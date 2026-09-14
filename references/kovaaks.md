@@ -1,0 +1,116 @@
+# KovaaK's on-disk format and API
+
+Everything here was verified against a real install on 2026-08-30, not inferred from
+documentation. KovaaK's has no official API docs; the endpoints below were recovered
+from the kovaaks.com frontend bundle and confirmed by calling them.
+
+> A copy of this file also lives in [claude-kovaaks](https://github.com/voidfill/claude-kovaaks),
+> the playlist skill aimcurve was split out of. The two are expected to drift — these are
+> notes, not code, and a shared dependency between the repositories would cost more than
+> the duplication does. The playlist sections below are kept because the same install
+> layout explains both tools; aimcurve itself only reads `stats/` and `performances/`.
+
+## Paths
+
+Relative to the install root
+(`C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer`):
+
+| Path | Contents |
+|---|---|
+| `Saved/SaveGames/Playlists/*.json` | one file per playlist |
+| `Saved/SaveGames/Scenarios/*.sce` | locally created scenarios |
+| `Saved/SaveGames/PrimaryUserSettings.json` | game settings (out of scope) |
+| `stats/*.csv` | one file per run — **aimcurve's input** |
+| `performances/*.perf` | the per-second time series, written alongside most runs but not all |
+
+Workshop scenarios live outside the install root, at
+`steamapps/workshop/content/824270/<id>/*.sce`. The **installed scenario set** is the
+union of `.sce` basenames from that directory and `Saved/SaveGames/Scenarios`.
+
+SteamID and persona name come from `Steam/config/loginusers.vdf` — prefer the block with
+`"MostRecent" "1"`.
+
+## Playlist file format
+
+The filename is always `<playlistName>.json`. Keys appear in this order:
+
+```
+playlistName, playlistId, authorSteamId, authorName, scenarioList, description,
+hasOfflineScenarios, hasEdited, shareCode, version, updated, isPrivate
+```
+
+`scenarioList` entries are `{"scenario_name": str, "play_Count": int}` — note the
+inconsistent casing, which is the game's, not a typo.
+
+### Encodings
+
+The game emits **two** encodings and reads both back:
+
+- UTF-8, no BOM, CRLF line endings, tab indent — the common case (19 of the 23 playlists
+  on the install this was verified against).
+- UTF-16LE **with BOM**, same structure — the rest (there, the VDIM "Switching"
+  playlists). Any install may hold both; do not assume either.
+
+Those four filenames also contain an invisible **U+200E** (left-to-right mark) between
+the dash and the word. It must be preserved when matching by name, and it is why the CLI
+forces UTF-8 on stdout — the Windows console codepage cannot encode it.
+
+The reader handles UTF-8, UTF-8-BOM, UTF-16LE and UTF-16BE. The writer only emits UTF-8.
+
+### Byte-exact emission
+
+This reproduces all 19 UTF-8 files byte for byte:
+
+```python
+json.dumps(data, indent="\t", separators=(",", ": "), ensure_ascii=False) \
+    .replace("\n", "\r\n").encode("utf-8")
+```
+
+No BOM and no trailing newline — the file ends at the closing `}`.
+
+### Field notes
+
+- `playlistId` — a real id for downloaded playlists; `0` for locally created ones.
+- `shareCode` — set on published playlists, empty otherwise.
+- `version` — `31` on every file observed.
+- `updated` — Unix epoch seconds.
+- `hasOfflineScenarios` — **always written as `false`.** The game errors on playlists
+  that claim offline scenarios, and every stock file says `false` anyway, even where
+  scenarios are demonstrably missing (the stock `1 - Basic` referenced 9 that were absent
+  on the install this was verified against).
+  The CLI used to compute it from the installed index; it no longer does, and nothing
+  should reintroduce that. A playlist may freely reference scenarios the user lacks —
+  report them to the user instead of encoding them in this field.
+
+### Sibling files that reference playlists by name
+
+Renaming a playlist strands entries in these; the skill does not rewrite them.
+
+| File | Notes |
+|---|---|
+| `LocalFavoritePlaylists.json` | UTF-16, array of playlist names |
+| `PlaylistInProgress.json` | the playlist currently being played, with per-scenario progress |
+| `PlaylistOrder.json` | play counts by index, no names |
+
+## API
+
+Base: `https://kovaaks.com/webapp-backend` — no authentication required for any of these.
+
+| Endpoint | Parameters | Returns |
+|---|---|---|
+| `/scenario/popular` | `page`, `max` (both required), `scenarioNameSearch`, `duration` | paged scenario search; `leaderboardId`, `scenarioName`, `scenario.aimType`, `scenario.authors`, `counts.plays`, `topScore` |
+| `/scenario/details` | `leaderboardId` | aim type, creator, description, tags, created date |
+| `/playlist/playlists` | `page`, `max`, `search` (lowercased) | paged playlist search; includes the **full `scenarioList`** with `scenarioName`, `playCount`, `aimType`, plus `playlistId`, `playlistCode`, `subscribers` |
+| `/playlist/trending` | none | trending playlists, no scenario lists |
+| `/leaderboard/scores/global` | `leaderboardId`, `page`, `max` | leaderboard scores with attributes (fov, sens) |
+| `/user/profile/by-username` | `username` | profile, SteamID, avatar |
+
+Corpus sizes as of 2026-08-30: 61,670 scenarios, 371,814 playlists.
+
+Notable gaps: there is **no fetch-playlist-by-id endpoint**. `/playlist/fetch`,
+`/playlists`, `/playlist/popular` and `/staff-picks/playlist` all return
+`404 Invalid Route`. To import a specific playlist you must search for it and select the
+matching `playlistId` from the results.
+
+Playlist `scenarioList` from the API uses different key names than the on-disk format:
+`scenarioName`/`playCount` on the wire, `scenario_name`/`play_Count` on disk.
