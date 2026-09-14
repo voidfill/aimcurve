@@ -5,6 +5,7 @@
  * store answers the same questions from disk.
  */
 
+import { pySum } from './compare';
 import type { Ingested } from './ingest';
 import { materialiseMarks } from './marks';
 import { refreshScenario, type ScenarioInput } from './scenario';
@@ -88,8 +89,11 @@ export function buildStore(rows: readonly Ingested[]): Store {
     };
   };
 
+  // SQLite's AVG, which has summed with Kahan-Babuska-Neumaier compensation
+  // since 3.42. A left-to-right total disagrees with it on a fifth of
+  // realistic scenario lists; no fixture scenario has enough runs to show it.
   const mean = (values: readonly number[]): number | null =>
-    values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    values.length ? pySum(values) / values.length : null;
 
   return {
     getRun: (id) => runs.get(id),

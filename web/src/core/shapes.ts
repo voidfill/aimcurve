@@ -8,6 +8,7 @@
  * Everything here is pure over already-parsed values.
  */
 
+import { pySum } from './compare';
 import type { Scenario, Shape } from './types';
 
 export const RACE = 'race' as const;
@@ -33,10 +34,17 @@ const WINDOW_MAX_SPREAD = 0.02;
 // One run cannot show a TTK is fixed rather than merely what happened once.
 const WINDOW_MIN_RUNS = 2;
 
+/** Both sums here are the Python's builtin `sum`, which compensates -- see
+ *  `pySum`. It matters for `budgetFromTotals`: roughly one in eight three-run
+ *  curveless races averages to a different budget under a left-to-right sum,
+ *  and the budget is what the whole race axis is scaled against. */
 function mean(values: number[]): number {
-  return values.reduce((a, b) => a + b, 0) / values.length;
+  return pySum(values) / values.length;
 }
 
+/** `statistics.pstdev` in the Python, which is exact over Fractions and cannot
+ *  be reproduced in floats at all. Compensated is as close as this gets, and
+ *  the only thing it feeds is a threshold with an 800x margin either side. */
 function pstdev(values: number[]): number {
   const mu = mean(values);
   return Math.sqrt(mean(values.map((v) => (v - mu) ** 2)));

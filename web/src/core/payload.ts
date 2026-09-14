@@ -24,8 +24,6 @@ const METRICS: Record<string, [SeriesName, SeriesName | null]> = {
   accuracy: ['hits', 'shots'],
   efficiency: ['dmg_done', 'dmg_possible'],
 };
-const METRIC_ORDER = ['score', 'shots', 'hits', 'kills', 'accuracy', 'efficiency'];
-
 export interface SplitRow {
   idx: number | null;
   bot: string;
@@ -108,7 +106,10 @@ function series(curve: Curve, metric: string): number[] {
  * shown as though it were a measurement.
  */
 function usableMetrics(curve: Curve | null): string[] {
-  const usable = METRIC_ORDER.filter((name) => name !== 'efficiency');
+  // Object.keys, not a second list: the Python builds it from METRICS itself
+  // (`[name for name in METRICS if name != "efficiency"]`), and a parallel
+  // array is one refactor away from disagreeing with the table it mirrors.
+  const usable = Object.keys(METRICS).filter((name) => name !== 'efficiency');
   if (curve) {
     // Summed the way the Python's builtin sums a float series, so a run
     // sitting on the 0.5 threshold falls the same side of it in both.
@@ -124,16 +125,24 @@ const DEFAULT_SCENARIO = (name: string): Scenario => ({
   clock_s: null, windowed: 0, evidence: 'default',
 });
 
+/** A run the store does not hold. Its own type because the two failures in
+ *  `buildRunPayload` are answered differently -- the Python's server maps a
+ *  KeyError to 404 and a ValueError to 400 -- and a routing table cannot tell
+ *  two bare Errors apart without reading their messages. */
+export class UnknownRunError extends Error {}
+
 export function buildRunPayload(
   store: Store, id: string, opts: PayloadOpts = {},
 ): Payload {
   const {
     metric = 'score', smoothing = 5, recentN = DEFAULT_RECENT_N, sameCfg = true,
   } = opts;
-  if (!(metric in METRICS)) throw new Error(`unknown metric: ${metric}`);
+  // RangeError, as `getRuns` uses for a limit out of range: a value outside
+  // the accepted set is the Python's ValueError, which its server answers 400.
+  if (!(metric in METRICS)) throw new RangeError(`unknown metric: ${metric}`);
 
   const run = store.getRun(id);
-  if (!run) throw new Error(`no such run: ${id}`);
+  if (!run) throw new UnknownRunError(`no such run: ${id}`);
 
   const scenario = store.getScenario(run.scenario) ?? DEFAULT_SCENARIO(run.scenario);
   const isRace = scenario.shape === RACE;
@@ -459,6 +468,14 @@ function botWindows(
 
   // The same recent-N the chart's band is built from, so the stepper moves both
   // and the two cannot disagree about what "recent" means.
+  //
+  // One unreproducible ordering: the Python's `WHERE run_id IN (...)` has no
+  // ORDER BY and resolves via sqlite_autoindex_kill_1, so its pool arrives in
+  // row-counter order where this one arrives chronologically. The two coincide
+  // whenever a scenario's runs were indexed in time order, which bootstrap's
+  // filename scan makes the normal case; with three or more samples in a slot
+  // and an out-of-order re-pick they could differ by an ulp. There is no row
+  // counter on this side to sort by.
   const recentByIdx = new Map<number, number[]>();
   for (const recentId of base.recent.run_ids ?? []) {
     for (const k of store.getKills(recentId)) {

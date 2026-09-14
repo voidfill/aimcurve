@@ -60,6 +60,18 @@ describe('budgetFromTotals', () => {
       .toBeCloseTo(999.98094, 5);
   });
 
+  it('averages three budgets the way the Python does, not left to right', () => {
+    // Measured from shapes.budget_from_totals on 2026-09-14: a left-to-right
+    // total gives 544.8193058283854 for these three, and about one random
+    // three-run curveless race in eight lands on such a triple. Two runs can
+    // never show it, which is why no fixture does.
+    expect(budgetFromTotals([
+      [449.00080412187503, 95.82302462868174],
+      [494.68586104235635, 50.12676595157123],
+      [438.2687380427769, 106.55272369789456],
+    ])).toBe(544.8193058283853);
+  });
+
   it('refuses a single run', () => {
     // One run landing near a round hundred minus its clock is a coincidence;
     // 6 of 2360 fixed-clock runs do it.

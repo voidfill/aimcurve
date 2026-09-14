@@ -29,8 +29,8 @@ describe('buildRunPayload, timed', () => {
     const p = build(GROUND_B);
     expect(p.rate.metric).toBe('score');
     expect(p.rate.unit).toBe('score');
-    expect(p.rate.mine.slice(0, 4).map((v) => +v.toFixed(4)))
-      .toEqual([52.6667, 49.5, 44.6, 40.2]);
+    expect(p.rate.mine.slice(0, 4))
+      .toEqual([52.666666666666664, 49.5, 44.6, 40.2]);
     expect(p.delta.values!.slice(0, 4)).toEqual([34, 66, 54, 52]);
   });
 

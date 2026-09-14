@@ -16,23 +16,23 @@ describe('bot windows', () => {
     const p = build(GROUND_B);
     expect(p.windows).toHaveLength(3);
     expect(p.windows[0]).toMatchObject({ idx: 1, bot: 'Ground 1 Bot' });
-    expect(p.windows[0].window_s).toBeCloseTo(18.993, 6);
-    expect(p.windows[0].mine).toBeCloseTo(0.4465956140687721, 12);
-    expect(p.windows[0].base).toBeCloseTo(0.29825678986109133, 12);
-    expect(p.windows[0].delta).toBeCloseTo(0.14833882420768074, 12);
+    expect(p.windows[0].window_s).toBe(18.993);
+    expect(p.windows[0].mine).toBe(0.4465956140687721);
+    expect(p.windows[0].base).toBe(0.29825678986109133);
+    expect(p.windows[0].delta).toBe(0.14833882420768074);
   });
 
   it('names the most of a window anyone has taken, this run included', () => {
     const p = build(GROUND_B);
-    expect(p.windows[0].best).toBeCloseTo(0.4465956140687721, 12);
+    expect(p.windows[0].best).toBe(0.4465956140687721);
     // The third window was better on the other run, so the ceiling is theirs.
-    expect(p.windows[2].best).toBeCloseTo(0.35538311842688974, 12);
+    expect(p.windows[2].best).toBe(0.35538311842688974);
   });
 
   it('uses the same recent set the band is built from', () => {
     const p = build(GROUND_B);
-    expect(p.windows[0].recent).toBeCloseTo(0.29825678986109133, 12);
-    expect(p.windows[0].delta_recent).toBeCloseTo(0.14833882420768074, 12);
+    expect(p.windows[0].recent).toBe(0.29825678986109133);
+    expect(p.windows[0].delta_recent).toBe(0.14833882420768074);
     // Move the stepper and both move together.
     expect(build(GROUND_B, { recentN: 0 }).windows[0].recent).toBeNull();
   });
@@ -42,16 +42,31 @@ describe('bot windows', () => {
     // shares over-counts the short one.
     const p = build(GROUND_B);
     expect(p.window_summary).not.toBeNull();
-    expect(p.window_summary!.mine).toBeCloseTo(0.3358887148407242, 12);
-    expect(p.window_summary!.base).toBeCloseTo(0.3070336947352315, 12);
+    expect(p.window_summary!.mine).toBe(0.3358887148407242);
+    expect(p.window_summary!.base).toBe(0.3070336947352315);
     const unweighted = p.windows.reduce((a, w) => a + (w.mine as number), 0) / 3;
     expect(p.window_summary!.mine).not.toBeCloseTo(unweighted, 6);
   });
 
   it('reverses cleanly when the baseline is the other run', () => {
     const p = build(GROUND_A);
-    expect(p.window_summary!.mine).toBeCloseTo(0.3070336947352315, 12);
-    expect(p.window_summary!.base).toBeCloseTo(0.3358887148407242, 12);
+    expect(p.window_summary!.mine).toBe(0.3070336947352315);
+    expect(p.window_summary!.base).toBe(0.3358887148407242);
+  });
+
+  it('keeps a window with no damage recorded out of the numerator only', () => {
+    // The two filters differ on purpose: a null `dmg_done` leaves the
+    // numerator but its window still counts as damage offered, so a hole
+    // reads as "offered and not taken". Dropping the window from both instead
+    // would raise this run's figure to 0.36690282938533414 -- better than it
+    // really went, from missing data.
+    const rows = statsIds().map((id) => ingest(id, readStats(id), readPerf(id)));
+    rows.find((r) => r.run.id === GROUND_B)!.kills[1].dmg_done = null;
+    const p = buildRunPayload(buildStore(rows), GROUND_B);
+    expect(p.window_summary!.mine).toBe(0.24175958849061785);
+    // And the window itself has no share at all, rather than a share of zero.
+    expect(p.windows[1].mine).toBeNull();
+    expect(p.windows[1].delta).toBeNull();
   });
 
   it('is absent on a scenario whose bots actually die', () => {

@@ -18,8 +18,11 @@ describe('buildRunPayload, race', () => {
     expect(p.rate.metric).toBe('damage');
     expect(p.rate.unit).toBe('dmg/s');
     expect(p.rate.mine).toHaveLength(200);
-    expect(p.rate.mine.slice(0, 4).map((v) => +v.toFixed(4)))
-      .toEqual([89.0062, 88.8955, 88.7176, 88.5176]);
+    // Full precision, not four places: rounding here would swallow exactly
+    // the drift the compensated sums exist to prevent.
+    expect(p.rate.mine.slice(0, 4)).toEqual([
+      89.00620973556421, 88.89550549459958, 88.71763238833056, 88.51761843386862,
+    ]);
   });
 
   it('shares kill marks across every run of the scenario', () => {
@@ -38,8 +41,8 @@ describe('buildRunPayload, race', () => {
     const p = build(AIR_B);
     expect(p.delta.unit).toBe('seconds');
     expect(p.delta.values).toHaveLength(200);
-    expect(p.delta.values![0]).toBeCloseTo(0.086177, 6);
-    expect(p.delta.final).toBeCloseTo(7.855, 6);
+    expect(p.delta.values![0]).toBe(0.08617719803760315);
+    expect(p.delta.final).toBe(7.855000000003201);
     // Both runs cover the whole pool by definition: no tail to shade.
     expect(p.delta.compare_until).toBe(1.0);
     expect(p.delta.baseline).toEqual({
@@ -64,16 +67,16 @@ describe('buildRunPayload, race', () => {
     expect(dead.bot).toBe('dead time');
     const total = bots.reduce((a, s) => a + (s.mine as number), 0) + (dead.mine as number);
     expect(total).toBeCloseTo(p.run.elapsed_s!, 6);
-    expect(dead.mine).toBeCloseTo(1.044995, 5);
+    expect(dead.mine).toBe(1.044994999998778);
   });
 
   it('names the fastest each bot has ever gone down, this run included', () => {
     const p = build(AIR_B);
     expect(p.splits[0]).toMatchObject({ idx: 1, bot: 'AIR1_Short_close' });
-    expect(p.splits[0].mine).toBeCloseTo(14.137001, 6);
-    expect(p.splits[0].base).toBeCloseTo(15.48, 6);
-    expect(p.splits[0].best).toBeCloseTo(14.137001, 6);
-    expect(p.splits[0].delta).toBeCloseTo(-1.342999, 5);
+    expect(p.splits[0].mine).toBe(14.137001);
+    expect(p.splits[0].base).toBe(15.48);
+    expect(p.splits[0].best).toBe(14.137001);
+    expect(p.splits[0].delta).toBe(-1.3429990000000007);
   });
 
   it('adjusts each split by the run\'s own mean, so they sum to zero', () => {
@@ -83,8 +86,8 @@ describe('buildRunPayload, race', () => {
       .map((s) => s.delta_adj as number);
     expect(adj).toHaveLength(5);
     expect(adj.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 9);
-    expect(adj[0]).toBeCloseTo(0.2288008, 6);
-    expect(adj[4]).toBeCloseTo(-6.6972012, 6);
+    expect(adj[0]).toBe(0.22880079999999947);
+    expect(adj[4]).toBe(-6.697201199999999);
   });
 
   it('reads the same dead-time pair from either side of the comparison', () => {
@@ -92,8 +95,8 @@ describe('buildRunPayload, race', () => {
     // swapping which run is focused swaps the two columns and nothing else.
     const p = build(AIR_A);
     const dead = p.splits.find((s) => s.idx === null)!;
-    expect(dead.mine).toBeCloseTo(1.040996, 5);
-    expect(dead.base).toBeCloseTo(1.044995, 5);
+    expect(dead.mine).toBe(1.0409960000019822);
+    expect(dead.base).toBe(1.044994999998778);
   });
 
   it('works on a race with no curve at all', () => {
@@ -106,6 +109,10 @@ describe('buildRunPayload, race', () => {
     expect(p.delta.values).toBeNull();
     expect(p.marks.kills).toHaveLength(6);
     expect(p.splits.filter((s) => s.idx !== null)).toHaveLength(6);
+    // Exactly, because this is where the Python's compensated sum shows: its
+    // six TTKs total 85.034005 and a left-to-right loop gives
+    // 85.03400500000001, and the difference lands in this residual.
+    expect(p.splits.find((s) => s.idx === null)!.mine).toBe(0.0589950000007633);
   });
 
   it('builds the band from each run\'s own clock', () => {
@@ -115,6 +122,6 @@ describe('buildRunPayload, race', () => {
     expect(p.rate.band).not.toBeNull();
     expect(p.rate.band!.mean).toHaveLength(200);
     // One member, so the band collapses onto the PB's own resampled rate.
-    expect(p.rate.band!.mean[0]).toBeCloseTo(p.rate.pb![0], 9);
+    expect(p.rate.band!.mean[0]).toBe(p.rate.pb![0]);
   });
 });

@@ -5,6 +5,7 @@
  * fields that only the curve knows.
  */
 
+import { pySum } from './compare';
 import { parsePerf, PerfError } from './perf';
 import { parseKills, parseStats } from './statscsv';
 import type { Curve, Kill, Run } from './types';
@@ -44,9 +45,10 @@ export function ingest(
       ? (run.score / run.duration_s) * 60
       : null;
     // damage_possible is not a summary key; the curve is the only source.
-    let possible = 0;
-    for (const v of curve.series.dmg_possible) possible += v;
-    run.damage_possible = possible;
+    // Summed the way the index's `float(sum(...))` sums it -- binary32 addends
+    // into a double make the compensation term zero in practice, but the
+    // reason is arithmetic that happens to hold here, not a rule.
+    run.damage_possible = pySum(curve.series.dmg_possible);
   }
 
   return error === undefined ? { run, curve, kills } : { run, curve, kills, error };

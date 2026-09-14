@@ -55,8 +55,9 @@ export function refreshScenario(
 
   // Both lists come off the same ordering, as they do in the Python, where
   // they are two comprehensions over one `runs`. `budget_from_totals` averages
-  // with a left-to-right sum, so feeding the totals in a different order than
-  // the curves would move the budget by an ulp for no reason.
+  // with the builtin sum, which is compensated but still order-dependent, so
+  // feeding the totals in a different order than the curves would move the
+  // budget by an ulp for no reason.
   const ordered = byScoreDescending(inputs);
 
   const curves = ordered

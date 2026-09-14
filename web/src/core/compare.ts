@@ -99,9 +99,16 @@ export function band(curves: readonly (readonly number[])[]): Band {
   const hi: number[] = [];
   for (let i = 0; i < n; i++) {
     const column = usable.map((c) => c[i]);
-    const mu = column.reduce((a, b) => a + b, 0) / column.length;
+    // `statistics.fmean` in the Python, which sums with `math.fsum` and is
+    // exactly rounded. `pySum` is not fsum, but over columns this short it
+    // agrees with it on every set measured (20k trials of 3, 5 and 10 values),
+    // where a left-to-right sum disagrees on a quarter of them.
+    const mu = pySum(column) / column.length;
+    // `statistics.pstdev` is Fraction-exact and no float algorithm reproduces
+    // it. This is the one place the oracle diff may eventually need a
+    // tolerance, and it needs three comparable prior curves to reach.
     const sigma = banded
-      ? Math.sqrt(column.reduce((a, v) => a + (v - mu) ** 2, 0) / column.length)
+      ? Math.sqrt(pySum(column.map((v) => (v - mu) ** 2)) / column.length)
       : 0;
     mean.push(mu);
     lo.push(mu - sigma);
