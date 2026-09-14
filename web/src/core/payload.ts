@@ -395,16 +395,99 @@ function raceSplits(
   return rows;
 }
 
-/** Filled in Task 15. */
-function botWindows(
-  _store: Store, _run: Run, _base: Baselines, _sameCfg: boolean,
-): WindowRow[] {
-  return [];
+/** Damage taken over damage offered, for one kill row.
+ *
+ * Null when the window offered no damage -- which is not the same as a share of
+ * zero. A missing `dmg_done` is null for the same reason: it is a hole, not a
+ * zero-damage window, and `bestBySlot` already drops such a row because the
+ * Python's `dmg_done * 1.0 / dmg_possible IS NOT NULL` does. The Python's own
+ * `_share` (payload.py:245-247) does neither -- it divides None by a float and
+ * raises TypeError -- so no corpus with such a row can be built there at all;
+ * absent is the reading the rest of the file already agrees on.
+ */
+function share(kill: Kill | undefined): number | null {
+  if (!kill || !kill.dmg_possible || kill.dmg_done === null) return null;
+  return kill.dmg_done / kill.dmg_possible;
 }
 
-/** Filled in Task 15. */
+/** Whole-run share for this run and for the PB run.
+ *
+ * Damage taken over damage offered, not the mean of the per-window shares: the
+ * windows are not all the same length -- 18.99 s against 20.39 s on the VT
+ * scenarios -- so an unweighted mean over-counts the short one.
+ *
+ * A null `dmg_done` drops out of the numerator while its window still counts
+ * toward the denominator, which is the Python's explicit guard rather than
+ * `share`'s: a hole here reads as damage offered and not taken.
+ */
 function windowSummary(
-  _store: Store, _run: Run, _base: Baselines,
-): { mine: number | null; base: number | null } | null {
-  return null;
+  store: Store, run: Run, base: Baselines,
+): { mine: number | null; base: number | null } {
+  const overall = (runId: string): number | null => {
+    const kills = store.getKills(runId);
+    // Totalled the way the Python's builtin sums a float series, so the two
+    // cannot disagree in the last bits of a ratio shown to twelve places.
+    const done = pySum(
+      kills.map((k) => k.dmg_done).filter((v): v is number => v !== null));
+    const possible = pySum(
+      kills.map((k) => k.dmg_possible).filter((v): v is number => !!v));
+    return possible ? done / possible : null;
+  };
+  return {
+    mine: overall(run.id),
+    base: base.pb ? overall(base.pb.run_id) : null,
+  };
+}
+
+/** Per-bot share of the damage its window made available.
+ *
+ * Raw damage is unreadable across scenarios -- 0.009 a window on Plink Palace
+ * against 0.86 on Aether -- and the window is a fixed length, so the damage it
+ * offers is a constant. The share of it you took is the same number in every
+ * scenario, and it is what the window was for.
+ */
+function botWindows(
+  store: Store, run: Run, base: Baselines, sameCfg: boolean,
+): WindowRow[] {
+  const kills = store.getKills(run.id);
+  if (!kills.length) return [];
+
+  const baseByIdx = new Map<number, Kill>();
+  if (base.pb) {
+    for (const k of store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
+  }
+
+  // The same recent-N the chart's band is built from, so the stepper moves both
+  // and the two cannot disagree about what "recent" means.
+  const recentByIdx = new Map<number, number[]>();
+  for (const recentId of base.recent.run_ids ?? []) {
+    for (const k of store.getKills(recentId)) {
+      const value = share(k);
+      if (value === null) continue;
+      const pool = recentByIdx.get(k.idx);
+      if (pool) pool.push(value);
+      else recentByIdx.set(k.idx, [value]);
+    }
+  }
+
+  // The most of this window anyone has taken, this run included.
+  const best = store.bestBySlot(peerIds(store, run, sameCfg, TIMED), 'share');
+
+  return kills.map((kill) => {
+    const mine = share(kill);
+    const against = share(baseByIdx.get(kill.idx));
+    const pool = recentByIdx.get(kill.idx) ?? [];
+    const recent = pool.length ? pySum(pool) / pool.length : null;
+    return {
+      idx: kill.idx,
+      bot: kill.bot,
+      window_s: kill.ttk,
+      mine,
+      base: against,
+      best: best.get(kill.idx) ?? null,
+      recent,
+      delta: mine === null || against === null ? null : mine - against,
+      delta_recent: mine === null || recent === null ? null : mine - recent,
+    };
+  });
 }
