@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from aimcurve import index, paths, server  # noqa: E402
+from aimcurve import index, paths, payload  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -37,36 +37,36 @@ class RaceEndToEnd(unittest.TestCase):
             "ORDER BY score ASC LIMIT 1").fetchone()[0]
 
     def test_the_whole_chain_produces_a_reconciling_race_payload(self):
-        payload = server.build_run_payload(self.conn, self.slow_run())
-        json.dumps(payload)
+        result = payload.build_run_payload(self.conn, self.slow_run())
+        json.dumps(result)
 
         # classified from the countdown curve
-        self.assertEqual(payload["scenario"]["shape"], "race")
-        self.assertEqual(payload["scenario"]["evidence"], "perf-countdown")
+        self.assertEqual(result["scenario"]["shape"], "race")
+        self.assertEqual(result["scenario"]["evidence"], "perf-countdown")
 
         # indexed by progress, with boundaries that coincide across runs
-        self.assertEqual(payload["axis"]["kind"], "progress")
-        self.assertEqual(len(payload["rate"]["mine"]), payload["axis"]["n"])
-        self.assertEqual(payload["marks"]["kills"], [0.2, 0.4, 0.6, 0.8, 1.0])
+        self.assertEqual(result["axis"]["kind"], "progress")
+        self.assertEqual(len(result["rate"]["mine"]), result["axis"]["n"])
+        self.assertEqual(result["marks"]["kills"], [0.2, 0.4, 0.6, 0.8, 1.0])
 
         # the invariant, end to end: the delta's endpoint IS the score gap
-        pb_score = payload["baselines"]["pb"]["score"]
-        self.assertAlmostEqual(payload["delta"]["final"],
-                               payload["run"]["score"] - pb_score, places=1)
+        pb_score = result["baselines"]["pb"]["score"]
+        self.assertAlmostEqual(result["delta"]["final"],
+                               result["run"]["score"] - pb_score, places=1)
 
         # and the split table adds up to the score
-        total = sum(s["mine"] for s in payload["splits"])
-        self.assertAlmostEqual(total, payload["run"]["elapsed_s"], places=6)
+        total = sum(s["mine"] for s in result["splits"])
+        self.assertAlmostEqual(total, result["run"]["elapsed_s"], places=6)
         self.assertAlmostEqual(
-            total, payload["scenario"]["budget"] - payload["run"]["score"], places=1)
+            total, result["scenario"]["budget"] - result["run"]["score"], places=1)
 
     def test_the_pb_survives_baseline_selection_on_a_slow_run(self):
         """The bug this feature exists to fix: the +-10% duration filter used
         to drop the PB from exactly the runs that needed it most."""
-        payload = server.build_run_payload(self.conn, self.slow_run())
-        self.assertIsNotNone(payload["baselines"]["pb"])
-        self.assertIsNotNone(payload["delta"]["values"])
-        self.assertGreater(payload["baselines"]["pb"]["score"], payload["run"]["score"])
+        result = payload.build_run_payload(self.conn, self.slow_run())
+        self.assertIsNotNone(result["baselines"]["pb"])
+        self.assertIsNotNone(result["delta"]["values"])
+        self.assertGreater(result["baselines"]["pb"]["score"], result["run"]["score"])
 
     def test_a_rebuild_from_scratch_reaches_the_same_verdict(self):
         """Schema 2 is drop-and-rebuild, so a rebuild has to be idempotent."""

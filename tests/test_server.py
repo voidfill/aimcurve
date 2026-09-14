@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from aimcurve import index, paths, server  # noqa: E402
+from aimcurve import index, paths, payload, server  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -37,52 +37,52 @@ class RunPayload(ServerBase):
             f"ORDER BY score {order} LIMIT 1", (scenario,)).fetchone()[0]
 
     def test_payload_is_serialisable_and_carries_the_shape(self):
-        payload = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
-        json.dumps(payload)   # arrays must be plain lists, not array.array
+        result = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        json.dumps(result)   # arrays must be plain lists, not array.array
         for key in ("run", "scenario", "axis", "rate", "delta", "marks",
                     "splits", "baselines"):
-            self.assertIn(key, payload)
-        self.assertEqual(payload["scenario"]["shape"], "race")
+            self.assertIn(key, result)
+        self.assertEqual(result["scenario"]["shape"], "race")
 
     def test_a_race_run_is_indexed_by_progress_with_shared_kill_marks(self):
-        payload = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
-        self.assertEqual(payload["axis"]["kind"], "progress")
-        self.assertEqual(payload["axis"]["n"], 200)
-        self.assertEqual(payload["delta"]["unit"], "seconds")
-        self.assertEqual(payload["rate"]["metric"], "damage")
-        self.assertTrue(payload["marks"]["aligned"])
-        self.assertEqual(len(payload["marks"]["kills"]), 5)
-        for i, mark in enumerate(payload["marks"]["kills"], start=1):
+        result = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        self.assertEqual(result["axis"]["kind"], "progress")
+        self.assertEqual(result["axis"]["n"], 200)
+        self.assertEqual(result["delta"]["unit"], "seconds")
+        self.assertEqual(result["rate"]["metric"], "damage")
+        self.assertTrue(result["marks"]["aligned"])
+        self.assertEqual(len(result["marks"]["kills"]), 5)
+        for i, mark in enumerate(result["marks"]["kills"], start=1):
             self.assertAlmostEqual(mark, i / 5, places=6)
 
     def test_race_marks_are_named_after_the_bots_that_hold_them(self):
         """A boundary is only meaningful if you can tell which bot it ends.
         The names come from the same rows the split table uses, so the chart
         and the table can never disagree about which bot is which."""
-        payload = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
-        self.assertEqual(payload["marks"]["labels"],
+        result = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        self.assertEqual(result["marks"]["labels"],
                          ["AIR1_Short_close", "AIR1_Short_far", "AIR2_Long3D_mid",
                           "AIR2_Short_close", "AIR2_Mid_UFO"])
-        self.assertEqual(payload["marks"]["labels"],
-                         [s["bot"] for s in payload["splits"] if s["idx"] is not None])
+        self.assertEqual(result["marks"]["labels"],
+                         [s["bot"] for s in result["splits"] if s["idx"] is not None])
 
     def test_a_timed_run_carries_no_mark_labels(self):
         """Timed marks are the focused run's own kills, drawn subdued and
         unlabelled -- there is no shared boundary for a name to describe."""
-        payload = server.build_run_payload(
+        result = payload.build_run_payload(
             self.conn, self.run_for("Air Voltaic Invincible 4 Medium"))
-        self.assertEqual(payload["marks"]["labels"], [])
+        self.assertEqual(result["marks"]["labels"], [])
 
     def test_race_splits_reconcile_to_the_score(self):
-        payload = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
-        bots = [s for s in payload["splits"] if s["idx"] is not None]
-        dead = [s for s in payload["splits"] if s["idx"] is None]
+        result = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        bots = [s for s in result["splits"] if s["idx"] is not None]
+        dead = [s for s in result["splits"] if s["idx"] is None]
         self.assertEqual(len(bots), 5)
         self.assertEqual(len(dead), 1)
-        total = sum(s["mine"] for s in payload["splits"])
-        self.assertAlmostEqual(total, payload["run"]["elapsed_s"], places=6)
-        budget = payload["scenario"]["budget"]
-        self.assertAlmostEqual(total, budget - payload["run"]["score"], places=1)
+        total = sum(s["mine"] for s in result["splits"])
+        self.assertAlmostEqual(total, result["run"]["elapsed_s"], places=6)
+        budget = result["scenario"]["budget"]
+        self.assertAlmostEqual(total, budget - result["run"]["score"], places=1)
 
     def test_split_deltas_are_offered_against_the_run_as_well_as_the_pb(self):
         """Which bot to work on is not the same question as which bot is hard.
@@ -93,8 +93,8 @@ class RunPayload(ServerBase):
         delta cannot say that -- it only reports that four bots were near the
         baseline and one was 8 s off, leaving the reader to do the subtraction.
         """
-        payload = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
-        bots = [s for s in payload["splits"] if s["idx"] is not None]
+        result = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        bots = [s for s in result["splits"] if s["idx"] is not None]
         adjusted = {s["bot"]: s["delta_adj"] for s in bots}
         self.assertAlmostEqual(adjusted["AIR2_Mid_UFO"], 6.697, places=2)
         self.assertAlmostEqual(adjusted["AIR2_Long3D_mid"], -2.674, places=2)
@@ -104,7 +104,7 @@ class RunPayload(ServerBase):
         self.assertAlmostEqual(sum(adjusted.values()), 0.0, places=6)
         self.assertEqual(len([v for v in adjusted.values() if v > 0]), 1)
 
-        dead = [s for s in payload["splits"] if s["idx"] is None][0]
+        dead = [s for s in result["splits"] if s["idx"] is None][0]
         self.assertIsNone(dead["delta_adj"], "dead time is not a bot to work on")
 
     def test_split_deltas_are_absent_without_a_baseline(self):
@@ -114,25 +114,25 @@ class RunPayload(ServerBase):
         run_id = self.conn.execute(
             "SELECT id FROM run WHERE scenario='Air Spectral Easy' "
             "ORDER BY started_at LIMIT 1").fetchone()[0]
-        payload = server.build_run_payload(self.conn, run_id)
-        self.assertEqual(len(payload["splits"]), 7)
-        for split in payload["splits"]:
+        result = payload.build_run_payload(self.conn, run_id)
+        self.assertEqual(len(result["splits"]), 7)
+        for split in result["splits"]:
             self.assertIsNone(split["delta"])
             self.assertIsNone(split["delta_adj"])
 
     def test_a_timed_run_keeps_its_per_second_axis(self):
-        payload = server.build_run_payload(
+        result = payload.build_run_payload(
             self.conn, self.run_for("Air Voltaic Invincible 4 Medium"))
-        self.assertEqual(payload["axis"]["kind"], "time")
-        self.assertEqual(payload["delta"]["unit"], "points")
-        self.assertFalse(payload["marks"]["aligned"])
-        self.assertEqual(payload["splits"], [])
+        self.assertEqual(result["axis"]["kind"], "time")
+        self.assertEqual(result["delta"]["unit"], "points")
+        self.assertFalse(result["marks"]["aligned"])
+        self.assertEqual(result["splits"], [])
 
     def test_a_penalising_scenario_is_flagged(self):
-        payload = server.build_run_payload(
+        result = payload.build_run_payload(
             self.conn, self.run_for("VT 1w2ts Horizontal Small"))
-        self.assertTrue(payload["scenario"]["penalising"])
-        self.assertEqual(payload["axis"]["kind"], "time")
+        self.assertTrue(result["scenario"]["penalising"])
+        self.assertEqual(result["axis"]["kind"], "time")
 
     def test_a_race_run_with_no_perf_still_emits_splits(self):
         """Air Spectral Easy is race via csv-constant-budget and has no .perf
@@ -141,28 +141,28 @@ class RunPayload(ServerBase):
         run_id = self.conn.execute(
             "SELECT id FROM run WHERE scenario=? ORDER BY score LIMIT 1",
             ("Air Spectral Easy",)).fetchone()[0]
-        payload = server.build_run_payload(self.conn, run_id)
-        self.assertEqual(payload["scenario"]["shape"], "race")
-        self.assertEqual(payload["rate"]["mine"], [])
-        self.assertIsNone(payload["delta"]["values"])
+        result = payload.build_run_payload(self.conn, run_id)
+        self.assertEqual(result["scenario"]["shape"], "race")
+        self.assertEqual(result["rate"]["mine"], [])
+        self.assertIsNone(result["delta"]["values"])
 
         # The curve is missing, but the splits come from the CSV kill rows,
         # not the curve, so they must still be there and still reconcile.
-        bots = [s for s in payload["splits"] if s["idx"] is not None]
-        dead = [s for s in payload["splits"] if s["idx"] is None]
+        bots = [s for s in result["splits"] if s["idx"] is not None]
+        dead = [s for s in result["splits"] if s["idx"] is None]
         self.assertEqual(len(bots), 6)
         self.assertEqual(len(dead), 1)
         self.assertAlmostEqual(dead[0]["mine"], 0.059, places=3)
-        total = sum(s["mine"] for s in payload["splits"])
-        self.assertAlmostEqual(total, payload["run"]["elapsed_s"], places=6)
-        budget = payload["scenario"]["budget"]
-        self.assertAlmostEqual(total, budget - payload["run"]["score"], places=1)
+        total = sum(s["mine"] for s in result["splits"])
+        self.assertAlmostEqual(total, result["run"]["elapsed_s"], places=6)
+        budget = result["scenario"]["budget"]
+        self.assertAlmostEqual(total, budget - result["run"]["score"], places=1)
 
     def test_delta_baseline_names_the_pb_the_delta_is_measured_against(self):
         """delta.baseline must always name the same PB that baselines.pb does,
         on both shapes -- the UI cannot be left free to label the chart with
         one baseline and the headline percentage with another."""
-        race = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        race = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
         pb = race["baselines"]["pb"]
         self.assertIsNotNone(pb)
         self.assertEqual(race["delta"]["baseline"], {
@@ -172,7 +172,7 @@ class RunPayload(ServerBase):
         # Pasu Voltaic Reload Easier is fixtured as a single run, so it is the
         # coverage for "no PB curve backs the delta" -- the exact case the
         # field must fall back to None for.
-        alone = server.build_run_payload(
+        alone = payload.build_run_payload(
             self.conn, self.run_for("Pasu Voltaic Reload Easier"))
         self.assertIsNone(alone["baselines"]["pb"])
         self.assertIsNone(alone["delta"]["baseline"])
@@ -181,10 +181,10 @@ class RunPayload(ServerBase):
         """VT Ground Intermediate S5 books damage at kill time: its whole-run
         dmg_possible is 6.0 against 6001 shots, so a per-second ratio is a flat
         zero pretending to be a measurement."""
-        booked_at_kill = server.build_run_payload(
+        booked_at_kill = payload.build_run_payload(
             self.conn, self.run_for("VT Ground Intermediate S5"))
         self.assertNotIn("efficiency", booked_at_kill["metrics"])
-        per_tick = server.build_run_payload(
+        per_tick = payload.build_run_payload(
             self.conn, self.run_for("VT 1w2ts Horizontal Small"))
         self.assertIn("efficiency", per_tick["metrics"])
         self.assertIn("accuracy", per_tick["metrics"])
@@ -193,7 +193,7 @@ class RunPayload(ServerBase):
         """A race is plotted in damage/s whatever `metric` says, so every one
         of the six buttons would redraw the same line. The payload has to say
         so, because the UI offers exactly what `metrics` lists."""
-        race = server.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
+        race = payload.build_run_payload(self.conn, self.run_for("Air Pure Medium"))
         self.assertEqual(race["metrics"], [])
         self.assertEqual(race["rate"]["metric"], "damage")
 
@@ -201,12 +201,12 @@ class RunPayload(ServerBase):
         # series. `metric` still has to be a METRICS key even so -- the UI
         # carries the timed run's choice across, and an unknown one would 400
         # every later request for this run.
-        as_accuracy = server.build_run_payload(
+        as_accuracy = payload.build_run_payload(
             self.conn, self.run_for("Air Pure Medium"), metric="accuracy")
         self.assertEqual(as_accuracy["rate"]["mine"], race["rate"]["mine"])
         self.assertEqual(as_accuracy["metrics"], [])
         with self.assertRaises(ValueError):
-            server.build_run_payload(
+            payload.build_run_payload(
                 self.conn, self.run_for("Air Pure Medium"), metric="damage")
 
     def test_a_timed_run_with_a_charted_baseline_gets_a_delta_and_a_band(self):
@@ -219,24 +219,24 @@ class RunPayload(ServerBase):
         """
         newer = self.run_for("VT Ground Intermediate S5", "DESC")
         older = self.run_for("VT Ground Intermediate S5", "ASC")
-        payload = server.build_run_payload(self.conn, newer)
+        result = payload.build_run_payload(self.conn, newer)
 
-        self.assertEqual(payload["axis"]["kind"], "time")
-        self.assertEqual(len(payload["rate"]["pb"]), payload["run"]["buckets"])
-        self.assertEqual(payload["delta"]["compare_until"], payload["run"]["buckets"])
+        self.assertEqual(result["axis"]["kind"], "time")
+        self.assertEqual(len(result["rate"]["pb"]), result["run"]["buckets"])
+        self.assertEqual(result["delta"]["compare_until"], result["run"]["buckets"])
 
         scores = dict(self.conn.execute(
             "SELECT id, score FROM run WHERE id IN (?,?)", (newer, older)))
-        self.assertAlmostEqual(payload["delta"]["final"],
+        self.assertAlmostEqual(result["delta"]["final"],
                                scores[newer] - scores[older], places=6)
-        self.assertEqual(payload["delta"]["values"][-1], payload["delta"]["final"])
-        self.assertEqual(payload["delta"]["baseline"],
+        self.assertEqual(result["delta"]["values"][-1], result["delta"]["final"])
+        self.assertEqual(result["delta"]["baseline"],
                          {"run_id": older, "score": scores[older], "is_true_pb": True})
 
-        band = payload["rate"]["band"]
+        band = result["rate"]["band"]
         self.assertIsNotNone(band)
         for series in ("mean", "lo", "hi"):
-            self.assertEqual(len(band[series]), payload["run"]["buckets"])
+            self.assertEqual(len(band[series]), result["run"]["buckets"])
 
 
 class RunList(ServerBase):
@@ -245,7 +245,7 @@ class RunList(ServerBase):
     that does not contain that history."""
 
     def test_every_row_says_how_it_stood_against_its_own_history(self):
-        rows = json.loads(json.dumps(server.run_list(self.conn, limit=50)))
+        rows = json.loads(json.dumps(payload.run_list(self.conn, limit=50)))
         self.assertEqual(len(rows), 11)
         for row in rows:
             self.assertIn("best_before", row)
@@ -262,7 +262,7 @@ class RunList(ServerBase):
     def test_the_rows_carry_what_the_rail_draws_with(self):
         """buckets marks the runs with no curve and shape picks the row's icon;
         both were already in the payload and must survive the rewrite."""
-        rows = server.run_list(self.conn, limit=50)
+        rows = payload.run_list(self.conn, limit=50)
         by_id = {r["id"]: r for r in rows}
         curved = self.conn.execute(
             "SELECT run_id, buckets FROM curve LIMIT 1").fetchone()
@@ -279,8 +279,8 @@ class RunList(ServerBase):
         """How the rail loads more as you scroll. The cursor is a run id, so
         the client hands back the last row it drew rather than an offset that
         shifts under it when a run lands mid-scroll."""
-        first = server.run_list(self.conn, limit=4)
-        older = server.run_list(self.conn, limit=4, before=first[-1]["id"])
+        first = payload.run_list(self.conn, limit=4)
+        older = payload.run_list(self.conn, limit=4, before=first[-1]["id"])
 
         self.assertEqual(len(first), 4)
         self.assertTrue(older, "11 fixture runs, so there is a second page")
@@ -288,7 +288,7 @@ class RunList(ServerBase):
                          "the pages must not overlap")
         self.assertLess(older[0]["started_at"], first[-1]["started_at"])
 
-        rest = server.run_list(self.conn, limit=50, before=older[-1]["id"])
+        rest = payload.run_list(self.conn, limit=50, before=older[-1]["id"])
         self.assertEqual(len(first) + len(older) + len(rest), 11,
                          "and together they must be the whole history")
 
@@ -347,7 +347,7 @@ class RunList(ServerBase):
         self.assertEqual(relaxed["played_before"], 2)
 
     def test_one_scenario_can_be_asked_for_on_its_own(self):
-        rows = server.run_list(self.conn, limit=50, scenario="Air Pure Medium")
+        rows = payload.run_list(self.conn, limit=50, scenario="Air Pure Medium")
         self.assertEqual({r["scenario"] for r in rows}, {"Air Pure Medium"})
         self.assertEqual(len(rows), 2)
 
