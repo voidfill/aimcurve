@@ -8,6 +8,30 @@
 export const DEFAULT_RECENT_N = 10;
 export const DURATION_TOLERANCE = 0.1;
 
+/** What Python's builtin `sum` does to a run of floats.
+ *
+ * Since 3.12 it carries a Neumaier compensation term rather than accumulating
+ * left to right, so `sum([0.74, 0.85, 0.84, 0.77, 0.71]) / 5` is 0.782 there
+ * and 0.7819999999999999 under a naive loop. The oracle sums a float series in
+ * every smoothing window and in a handful of payload aggregates, so a naive
+ * loop here drifts by an ulp on roughly one rate bucket in ten -- inside the
+ * diff harness's tolerance, and therefore invisible exactly where it matters.
+ * Reproduced rather than tolerated: it is nine lines.
+ */
+export function pySum(values: ArrayLike<number>, lo = 0, hi = values.length): number {
+  let total = 0;
+  let compensation = 0;
+  for (let i = lo; i < hi; i++) {
+    const x = values[i];
+    const t = total + x;
+    compensation += Math.abs(total) >= Math.abs(x)
+      ? (total - t) + x
+      : (x - t) + total;
+    total = t;
+  }
+  return total + compensation;
+}
+
 /** Centred rolling mean. Preserves length; shrinks the window at the edges. */
 export function smooth(values: readonly number[], window: number): number[] {
   if (window <= 1 || !values.length) return Array.from(values);
@@ -16,9 +40,7 @@ export function smooth(values: readonly number[], window: number): number[] {
   for (let i = 0; i < values.length; i++) {
     const lo = Math.max(0, i - half);
     const hi = Math.min(values.length, i + half + 1);
-    let total = 0;
-    for (let j = lo; j < hi; j++) total += values[j];
-    out.push(total / (hi - lo));
+    out.push(pySum(values, lo, hi) / (hi - lo));
   }
   return out;
 }
