@@ -53,13 +53,19 @@ export function refreshScenario(
 ): Scenario | null {
   if (!inputs.length) return null;
 
-  const curves = byScoreDescending(inputs)
+  // Both lists come off the same ordering, as they do in the Python, where
+  // they are two comprehensions over one `runs`. `budget_from_totals` averages
+  // with a left-to-right sum, so feeding the totals in a different order than
+  // the curves would move the budget by an ulp for no reason.
+  const ordered = byScoreDescending(inputs);
+
+  const curves = ordered
     .map((i) => i.score)
     .filter((s): s is Float32Array => s !== null);
 
   const verdict = classify(
     curves,
-    inputs.map((i) => [i.run.score, i.run.elapsed_s] as const),
+    ordered.map((i) => [i.run.score, i.run.elapsed_s] as const),
   );
 
   let pool: number | null = null;

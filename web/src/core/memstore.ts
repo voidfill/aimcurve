@@ -27,18 +27,28 @@ export function buildStore(rows: readonly Ingested[]): Store {
   const kills = new Map<string, Kill[]>();
   let failed = 0;
 
-  for (const row of rows) {
+  // A repeated id is dropped whole rather than merged: `run.stats_file` is
+  // UNIQUE and the index inserts OR IGNORE, so the first row wins there too.
+  // Letting the second through would count it twice in `scenarioList` and fold
+  // it twice into the scenario's shape while `counts` stayed right.
+  const seen = rows.filter((row) => {
+    if (runs.has(row.run.id)) return false;
     runs.set(row.run.id, row.run);
     if (row.curve) curves.set(row.run.id, row.curve);
     kills.set(row.run.id, row.kills);
+    // Not `SELECT COUNT(*) FROM failed`: the Python's table is keyed by path,
+    // outlives a bootstrap and also records CSVs that never became runs. This
+    // counts the perf failures of the rows in hand, which is all a store built
+    // from a single pass can know.
     if (row.error !== undefined) failed += 1;
-  }
+    return true;
+  });
 
   // Classification is a fold over every run of a scenario, so it happens after
   // all of them are in. Doing it per run would classify a race scenario from
   // its first run alone, before the evidence that settles it has landed.
   const byScenario = new Map<string, ScenarioInput[]>();
-  for (const row of rows) {
+  for (const row of seen) {
     const input: ScenarioInput = {
       run: row.run,
       score: row.curve?.series.score ?? null,
@@ -117,9 +127,17 @@ export function buildStore(rows: readonly Ingested[]): Store {
         // The cursor is the whole (started_at, id) pair: started_at has second
         // resolution and no uniqueness constraint, so a cursor on time alone
         // would drop a run whose timestamp straddled a page boundary.
-        if (cursor) rows2 = rows2.filter((r) => byTimeThenId(r, cursor) < 0);
+        //
+        // An unknown cursor pages to nothing, not to everything: the SQL's
+        // subquery yields NULL, `(started_at, id) < NULL` is NULL, and no row
+        // survives. Dropping the predicate instead would wrap an infinite
+        // scroll back to the newest rows and repeat them for ever.
+        rows2 = cursor ? rows2.filter((r) => byTimeThenId(r, cursor) < 0) : [];
       }
-      return rows2.slice(0, limit).map((r) => railRow(r, opts.sameCfg));
+      // SQLite reads a negative LIMIT as no limit at all; slice(0, -1) would
+      // quietly drop the last row instead.
+      return (limit < 0 ? rows2 : rows2.slice(0, limit))
+        .map((r) => railRow(r, opts.sameCfg));
     },
 
     bestBySlot(ids: readonly string[], metric: SlotMetric): Map<number, number> {
@@ -170,7 +188,8 @@ export function buildStore(rows: readonly Ingested[]): Store {
             recent.map((r) => r.score).filter((v): v is number => v !== null)),
         });
       }
-      return out.sort((a, b) => (a.last_played < b.last_played ? 1 : -1));
+      return out.sort((a, b) =>
+        a.last_played === b.last_played ? 0 : a.last_played < b.last_played ? 1 : -1);
     },
 
     day(day: string): SessionRow[] {

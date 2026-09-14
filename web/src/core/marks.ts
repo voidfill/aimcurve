@@ -8,8 +8,14 @@
  *
  * Materialised rather than computed per row because the browser design measured
  * the correlated-subquery equivalent at 296 ms against 4.2 ms over 12k runs.
- * Recomputing is a forward pass costing ~41 ms over that corpus, so the rule
- * can simply be: detect an out-of-order insert or a shape change, refold, done.
+ * The design measured the incremental version -- a forward walk from the
+ * earliest affected run -- at 41 ms over that corpus, so the rule can simply
+ * be: detect an out-of-order insert or a shape change, refold, done. What is
+ * below is the whole-corpus fold that walk is derived from, and it is
+ * quadratic in a scenario's runs rather than a running maximum, because the
+ * duration window is relative to each focused run: a prior that is comparable
+ * for one focus can be out of range for the next. It stays cheap only because
+ * the inner loop never leaves one scenario.
  */
 
 import { DURATION_TOLERANCE } from './compare';

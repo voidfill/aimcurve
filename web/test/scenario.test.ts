@@ -26,6 +26,10 @@ const TRACKING = 'Air Voltaic Invincible 4 Medium - Challenge - 2026.09.10-17.17
 
 describe('refreshScenario', () => {
   it('classifies a race from its countdown and sizes the pool', () => {
+    // Also the test for the score-descending sort: the runs go in oldest
+    // first, and their countdowns differ (A gives 999.9983520507812). classify
+    // takes the first curve, so without the sort this budget is A's, which is
+    // not what the SQL's index order hands the Python.
     const s = refreshScenario('Air Pure Medium', [input(AIR_A), input(AIR_B)])!;
     expect(s.shape).toBe('race');
     expect(s.evidence).toBe('perf-countdown');

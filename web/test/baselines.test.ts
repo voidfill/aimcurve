@@ -90,7 +90,14 @@ describe('baselines', () => {
   });
 
   it('drops peers at a different sensitivity when asked to', () => {
-    const b = baselines(store, AIR_B, { ...opts, sameCfg: false, shape: 'race' });
-    expect(b.candidates).toBe(1);
+    // Every run of a fixture scenario shares its cm/360, so the flag has to be
+    // given something to bite on: asserting `candidates` on the corpus as it
+    // stands passes with the filter deleted.
+    const rows = statsIds().map((id) => ingest(id, readStats(id), readPerf(id)));
+    rows.find((r) => r.run.id === AIR_A)!.run.cfg_key = '45.0';
+    const mixed = buildStore(rows);
+    expect(baselines(mixed, AIR_B, { ...opts, shape: 'race' }).candidates).toBe(0);
+    expect(baselines(mixed, AIR_B, { ...opts, sameCfg: false, shape: 'race' }).candidates)
+      .toBe(1);
   });
 });

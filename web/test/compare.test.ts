@@ -44,8 +44,10 @@ describe('cumulativeDelta', () => {
     const mine = Array.from(curve(GROUND_B).series.score);
     const base = Array.from(curve(GROUND_A).series.score);
     const values = cumulativeDelta(mine, base);
-    expect(values[values.length - 1]).toBeCloseTo(2009 - 1814, 9);
-    expect(values[values.length - 1]).toBeCloseTo(sum(mine) - sum(base), 9);
+    // Exactly, not nearly: a tolerance here would hide the one class of bug
+    // this port is most likely to have.
+    expect(values[values.length - 1]).toBe(2009 - 1814);
+    expect(values[values.length - 1]).toBe(sum(mine) - sum(base));
     expect(values.slice(0, 4)).toEqual([34, 66, 54, 52]);
   });
 
@@ -60,7 +62,7 @@ describe('cumulativeDelta', () => {
     const base = Array.from(curve(AIR_A).series.score);   // 94 buckets
     const values = cumulativeDelta(mine, base);
     expect(values).toHaveLength(94);
-    expect(values.at(-1)).toBeCloseTo(sum(mine) - sum(base), 9);
+    expect(values.at(-1)).toBe(sum(mine) - sum(base));
   });
 });
 

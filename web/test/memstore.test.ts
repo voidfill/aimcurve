@@ -101,6 +101,30 @@ describe('buildStore', () => {
     expect(next).toHaveLength(3);
   });
 
+  it('pages an unknown cursor to nothing, not to everything', () => {
+    // `(started_at, id) < (SELECT ... WHERE id = ?)` is NULL when the subquery
+    // matches nothing, so the SQL returns no rows. Dropping the predicate
+    // instead would wrap the infinite scroll back to the newest page and
+    // repeat it for ever. Verified against compare.page(conn, 100, before=999).
+    expect(store().page(100, { sameCfg: true, before: 'no-such-run' })).toEqual([]);
+  });
+
+  it('reads a negative limit as no limit, the way SQLite does', () => {
+    // slice(0, -1) would silently drop the last run instead.
+    expect(store().page(-1, { sameCfg: true })).toHaveLength(11);
+  });
+
+  it('ignores a repeated run rather than folding it in twice', () => {
+    // run.stats_file is UNIQUE and the index inserts OR IGNORE. Counting the
+    // duplicate would inflate the scenario's run count and feed refreshScenario
+    // the same curve twice.
+    const rows = all();
+    const doubled = buildStore([...rows, rows.find((r) => r.run.id === AIR_B)!]);
+    expect(doubled.counts().runs).toBe(11);
+    expect(doubled.scenarioList().find((s) => s.scenario === 'Air Pure Medium')!.runs)
+      .toBe(2);
+  });
+
   it('filters the rail by scenario', () => {
     const rail = store().page(100, { sameCfg: true, scenario: 'Air Pure Medium' });
     expect(rail.map((r) => r.id)).toEqual([AIR_B, AIR_A]);
