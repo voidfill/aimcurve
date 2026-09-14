@@ -9,11 +9,11 @@
 import { baselines, type Baselines } from './baselines';
 import {
   band as makeBand, compareUntil, cumulativeDelta, DEFAULT_RECENT_N,
-  DURATION_TOLERANCE, pySum, smooth,
+  DURATION_TOLERANCE, pySum, raceDelta, raceGrid, resampleRace, smooth,
 } from './compare';
 import { RACE, TIMED } from './shapes';
 import type { Store } from './store';
-import type { Curve, Run, Scenario, SeriesName } from './types';
+import type { Curve, Kill, Run, Scenario, SeriesName } from './types';
 
 /** Metric name -> (numerator, denominator). Order is the button order. */
 const METRICS: Record<string, [SeriesName, SeriesName | null]> = {
@@ -231,12 +231,168 @@ function fillTimed(
   }
 }
 
-/** Filled in Task 14. */
+/** Progress axis, damage rate, seconds-based delta, shared kill marks. */
 function fillRace(
-  _store: Store, _payload: Payload, _run: Run, _scenario: Scenario,
-  _curve: Curve | null, _base: Baselines, _smoothing: number, _sameCfg: boolean,
+  store: Store, payload: Payload, run: Run, scenario: Scenario,
+  curve: Curve | null, base: Baselines, smoothing: number, sameCfg: boolean,
 ): void {
-  throw new Error('race path not implemented yet');
+  const bots = scenario.bots || 1;
+  const steps = raceGrid(bots);
+  payload.axis = { kind: 'progress', label: '% of pool', n: steps };
+  payload.rate.metric = 'damage';
+  payload.rate.unit = 'dmg/s';
+  payload.delta.unit = 'seconds';
+  // Kill k always lands at damage k*pool/bots, so the marks are the same for
+  // every run of the scenario -- which is the whole point of this axis.
+  payload.marks = {
+    kills: Array.from({ length: bots }, (_, i) => (i + 1) / bots),
+    labels: [],
+    aligned: true,
+  };
+
+  let mineEdges: number[] = [];
+  if (curve && run.elapsed_s) {
+    const [edges, rate] = resampleRace(curve.series.hits, run.elapsed_s, steps);
+    mineEdges = edges;
+    payload.rate.mine = smooth(rate, smoothing);
+  }
+
+  const pbRun = base.pb && base.pb.curve ? store.getRun(base.pb.run_id) : undefined;
+  if (mineEdges.length && base.pb?.curve && pbRun?.elapsed_s) {
+    const [baseEdges, baseRate] = resampleRace(
+      base.pb.curve.series.hits, pbRun.elapsed_s, steps);
+    payload.rate.pb = smooth(baseRate, smoothing);
+    const values = raceDelta(mineEdges, baseEdges);
+    payload.delta.values = values;
+    payload.delta.final = values.length ? values[values.length - 1] : null;
+    // Both runs span the whole pool by definition, so there is no region where
+    // only one of them has data.
+    payload.delta.compare_until = 1.0;
+    payload.delta.baseline = {
+      run_id: base.pb.run_id, score: base.pb.score, is_true_pb: base.pb.is_true_pb,
+    };
+  }
+
+  if (mineEdges.length && base.recent.curve && base.recent.run_ids) {
+    const curves: number[][] = [];
+    // Each recent run is resampled against its OWN elapsed_s, not the focused
+    // run's: scaling every band member onto someone else's clock moves a real
+    // Air Pure Medium run by up to ~15%, hiding a slow run inside a band that
+    // looks normal.
+    base.recent.curve.forEach((recent, i) => {
+      const recentRun = store.getRun(base.recent.run_ids![i]);
+      if (!recentRun?.elapsed_s) return;
+      const [, recentRate] = resampleRace(
+        recent.series.hits, recentRun.elapsed_s, steps);
+      if (recentRate.length) curves.push(recentRate);
+    });
+    if (curves.length) {
+      const raw = makeBand(curves);
+      payload.rate.band = {
+        mean: smooth(raw.mean, smoothing),
+        lo: smooth(raw.lo, smoothing),
+        hi: smooth(raw.hi, smoothing),
+      };
+    }
+  }
+
+  payload.splits = raceSplits(store, run, base, sameCfg);
+  // Name the boundaries after the bots that hold them, reusing the rows the
+  // split table already loaded. A run that quit early names fewer bots than the
+  // scenario has; the chart falls back to the ordinal for the rest.
+  payload.marks.labels = payload.splits
+    .filter((s) => s.idx !== null)
+    .map((s) => s.bot)
+    .slice(0, bots);
+}
+
+/** Every run this one can fairly be judged against, and itself.
+ *
+ * Itself because `best` is a ceiling: on the run that set it the column has to
+ * read that run's own number and the gap has to be zero, not blank.
+ */
+function peerIds(
+  store: Store, run: Run, sameCfg: boolean, shape: Scenario['shape'],
+): string[] {
+  const rows = store.candidates(run.id, {
+    sameCfg, durationTol: DURATION_TOLERANCE, shape,
+  });
+  return [...rows.map((r) => r.id), run.id];
+}
+
+/** Total TTK the way the Python's builtin `sum` totals it.
+ *
+ * A null TTK is carried as zero rather than skipped, which is the same number
+ * either way -- the Python sums the generator without a guard, so a null there
+ * raises instead of choosing. Neumaier-compensated because the residual it
+ * feeds is subtracted from `elapsed_s` and shown to six decimals.
+ */
+function sumTtk(kills: Iterable<Kill>): number {
+  return pySum(Array.from(kills, (k) => k.ttk ?? 0));
+}
+
+/** Per-bot rows plus the dead-time residual, so the table reconciles.
+ *
+ * Dead time is not modelled as a scenario constant: it is stable within a game
+ * version but moved by up to a second across versions, so it is carried as this
+ * run's own residual and simply shown.
+ */
+function raceSplits(
+  store: Store, run: Run, base: Baselines, sameCfg: boolean,
+): SplitRow[] {
+  const mine = store.getKills(run.id);
+  if (!mine.length || !run.elapsed_s) return [];
+
+  const baseByIdx = new Map<number, Kill>();
+  if (base.pb) {
+    for (const k of store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
+  }
+
+  // Fastest this bot has ever gone down, this run included -- the column says
+  // what the ceiling is, so the run that set it must show itself.
+  const best = store.bestBySlot(peerIds(store, run, sameCfg, RACE), 'ttk');
+
+  const rows: SplitRow[] = mine.map((kill) => {
+    const other = baseByIdx.get(kill.idx);
+    return {
+      idx: kill.idx,
+      bot: kill.bot,
+      mine: kill.ttk,
+      base: other ? other.ttk : null,
+      best: best.get(kill.idx) ?? null,
+      delta: other && other.ttk !== null && kill.ttk !== null
+        ? kill.ttk - other.ttk : null,
+      delta_adj: null,
+    };
+  });
+
+  // How much this bot cost you *over and above how the run went generally*. A
+  // plain delta against the PB ranks the bots you find hard; subtracting the
+  // run's own mean delta takes the bad-day component out and leaves the bot
+  // that actually broke. Sums to zero across the bots by construction.
+  const deltas = rows
+    .map((r) => r.delta)
+    .filter((d): d is number => d !== null);
+  const meanDelta = deltas.length ? pySum(deltas) / deltas.length : null;
+  for (const row of rows) {
+    row.delta_adj = row.delta === null || meanDelta === null
+      ? null : row.delta - meanDelta;
+  }
+
+  const mineDead = run.elapsed_s - sumTtk(mine);
+  let baseDead: number | null = null;
+  if (baseByIdx.size && base.pb) {
+    const baseRun = store.getRun(base.pb.run_id);
+    if (baseRun?.elapsed_s) baseDead = baseRun.elapsed_s - sumTtk(baseByIdx.values());
+  }
+  // Dead time is the gap between bots, not a bot: it is part of the total but
+  // it has no place in a ranking of which bot to work on.
+  rows.push({
+    idx: null, bot: 'dead time', mine: mineDead, base: baseDead, best: null,
+    delta_adj: null,
+    delta: baseDead === null ? null : mineDead - baseDead,
+  });
+  return rows;
 }
 
 /** Filled in Task 15. */

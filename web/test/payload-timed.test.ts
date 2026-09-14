@@ -80,10 +80,7 @@ describe('buildRunPayload, timed', () => {
       .toEqual(['score', 'shots', 'hits', 'kills', 'accuracy', 'efficiency']);
   });
 
-  // Deferred to Task 14: `metrics` is already [] by the time the race path is
-  // reached, but `fillRace` is still a stub that throws, so the call cannot
-  // return. Restore this as `it` when the race path lands.
-  it.todo('offers no metric buttons at all on a race', () => {
+  it('offers no metric buttons at all on a race', () => {
     // The shape fixes the y series; six buttons would redraw one line.
     expect(build(AIR_B).metrics).toEqual([]);
   });
