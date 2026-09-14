@@ -27,7 +27,18 @@ const FILENAME =
 const KILL_COLUMNS = 13;
 const CLOCK = /^(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)$/;
 
-const FLOATS: Record<string, keyof Run> = {
+/** The `Run` fields a numeric key may name, and the ones a string key may.
+ *
+ * Narrower than `keyof Run` on purpose. With the wider type the assignment
+ * below needs a cast to a single field name, and a cast is an assertion rather
+ * than a check: mis-keying `Score: 'scenario'` would then compile and write a
+ * number into a string field. Derived this way, the mistake is caught here, at
+ * the table.
+ */
+type NumberField = { [K in keyof Run]: Run[K] extends number | null ? K : never }[keyof Run];
+type StringField = { [K in keyof Run]: Run[K] extends string | null ? K : never }[keyof Run];
+
+const FLOATS: Record<string, NumberField> = {
   Score: 'score',
   'Damage Done': 'damage_done',
   'Avg TTK': 'avg_ttk',
@@ -38,7 +49,7 @@ const FLOATS: Record<string, keyof Run> = {
   'Avg FPS': 'avg_fps',
   'Damage Taken': 'damage_taken',
 };
-const INTS: Record<string, keyof Run> = {
+const INTS: Record<string, NumberField> = {
   Kills: 'kills',
   'Hit Count': 'hits',
   'Miss Count': 'misses',
@@ -47,7 +58,7 @@ const INTS: Record<string, keyof Run> = {
   'Total Overshots': 'overshots',
   Reloads: 'reloads',
 };
-const STRINGS: Record<string, keyof Run> = {
+const STRINGS: Record<string, StringField> = {
   Scenario: 'scenario',
   Hash: 'hash',
   'Game Version': 'game_version',
@@ -178,9 +189,9 @@ export function parseStats(id: string, text: string): Run {
     if (!rawKey.endsWith(':')) continue; // kill row, blank line, or a header
     const key = rawKey.slice(0, -1);
     const value = line.slice(comma + 1).trim();
-    if (key in FLOATS) set(FLOATS[key] as 'score', toNumber(value));
-    else if (key in INTS) set(INTS[key] as 'kills', toInt(value));
-    else if (key in STRINGS) set(STRINGS[key] as 'hash', value);
+    if (key in FLOATS) set(FLOATS[key], toNumber(value));
+    else if (key in INTS) set(INTS[key], toInt(value));
+    else if (key in STRINGS) set(STRINGS[key], value);
   }
 
   const { hits, misses } = run;

@@ -1,10 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // The fixtures live with the Python, one level up, because both implementations
 // are checked against the same files. See the repository-split spec: there is
 // no boundary here to reach across.
-export const FIXTURES = new URL('../../tests/fixtures/', import.meta.url).pathname;
+// fileURLToPath rather than .pathname: a URL's pathname is percent-encoded, so
+// a checkout under a path with a space in it resolves to a literal "%20" and
+// every fixture read fails with ENOENT. The target users are Windows players,
+// where a space in the path is the normal case rather than the odd one.
+export const FIXTURES = fileURLToPath(new URL('../../tests/fixtures/', import.meta.url));
 
 export const statsDir = join(FIXTURES, 'stats');
 export const perfDir = join(FIXTURES, 'performances');
