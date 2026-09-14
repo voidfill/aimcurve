@@ -4,6 +4,12 @@ This exists so the browser port can be diffed against this implementation
 without either side running a server. It is the whole API surface in one file:
 every run's payload, the rail, the scenario list and each day's session view.
 
+Plus an option matrix. The default view exercises one metric of six, one
+smoothing window, one recent-N and the rail with no cursor -- so a dump of only
+the defaults never compares the ratio branch of `_series`, the zero-denominator
+rule in `_ratio`, the recent-N slice boundary, `same_cfg=0`, the cursor, or the
+health counts. `cases`, `rails`, `health` and `session` cover the rest.
+
 `ids` maps this database's row counters onto run basenames. The browser keys on
 the basename -- a row counter does not survive a machine, let alone a re-pick --
 so the harness needs the correspondence spelled out rather than inferred.
@@ -25,6 +31,26 @@ ALL = 100_000
 def _basename_id(stats_file):
     base = os.path.basename(stats_file)
     return base[: -len(" Stats.csv")] if base.endswith(" Stats.csv") else base
+
+
+def run_cases():
+    """[(case key, build_run_payload kwargs)] -- the per-run option matrix.
+
+    The key is a literal string, and the port builds the same literals rather
+    than deriving them: the two documents are joined on this key, and a key
+    formatted from a number on one side and a template literal on the other is
+    one repr away from lining nothing up while still reporting no differences.
+
+    recent_n runs below 1 on purpose. `prior[-recent_n:]` reads 0 as "every
+    prior run" and a negative value as "drop from the front", which is a slice
+    quirk rather than an intention -- both sides clamp, and this is what
+    checks that they clamp identically.
+    """
+    cases = [(f"metric={name}", {"metric": name}) for name in payload.METRICS]
+    cases += [(f"smoothing={n}", {"smoothing": n}) for n in (0, 1, 2, 3, 7)]
+    cases += [(f"recent_n={n}", {"recent_n": n}) for n in (-5, 0, 1, 3)]
+    cases += [("same_cfg=0", {"same_cfg": False})]
+    return cases
 
 
 def build(conn):
@@ -58,11 +84,57 @@ def build(conn):
             "FROM run WHERE substr(started_at,1,10)=? ORDER BY started_at",
             (day,))
 
+    # Every run under every option in the matrix. Keyed "<basename>|<case>"
+    # because the browser has no row counters to key on.
+    cases = {}
+    for row_id, base in ids.items():
+        for key, kwargs in run_cases():
+            cases[f"{base}|{key}"] = payload.build_run_payload(
+                conn, int(row_id), **kwargs)
+
+    # The rail under the parameters the URL can carry. `before` is a row
+    # counter here and a basename in the browser, so the key is the basename
+    # on both sides -- the same inversion `ids` exists for.
+    rails = {}
+    for limit in (0, 1, 5):
+        rails[f"limit={limit}"] = payload.run_list(conn, limit)
+    rails["same_cfg=0"] = payload.run_list(conn, ALL, same_cfg=False)
+    for row in scenarios:
+        rails[f"scenario={row['scenario']}"] = payload.run_list(
+            conn, ALL, scenario=row["scenario"])
+    for row_id, base in ids.items():
+        rails[f"before={base}"] = payload.run_list(conn, ALL, before=int(row_id))
+
+    # What /api/health answers, less awaiting_perf and watcher_errors: both
+    # read a live watcher's counters, which a dump has no business inventing.
+    def count(sql):
+        return conn.execute(sql).fetchone()[0]
+
+    health = {
+        "runs": count("SELECT COUNT(*) FROM run"),
+        "curves": count("SELECT COUNT(*) FROM curve"),
+        "failed": count("SELECT COUNT(*) FROM failed"),
+        "scenarios": count("SELECT COUNT(DISTINCT scenario) FROM run"),
+    }
+
+    # /api/session/today with no `day`: the most recent day that has runs,
+    # which is a choice the server makes and so is worth diffing.
+    (today,) = conn.execute("SELECT MAX(substr(started_at,1,10)) FROM run").fetchone()
+    session = {"day": today, "runs": payload._rows(
+        conn,
+        "SELECT id, scenario, started_at, score, accuracy, spm "
+        "FROM run WHERE substr(started_at,1,10)=? ORDER BY started_at",
+        (today,))}
+
     return {
         "runs": runs,
+        "cases": cases,
         "rail": payload.run_list(conn, ALL),
+        "rails": rails,
         "scenarios": scenarios,
         "days": days,
+        "health": health,
+        "session": session,
         "ids": ids,
     }
 

@@ -47,6 +47,48 @@ class DumpTest(unittest.TestCase):
         self.assertIn("2026-09-12", self.doc["days"])
         self.assertEqual(len(self.doc["days"]["2026-09-12"]), 1)
 
+    def test_cases_cover_every_run_under_every_option(self):
+        self.assertEqual(len(dump.run_cases()), 16)
+        self.assertEqual(len(self.doc["cases"]), 11 * 16)
+        for base in self.doc["ids"].values():
+            for key, _ in dump.run_cases():
+                self.assertIn(f"{base}|{key}", self.doc["cases"])
+
+    def test_cases_actually_vary_the_payload(self):
+        base = self.doc["ids"]["3"]
+        # A race fixes the y series, so its metric buttons do not move the
+        # chart -- take a timed run with a curve for the metric check.
+        timed = self.doc["ids"]["6"]
+        self.assertNotEqual(self.doc["cases"][f"{timed}|metric=accuracy"]["rate"]["mine"],
+                            self.doc["cases"][f"{timed}|metric=score"]["rate"]["mine"])
+        self.assertNotEqual(self.doc["cases"][f"{base}|smoothing=0"]["rate"]["mine"],
+                            self.doc["cases"][f"{base}|smoothing=7"]["rate"]["mine"])
+        # recent_n<=0 is the slice quirk: "all prior runs", not "none".
+        self.assertEqual(self.doc["cases"][f"{base}|recent_n=-5"]["baselines"]["recent_n"],
+                         self.doc["cases"][f"{base}|recent_n=0"]["baselines"]["recent_n"])
+
+    def test_rails_cover_limits_cursors_and_scenarios(self):
+        self.assertEqual(self.doc["rails"]["limit=0"], [])
+        self.assertEqual(len(self.doc["rails"]["limit=1"]), 1)
+        self.assertEqual(len(self.doc["rails"]["limit=5"]), 5)
+        self.assertEqual(len(self.doc["rails"]["same_cfg=0"]), 11)
+        for base in self.doc["ids"].values():
+            self.assertIn(f"before={base}", self.doc["rails"])
+        for row in self.doc["scenarios"]:
+            self.assertIn(f"scenario={row['scenario']}", self.doc["rails"])
+        # The newest run's cursor pages to everything older than it.
+        newest = self.doc["ids"][str(self.doc["rail"][0]["id"])]
+        self.assertEqual(len(self.doc["rails"][f"before={newest}"]), 10)
+
+    def test_health_is_the_four_countable_fields(self):
+        self.assertEqual(self.doc["health"],
+                         {"runs": 11, "curves": 7, "failed": 0, "scenarios": 8})
+
+    def test_session_defaults_to_the_most_recent_day(self):
+        self.assertEqual(self.doc["session"]["day"], "2026-09-12")
+        self.assertEqual(self.doc["session"]["runs"],
+                         self.doc["days"]["2026-09-12"])
+
     def test_document_is_json_serialisable(self):
         json.dumps(self.doc, default=float)
 
