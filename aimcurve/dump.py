@@ -77,15 +77,25 @@ def main(argv=None):
     # A throwaway database every time. A dump that reused a cache could report
     # a schema from a previous version of the code, which is precisely the
     # failure an oracle must not have.
-    with tempfile.TemporaryDirectory() as tmp:
-        cfg = paths.load({"KOVAAKS_DIR": args.root,
-                          "AIMCURVE_DB": os.path.join(tmp, "dump.sqlite3")})
-        conn = index.connect(cfg.db_path)
-        counts = index.bootstrap(conn, cfg)
-        document = build(conn)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = paths.load({"KOVAAKS_DIR": args.root,
+                              "AIMCURVE_DB": os.path.join(tmp, "dump.sqlite3")})
+            conn = index.connect(cfg.db_path)
+            counts = index.bootstrap(conn, cfg)
+            document = build(conn)
 
-    with open(args.out, "w", encoding="utf-8") as handle:
-        json.dump(document, handle, default=float, sort_keys=True, indent=1)
+        with open(args.out, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, default=float, sort_keys=True, indent=1)
+    # The diff harness shells out to this command. A traceback there says
+    # "the port is broken" when the truth is "--root was wrong", which is the
+    # most expensive kind of wrong answer a verification step can give.
+    except paths.Fail as error:
+        print(error, file=sys.stderr)
+        return error.code
+    except OSError as error:
+        print(error, file=sys.stderr)
+        return paths.EXIT_INPUT
     print(f"{counts['runs']} runs, {counts['curves']} curves -> {args.out}",
           file=sys.stderr)
     return 0
