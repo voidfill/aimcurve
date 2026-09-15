@@ -41,7 +41,10 @@ export function compare(
   if (python && typescript && typeof python === 'object' && typeof typescript === 'object') {
     const pk = Object.keys(python as object).sort();
     const tk = Object.keys(typescript as object).sort();
-    if (pk.join(',') !== tk.join(',')) {
+    // JSON.stringify rather than join(','): the rail is keyed on scenario
+    // names, which are whatever the game wrote into a filename, and a comma in
+    // one of them makes {"a,b": x} and {"a": x, "b": y} compare equal.
+    if (JSON.stringify(pk) !== JSON.stringify(tk)) {
       out.push({ path: `${path}{keys}`, python: pk, typescript: tk });
       return out;
     }
@@ -57,6 +60,39 @@ export function compare(
   }
   if (python !== typescript) out.push({ path, python, typescript });
   return out;
+}
+
+/** `JSON.stringify`, except that a negative zero renders as `-0`.
+ *
+ * `Object.is(0, -0)` is false, so `compare` reports a sign-of-zero divergence
+ * and the Python does emit `-0.0` -- but `JSON.stringify(-0)` is "0", so the
+ * report read "python: 0 / ts: 0". Two identical-looking values is the one
+ * failure message a legibility harness cannot afford. Recursive because a
+ * length or type mismatch dumps a whole array or object, not just a leaf.
+ */
+function render(value: unknown): string {
+  if (Object.is(value, -0)) return '-0';
+  if (Array.isArray(value)) return `[${value.map(render).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .map(([key, v]) => `${JSON.stringify(key)}:${render(v)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** The differences as something a human reads, capped so it stays readable.
+ *
+ * Lives here rather than in the test because it is what a failure actually
+ * shows: the assertions compare a bounded value and pass this as the message,
+ * so that vitest renders forty formatted lines instead of its own diff of a
+ * 258 KB array with the message scrolled off the top.
+ */
+export function report(differences: Difference[]): string {
+  return differences
+    .slice(0, 40)
+    .map((d) => `  ${d.path}\n    python: ${render(d.python)}\n    ts:     ${render(d.typescript)}`)
+    .join('\n');
 }
 
 /** Rewrite a Python-side document so that only real disagreements remain.

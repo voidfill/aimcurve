@@ -32,6 +32,92 @@ export function pySum(values: ArrayLike<number>, lo = 0, hi = values.length): nu
   return total + compensation;
 }
 
+/** What Python's `math.fsum` does to a run of floats.
+ *
+ * Not the same algorithm as `pySum` and not interchangeable with it. Builtin
+ * `sum` carries a single Neumaier compensation term, which is cheap and almost
+ * always right; `math.fsum` keeps Shewchuk's full expansion -- a list of
+ * non-overlapping partials that together represent the running total exactly --
+ * and so returns the correctly rounded sum always. The two differ: over
+ * `[1e100, 1, 1e-100, -1e100, -1]` a naive loop gives -1, builtin `sum` gives
+ * 0, and `fsum` gives 1e-100.
+ *
+ * Which one a call site needs is decided by the oracle, not by taste. Python's
+ * `statistics.fmean` is `fsum(data) / n`, so every `fmean` in the oracle is a
+ * `pyFsum` here; every builtin `sum` is a `pySum`. Short inputs let the two
+ * agree by luck, which is exactly how the wrong one survives review -- the band
+ * below only ever saw two-value columns until a scenario had three comparable
+ * curves.
+ *
+ * The tail is CPython's, including the half-even fixup: without it
+ * `fsum([1e-16, 1, 1e16])` rounds down to 1e16 instead of up to the value two
+ * ulps above it, and fsum stops being commutative.
+ */
+export function pyFsum(values: ArrayLike<number>): number {
+  const partials: number[] = [];
+  let n = 0;
+  // A non-finite intermediate is either overflow (which Python raises on) or an
+  // inf/nan that was in the input (which it sums separately, so that an inf
+  // among finite values comes back as inf rather than as the nan the expansion
+  // would otherwise produce).
+  let special = 0;
+  let infinities = 0;
+
+  for (let k = 0; k < values.length; k++) {
+    let x = values[k];
+    const original = x;
+    let i = 0;
+    for (let j = 0; j < n; j++) {
+      let y = partials[j];
+      if (Math.abs(x) < Math.abs(y)) { const t = x; x = y; y = t; }
+      const high = x + y;
+      const low = y - (high - x);
+      if (low !== 0) partials[i++] = low;
+      x = high;
+    }
+    n = i;
+    if (x !== 0) {
+      if (!Number.isFinite(x)) {
+        if (Number.isFinite(original)) throw new RangeError('intermediate overflow in fsum');
+        if (Math.abs(original) === Infinity) infinities += original;
+        special += original;
+        n = 0;
+      } else {
+        partials[n++] = x;
+      }
+    }
+  }
+
+  // `!== 0` rather than a finiteness test on purpose: a nan special sum is not
+  // equal to zero either, and a nan anywhere in the input must come back out.
+  if (special !== 0) {
+    if (Number.isNaN(infinities)) throw new RangeError('-inf + inf in fsum');
+    return special;
+  }
+
+  let total = 0;
+  if (n > 0) {
+    total = partials[--n];
+    // Add the partials from the top down, stopping at the first one that does
+    // not fit: everything below it is strictly smaller than half an ulp of the
+    // total, so it can only move the result by tipping a tie.
+    let low = 0;
+    while (n > 0) {
+      const x = total;
+      const y = partials[--n];
+      total = x + y;
+      low = y - (total - x);
+      if (low !== 0) break;
+    }
+    if (n > 0 && ((low < 0 && partials[n - 1] < 0) || (low > 0 && partials[n - 1] > 0))) {
+      const y = low * 2;
+      const x = total + y;
+      if (y === x - total) total = x;
+    }
+  }
+  return total;
+}
+
 /** Centred rolling mean. Preserves length; shrinks the window at the edges. */
 export function smooth(values: readonly number[], window: number): number[] {
   if (window <= 1 || !values.length) return Array.from(values);
@@ -99,14 +185,12 @@ export function band(curves: readonly (readonly number[])[]): Band {
   const hi: number[] = [];
   for (let i = 0; i < n; i++) {
     const column = usable.map((c) => c[i]);
-    // `statistics.fmean` in the Python, which sums with `math.fsum` and is
-    // exactly rounded. `pySum` is not fsum, but over columns this short it
-    // agrees with it on every set measured (20k trials of 3, 5 and 10 values),
-    // where a left-to-right sum disagrees on a quarter of them.
-    const mu = pySum(column) / column.length;
+    // `statistics.fmean` in the Python, which is `math.fsum(column) / n`.
+    const mu = pyFsum(column) / column.length;
     // `statistics.pstdev` is Fraction-exact and no float algorithm reproduces
-    // it. This is the one place the oracle diff may eventually need a
-    // tolerance, and it needs three comparable prior curves to reach.
+    // it -- `pyFsum` no better than `pySum`, so the choice below is arbitrary
+    // rather than matched. This is the one place the oracle diff may eventually
+    // need a tolerance, and it needs three comparable prior curves to reach.
     const sigma = banded
       ? Math.sqrt(pySum(column.map((v) => (v - mu) ** 2)) / column.length)
       : 0;

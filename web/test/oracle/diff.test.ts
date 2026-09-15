@@ -10,7 +10,7 @@ import { buildStore } from '../../src/core/memstore';
 import type { PayloadOpts } from '../../src/core/payload';
 import type { Store } from '../../src/core/store';
 import { readPerf, readStats, statsIds } from '../fixtures';
-import { compare, normalisePython, type Difference } from './diff';
+import { compare, normalisePython, report } from './diff';
 
 // Reached with `nix shell nixpkgs#python3 --command python3` on the development
 // machine; set AIMCURVE_PYTHON to whatever invokes Python 3 elsewhere. There is
@@ -112,13 +112,6 @@ function dumpFromTypescript(s: Store) {
   };
 }
 
-function report(differences: Difference[]): string {
-  return differences
-    .slice(0, 40)
-    .map((d) => `  ${d.path}\n    python: ${JSON.stringify(d.python)}\n    ts:     ${JSON.stringify(d.typescript)}`)
-    .join('\n');
-}
-
 beforeAll(() => {
   python = normalisePython(dumpFromPython());
   const store = buildStore(statsIds().map((id) => ingest(id, readStats(id), readPerf(id))));
@@ -133,41 +126,41 @@ describe('oracle diff', () => {
 
   it('agrees on every run payload', () => {
     const differences = compare(python.runs, mine.runs, 'runs');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on every run under every option', () => {
     const differences = compare(python.cases, mine.cases, 'cases');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on the rail', () => {
     const differences = compare(python.rail, mine.rail, 'rail');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on the rail under every limit, cursor and filter', () => {
     const differences = compare(python.rails, mine.rails, 'rails');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on the scenario list', () => {
     const differences = compare(python.scenarios, mine.scenarios, 'scenarios');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on every day', () => {
     const differences = compare(python.days, mine.days, 'days');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on the health counts', () => {
     const differences = compare(python.health, mine.health, 'health');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 
   it('agrees on the default session', () => {
     const differences = compare(python.session, mine.session, 'session');
-    expect(differences, `\n${report(differences)}`).toEqual([]);
+    expect(differences.length, `\n${report(differences)}`).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  band, compareUntil, cumulativeDelta, pad, raceDelta, raceGrid, resampleRace, smooth,
+  band, compareUntil, cumulativeDelta, pad, pyFsum, pySum, raceDelta, raceGrid, resampleRace,
+  smooth,
 } from '../src/core/compare';
 import { parsePerf } from '../src/core/perf';
 import { readPerf } from './fixtures';
@@ -12,6 +13,46 @@ const GROUND_B = 'VT Ground Intermediate S5 - Challenge - 2026.06.16-20.49.09';
 
 const curve = (id: string) => parsePerf(readPerf(id)!);
 const sum = (a: readonly number[]) => a.reduce((x, y) => x + y, 0);
+
+// Every expected value below was read off CPython 3.14 with
+// `python3 -c "import math; print(repr(math.fsum(...)))"`, next to `sum(...)`
+// and a left-to-right loop over the same list. The point of the block is that
+// the three algorithms are genuinely three algorithms: picking the wrong one is
+// invisible on short well-scaled inputs and permanent once it ships.
+describe('pyFsum', () => {
+  it('disagrees with both a naive sum and the builtin sum', () => {
+    // Builtin `sum` carries one compensation term, so it recovers the 1 that a
+    // naive loop loses against 1e100 -- but it has nowhere left to hold the
+    // 1e-100, and drops it. fsum keeps both.
+    const values = [1e100, 1, 1e-100, -1e100, -1];
+    expect(sum(values)).toBe(-1);
+    expect(pySum(values)).toBe(0);
+    expect(pyFsum(values)).toBe(1e-100);
+  });
+
+  it('is exact where a naive sum cancels to nothing', () => {
+    const values = Array.from({ length: 10 }, () => [1, 1e100, 1, -1e100]).flat();
+    expect(sum(values)).toBe(0);
+    expect(pyFsum(values)).toBe(20);
+  });
+
+  it('rounds the accumulated total, not each addition', () => {
+    // The half-even fixup in fsum's tail: the 1e-16 pushes the exact total past
+    // the midpoint between 1e16 and the double above it, so the correctly
+    // rounded answer is the larger one. Both other algorithms have already
+    // thrown the 1e-16 away by the time they add 1e16.
+    expect(pyFsum([1e-16, 1, 1e16])).toBe(1.0000000000000002e16);
+    expect(pySum([1e-16, 1, 1e16])).toBe(1e16);
+
+    expect(pyFsum([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])).toBe(1);
+    expect(sum([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]))
+      .toBe(0.9999999999999999);
+  });
+
+  it('sums nothing to zero, the way fsum([]) does', () => {
+    expect(pyFsum([])).toBe(0);
+  });
+});
 
 describe('smooth', () => {
   it('is a centred rolling mean that shrinks at the edges', () => {
@@ -103,6 +144,16 @@ describe('band', () => {
 
   it('survives an empty set', () => {
     expect(band([])).toEqual({ mean: [], lo: [], hi: [] });
+  });
+
+  it('takes the column mean with fsum, because the Python takes fmean', () => {
+    // `statistics.fmean([1e-16, 1.0, 1e16])` is 3333333333333334.0; dividing a
+    // compensated builtin `sum` by three gives 3333333333333333.5 instead. It
+    // takes three comparable curves for a column to be long enough for the two
+    // to part company, which is why this went unnoticed: the fixture corpus has
+    // no scenario with three, so the oracle diff cannot reach it.
+    expect(band([[1e-16], [1], [1e16]]).mean).toEqual([3333333333333334]);
+    expect(pySum([1e-16, 1, 1e16]) / 3).toBe(3333333333333333.5);
   });
 });
 

@@ -4,7 +4,7 @@
  * candidate set, and it takes that through the Store interface.
  */
 
-import { DEFAULT_RECENT_N, DURATION_TOLERANCE, pySum } from './compare';
+import { DEFAULT_RECENT_N, DURATION_TOLERANCE, pyFsum } from './compare';
 import type { Store } from './store';
 import type { Curve, Shape } from './types';
 
@@ -91,10 +91,9 @@ export function baselines(
     const scores = recent
       .map((r) => r.score)
       .filter((s): s is number => s !== null);
-    // `statistics.fmean` in the Python. Compensated rather than left to right:
-    // it is not fsum, but over a handful of scores it agrees with fsum where a
-    // plain running total does not.
-    result.recent.mean_score = scores.length ? pySum(scores) / scores.length : 0;
+    // `statistics.fmean` in the Python, which is `math.fsum(scores) / n` -- and
+    // the Python falls back to `fmean([0.0])` when every recent score is null.
+    result.recent.mean_score = scores.length ? pyFsum(scores) / scores.length : 0;
 
     // Built in one pass so the two lists stay index-aligned -- a race curve is
     // later resampled against its own run's elapsed_s, not the focused run's.
