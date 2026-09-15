@@ -21,7 +21,9 @@
 - **Never write to the KovaaK's install.** Every source is read-only. The picker is opened with `mode: 'read'`.
 - **Nothing leaves the machine.** No network request of any kind after the page loads. Chrome's directory dialog says *"Upload N files to this site?"*; the UI must contradict that in words **before** the dialog opens, because it is the first thing a new user reads.
 - **A missing `.perf` is normal, not an error.** Roughly one run in seven has none.
-- **Never `await` something that is not an IndexedDB request while a transaction is open.** A transaction commits as soon as control returns to the event loop with no request pending, so an `await` on a dynamic import, a `File.text()`, or a second transaction's result silently deactivates the one you are holding — and the next `put` throws `TransactionInactiveError`, or worse, the reads before it came from a transaction that is now gone. The safe pattern is to issue every request **synchronously** and then await them together:
+- **Never `await` a non-IndexedDB promise while a transaction is open.** A transaction commits as soon as control returns to the event loop with no request pending, so an `await` on a dynamic import, a `File.text()`, a timer, or a second transaction's result silently deactivates the one you are holding — and the next `put` throws `TransactionInactiveError`, or worse, the reads before it came from a transaction that is now gone. Read everything a write needs *before* opening the write transaction.
+
+  **Awaiting a request belonging to the open transaction is safe**, and the spec is explicit about it: the transaction stays active while one of its own requests is pending, which is what keeps `await req(store.get(id))` from committing underneath you. So a sequential loop over a transaction's own requests is *correct* — it is merely slow, because it costs one event-loop turn per row instead of one for the batch. Prefer issuing every request **synchronously** and awaiting them together, for the round trips rather than for safety:
 
   ```ts
   const tx = db.transaction(['curves', 'kills']);
@@ -31,7 +33,7 @@
     Promise.all(curves), Promise.all(kills)]);
   ```
 
-  A sequential `for (const r of rows) await req(store.get(r.id))` is the shape that fails, and it fails intermittently, which is worse than failing outright. Read everything a write needs *before* opening the write transaction.
+  The shape that genuinely fails, and fails intermittently, is `await` on anything the transaction does not own — `await file.text()` or `await import(...)` mid-transaction, not `await req(store.get(id))`.
 - **Eviction is survivable.** Losing the database costs a re-pick and one bootstrap. Treat a `persist()` refusal as normal rather than as a failure.
 - **Verification here is the integration pass**, on a machine with KovaaK's installed. Automated tests cover only the two indexer cases named in Task 5. Do not write tests that stub the browser into agreeing with you.
 
@@ -196,10 +198,20 @@ export function openDatabase(factory: IDBFactory = indexedDB): Promise<IDBDataba
       for (const name of Array.from(db.objectStoreNames)) db.deleteObjectStore(name);
       create(db);
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Without this, a tab left open on an older schema blocks every new tab
+      // for ever: the newcomer's open() sits in onblocked until this connection
+      // goes away, and nothing makes it go away. Closing on demand costs this
+      // tab nothing -- the database is a cache, and a reload rebuilds it.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
     request.onblocked = () =>
-      reject(new Error('another tab is holding an older version of the database'));
+      reject(new Error(
+        'another tab is using an older version of aimcurve. Close aimcurve’s ' +
+        'other tabs and reload this one.'));
   });
 }
 
@@ -477,7 +489,7 @@ Run: `cd web && npm test && npx astro check`
 Expected: all passed, `0 errors`.
 
 Run: `nix shell nixpkgs#python3 --command bash -c 'cd web && npm run oracle'`
-Expected: 5 passed. **If the oracle diff now fails, revert and redo the change — `async` cannot alter a value.**
+Expected: 9 passed. **If the oracle diff now fails, revert and redo the change — `async` cannot alter a value.**
 
 - [ ] **Step 5: Commit the async conversion on its own**
 
@@ -501,7 +513,7 @@ is the check that nothing but the await changed."
  * to beat something rather than guess.
  */
 
-import { DURATION_TOLERANCE } from '../core/compare';
+import { DURATION_TOLERANCE, pySum } from '../core/compare';
 import { RACE } from '../core/shapes';
 import type {
   CandidateOpts, Counts, PageOpts, ScenarioListRow, SessionRow, SlotMetric, Store,
@@ -588,6 +600,12 @@ export function createStore(db: IDBDatabase): Store {
      *  296 ms. */
     async page(limit: number, opts: PageOpts): Promise<RailRow[]> {
       const cursorRun = opts.before != null ? await stored(opts.before) : undefined;
+      // An unknown cursor pages to nothing, not to everything. The SQL's
+      // subquery yields NULL, `(started_at, id) < NULL` is NULL, and no row
+      // survives; dropping the predicate instead wraps an infinite scroll back
+      // to the newest rows and repeats them for ever. See memstore.ts:129-140,
+      // which carries the same comment because this was already fixed once.
+      if (opts.before != null && !cursorRun) return [];
       const index = db.transaction('runs').objectStore('runs').index('started_at');
       const range = cursorRun
         ? IDBKeyRange.upperBound(cursorRun.started_at)
@@ -672,8 +690,12 @@ export function createStore(db: IDBDatabase): Store {
         const scored = rows.filter((r) => r.score !== null);
         const byScore = [...scored].sort((a, b) => (b.score as number) - (a.score as number));
         const recent = rows.slice(-RECENT_FORM_N);
+        // pySum, not reduce: SQLite's AVG has summed with Neumaier
+        // compensation since 3.42, and memstore.ts:96 matches it. A plain
+        // left-to-right sum is invisible on the fixtures -- no scenario has
+        // enough runs -- and diverges against a real install.
         const mean = (values: number[]) =>
-          values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+          values.length ? pySum(values) / values.length : null;
         out.push({
           scenario: scenario.name,
           runs: rows.length,
@@ -687,7 +709,11 @@ export function createStore(db: IDBDatabase): Store {
             recent.map((r) => r.score).filter((v): v is number => v !== null)),
         });
       }
-      return out.sort((a, b) => (a.last_played < b.last_played ? 1 : -1));
+      // 0 on equality, not -1: an inconsistent comparator sorts unpredictably,
+      // and the oracle compares this list positionally. memstore.ts:195-196
+      // spells the equal case out for the same reason.
+      return out.sort((a, b) =>
+        a.last_played === b.last_played ? 0 : a.last_played < b.last_played ? 1 : -1);
     },
 
     /** substr(started_at,1,10) = ? becomes a bounded range, since the field is
@@ -703,9 +729,24 @@ export function createStore(db: IDBDatabase): Store {
     },
 
     async days(): Promise<string[]> {
-      const keys = await req<IDBValidKey[]>(
-        db.transaction('runs').objectStore('runs').index('started_at').getAllKeys());
-      return [...new Set(keys.map((k) => String(k).slice(0, 10)))].sort();
+      // A key cursor, not getAllKeys(): on an *index*, getAllKeys() returns the
+      // PRIMARY keys, which here are the run basenames -- so slice(0, 10) would
+      // yield 'Air Pure M' rather than '2026-04-06'. It cascades, because
+      // api.getSession takes days[days.length - 1] and would then ask for a day
+      // that matches no row at all. cursor.key is the index key.
+      const index = db.transaction('runs').objectStore('runs').index('started_at');
+      const days = new Set<string>();
+      await new Promise<void>((resolve, reject) => {
+        const request = index.openKeyCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return resolve();
+          days.add(String(cursor.key).slice(0, 10));
+          cursor.continue();
+        };
+        request.onerror = () => reject(request.error);
+      });
+      return [...days].sort();
     },
 
     async counts(): Promise<Counts> {
@@ -810,12 +851,24 @@ export function perfIdOf(filename: string): string | null {
  *
  * The pool size is deliberately not a constant tuned on one device. High
  * concurrency does not help on a spinning disk or a network-redirected profile,
- * and the measured curve is flat from 8 to 128, so the middle of that range is
- * the safe default rather than the fastest observed point.
+ * and the measured curve is flat from 8 to 128 -- so the value is chosen from
+ * the low end of that flat region, where the gain is already banked and the
+ * memory held in flight is smallest. It is not the midpoint of the range, and
+ * it is not the fastest observed point.
  */
 
 export const DEFAULT_CONCURRENCY = 12;
 
+/** Run `work` over every item, at most `concurrency` at a time.
+ *
+ * `work` is called in input order but *completes* in whatever order the reads
+ * finish, so a caller that pushes into an array gets completion order, not
+ * input order. Sort afterwards if the order matters.
+ *
+ * The first rejection stops the pool and propagates: the remaining items are
+ * left untouched rather than being read into a caller that has already
+ * unwound.
+ */
 export async function readAll<T>(
   items: readonly T[],
   work: (item: T) => Promise<void>,
@@ -823,11 +876,23 @@ export async function readAll<T>(
 ): Promise<void> {
   const width = Math.max(1, Math.min(concurrency, items.length));
   let next = 0;
+  let failed = false;
   const workers = Array.from({ length: width }, async () => {
     for (;;) {
+      // Without this the other width-1 workers keep draining the list after one
+      // of them has thrown -- calling `work` on every remaining item while the
+      // caller has already unwound and possibly torn its database down. How
+      // much still runs depends on the width, so one unreadable file would give
+      // a different partial index at width 1 than at width 2.
+      if (failed) return;
       const i = next++;
       if (i >= items.length) return;
-      await work(items[i]);
+      try {
+        await work(items[i]);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   });
   await Promise.all(workers);
@@ -854,16 +919,35 @@ import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
 export function uploadSource(files: FileList | readonly File[]): RunSource {
   const stats = new Map<string, File>();
   const perfs = new Map<string, File>();
+  let sawStatsDir = false;
 
   for (const file of Array.from(files)) {
-    // webkitRelativePath is the whole path under the chosen folder; only the
-    // final component names the run.
-    const name = file.name;
-    const statsId = statsIdOf(name);
-    if (statsId !== null) { stats.set(statsId, file); continue; }
-    const perfId = perfIdOf(name);
-    if (perfId !== null) perfs.set(perfId, file);
+    // webkitRelativePath is the whole path under the chosen folder, e.g.
+    // "FPSAimTrainer/stats/Foo - Challenge - 2026.09.03-19.08.37 Stats.csv",
+    // and it is the parent directory that has to be checked -- not just the
+    // filename. Matching on the name alone indexes every "* Stats.csv"
+    // anywhere in the tree: a backup folder, or a second install, with the last
+    // File silently winning a name collision. The picker source reads strictly
+    // stats/ and performances/, and the indexer must never be able to tell the
+    // two sources apart.
+    const parts = file.webkitRelativePath.split('/');
+    if (parts.length < 2) continue;  // no directory information: not ours
+    const dir = parts[parts.length - 2];
+    const name = parts[parts.length - 1];
+    if (dir === 'stats') {
+      sawStatsDir = true;
+      const statsId = statsIdOf(name);
+      if (statsId !== null) stats.set(statsId, file);
+    } else if (dir === 'performances') {
+      const perfId = perfIdOf(name);
+      if (perfId !== null) perfs.set(perfId, file);
+    }
   }
+
+  // The same error the picker source raises for the same mistake. Returning an
+  // empty source instead renders as "No runs yet", which reads as "you have not
+  // played" rather than "you picked the wrong folder".
+  if (!sawStatsDir) throw new Error('that folder has no stats/ directory');
 
   const pickedAt = Date.now();
 
@@ -1011,7 +1095,8 @@ Safari -- so the picker is preferred where it works and never required."
 ```ts
 export interface IndexProgress { phase: 'reading' | 'writing' | 'classifying'; done: number; total: number }
 export interface IndexResult { runs: number; curves: number; failed: number; skipped: number }
-export function indexInto(db, source, ids, onProgress?): Promise<IndexResult>;
+export interface IndexOptions { force?: boolean; concurrency?: number }
+export function indexInto(db, source, ids, onProgress?, options?: IndexOptions): Promise<IndexResult>;
 export function pendingIds(db, source): Promise<string[]>;
 ```
 
@@ -1095,15 +1180,49 @@ describe('indexInto', () => {
       ...fixtureSource([AIR_A]),
       async read() { return { stats: readStats(AIR_A), perf: new Uint8Array([0x0a, 0x40, 0x01]) }; },
     };
-    const first = await indexInto(db, broken, [AIR_A]);
-    // The run is indexed from its CSV; only the curve failed.
-    expect(first).toMatchObject({ runs: 1, curves: 0, failed: 1 });
-    const failure = await new Promise<any>((resolve) => {
+    const readFailure = () => new Promise<any>((resolve) => {
       const r = db.transaction('failed').objectStore('failed').get(AIR_A);
       r.onsuccess = () => resolve(r.result);
     });
-    expect(failure.tries).toBe(1);
-    expect(failure.last_error).toContain('truncated');
+
+    const first = await indexInto(db, broken, [AIR_A]);
+    // The run is indexed from its CSV; only the curve failed.
+    expect(first).toMatchObject({ runs: 1, curves: 0, failed: 1 });
+    expect((await readFailure()).tries).toBe(1);
+    expect((await readFailure()).last_error).toContain('truncated');
+
+    // The retry half of the name, which needs a second pass to mean anything.
+    // A file recorded as failed must NOT have been marked indexed, or it is
+    // never re-read, `tries` can never exceed 1, and MAX_TRIES is unreachable.
+    const second = await indexInto(db, broken, [AIR_A]);
+    expect(second).toMatchObject({ runs: 1, curves: 0, failed: 1, skipped: 0 });
+    expect((await readFailure()).tries).toBe(2);
+
+    // And when the .perf finally parses, the failed row goes away -- otherwise
+    // counts().failed never returns to 0 once anything has ever failed.
+    const fixed = await indexInto(db, fixtureSource([AIR_A]), [AIR_A]);
+    expect(fixed).toMatchObject({ runs: 1, curves: 1, failed: 0 });
+    expect(await readFailure()).toBeUndefined();
+  });
+
+  it('keeps the batch when one file cannot be read', async () => {
+    // A file deleted or locked mid-pass must cost that file, not the pass. The
+    // read rejecting used to propagate out of readAll before the write
+    // transaction opened, so all 12 of 12 stayed pending and nothing was
+    // written at all.
+    const ids = statsIds().slice(0, 3);
+    const flaky: RunSource = {
+      ...fixtureSource(ids),
+      async read(id: string) {
+        if (id === ids[1]) throw new Error('NotFoundError');
+        return { stats: readStats(id), perf: readPerf(id) };
+      },
+    };
+    const result = await indexInto(db, flaky, ids);
+    expect(result.runs).toBe(2);
+    expect(result.failed).toBe(1);
+    // The unreadable one is still pending, because it was never marked indexed.
+    expect(await pendingIds(db, fixtureSource(ids))).toEqual([ids[1]]);
   });
 
   it('upgrades a curve-less run when its .perf arrives', async () => {
@@ -1262,17 +1381,38 @@ export async function indexInto(
   const result: IndexResult = {
     runs: 0, curves: 0, failed: 0, skipped: ids.length - wanted.length,
   };
-  if (!wanted.length) return result;
+  if (!wanted.length) {
+    // Record that we looked, even with nothing to do. Returning here without
+    // writing read_at leaves the staleness badge with nothing to read -- on the
+    // "nothing new" path, which is every refresh after the first.
+    const meta = db.transaction('meta', 'readwrite');
+    meta.objectStore('meta').put({ key: META_READ_AT, value: Date.now() });
+    await done(meta);
+    return result;
+  }
 
   // Reading dominates a bootstrap -- 15 s of the design's 22 s at 12k runs --
   // and it is the only phase worth parallelising. The pool size is not
   // hard-coded: 8 to 32 is right on one machine, and high concurrency does not
   // help on a spinning disk or a network-redirected profile.
   const parsed: { run: Run; curve: Curve | null; kills: Kill[]; error?: string }[] = [];
+  const unreadable = new Map<string, string>();
   let read = 0;
   await readAll(wanted, async (id) => {
-    const { stats, perf } = await source.read(id);
-    if (stats !== undefined) parsed.push(ingest(id, stats, perf));
+    // One unreadable file must not discard the batch. Letting this reject
+    // propagates out of readAll before the write transaction is even opened, so
+    // a single file deleted or locked mid-pass costs all 12k runs and writes
+    // nothing at all. A file that went away between listing and reading is
+    // exactly what the failed store and MAX_TRIES exist for.
+    try {
+      const { stats, perf } = await source.read(id);
+      if (stats !== undefined) parsed.push(ingest(id, stats, perf));
+      // The picker source answers a vanished file with an empty result rather
+      // than a throw, so an absent CSV is the same condition, not a no-op.
+      else unreadable.set(id, 'the stats file could not be read');
+    } catch (error) {
+      unreadable.set(id, error instanceof Error ? error.message : String(error));
+    }
     onProgress?.({ phase: 'reading', done: ++read, total: wanted.length });
   }, options.concurrency);
 
@@ -1286,15 +1426,48 @@ export async function indexInto(
   const killsStore = write.objectStore('kills');
   const failedStore = write.objectStore('failed');
 
+  const now = new Date().toISOString();
+
+  // A file whose basename does not match the expected shape parses to an empty
+  // scenario and an empty started_at. That is permanent -- re-reading it will
+  // never produce anything -- so it is marked known and counted as skipped.
+  // Leaving it out of `known` re-reads it on every pass for ever, and counting
+  // it nowhere makes it invisible in the totals.
+  for (const row of parsed) {
+    if (row.run.scenario && row.run.started_at) continue;
+    known.add(row.run.id);
+    result.skipped += 1;
+  }
+
+  // Files that could not be read at all. Not added to `known`: the whole point
+  // is that the next pass tries again.
+  for (const [id, message] of unreadable) {
+    const previous = failed.get(id);
+    if ((previous?.tries ?? 0) < MAX_TRIES) {
+      failedStore.put({
+        basename: id, tries: (previous?.tries ?? 0) + 1,
+        last_error: message, last_try: now,
+      });
+      result.failed += 1;
+    } else {
+      // Out of tries. Mark it known so it stops being re-read, and leave the
+      // failed row standing as the record of why.
+      known.add(id);
+    }
+  }
+
   const touched = new Set<string>();
   for (const [i, row] of parsed.entries()) {
     if (!row.run.scenario || !row.run.started_at) continue;
     touched.add(row.run.scenario);
 
     if (row.error !== undefined) {
-      // A parse that failed because the file was still being written is a
-      // retry, not a failure -- but a genuinely corrupt file must stop being
-      // re-read eventually, which is what the ceiling is for.
+      // `error` means the .perf was rejected, not that the run is bad: the CSV
+      // parsed, so the run and its kills below are good and get written. What
+      // is missing is the curve, and a half-written .perf becomes readable on
+      // the next pass -- which is why this id is deliberately NOT added to
+      // `known` until the budget runs out. Adding it unconditionally is what
+      // makes MAX_TRIES unreachable dead code and rule 2 a dead letter.
       //
       // The previous count comes from the map read before this transaction
       // opened. Looking it up here would mean awaiting a request mid-write,
@@ -1305,10 +1478,18 @@ export async function indexInto(
           basename: row.run.id,
           tries: (previous?.tries ?? 0) + 1,
           last_error: row.error,
-          last_try: new Date().toISOString(),
+          last_try: now,
         });
         result.failed += 1;
+      } else {
+        known.add(row.run.id);
       }
+    } else {
+      known.add(row.run.id);
+      // A file that used to fail and now parses must stop being reported as
+      // failed, or counts().failed never returns to 0 once anything has ever
+      // failed. delete() on an absent key is a no-op, so this is unconditional.
+      failedStore.delete(row.run.id);
     }
 
     const storedRun: StoredRun = {
@@ -1327,12 +1508,15 @@ export async function indexInto(
       result.curves += 1;
     }
     killsStore.put(pack(row.run.id, row.kills));
-    known.add(row.run.id);
     onProgress?.({ phase: 'writing', done: i + 1, total: parsed.length });
   }
 
   write.objectStore('meta').put({ key: META_INDEXED, value: [...known] });
-  write.objectStore('meta').put({ key: META_READ_AT, value: source.pickedAt });
+  // The time of THIS pass, not source.pickedAt. pickedAt is set once, when the
+  // handle was opened, and a re-pick reuses the same source object -- so
+  // recording it would rewrite read_at backwards to 09:00 on a 14:00 refresh
+  // and leave the staleness badge permanently unclearable.
+  write.objectStore('meta').put({ key: META_READ_AT, value: Date.now() });
   await done(write);
 
   await reclassify(db, [...touched], onProgress);
@@ -1440,36 +1624,74 @@ Two tabs share one database and will both try to index and both read-modify-writ
  * rather than derived on read.
  *
  * The loser is not broken: it reads the same database and sees the winner's
- * writes. It simply does not write.
+ * writes. It simply does not write -- until the winner goes away, at which
+ * point it is promoted and takes over. `elected` is therefore a live flag, not
+ * a snapshot taken at boot.
  */
 
 const LOCK = 'aimcurve-writer';
 
 export interface Writer {
-  /** Whether this tab holds the write lock. */
+  /** Whether this tab holds the write lock *now*. False for a tab that lost,
+   *  and true from the moment it is promoted. Read it, do not cache it. */
   readonly elected: boolean;
   release(): void;
 }
 
 /** Try to become the writer, without waiting for another tab to finish. */
 export function electWriter(): Promise<Writer> {
+  let elected = false;
+  let release = () => {};
+  const writer: Writer = {
+    get elected() { return elected; },
+    release() { release(); elected = false; },
+  };
+
   if (!navigator.locks) {
-    // No Web Locks means no other tab can be detected either. Writing is the
-    // only useful behaviour, and a single-tab user is the common case.
-    return Promise.resolve({ elected: true, release() {} });
+    // Fail closed: a reader, not a writer.
+    //
+    // The trigger is a non-secure context -- navigator.locks is undefined over
+    // plain http://, which is exactly how this static build gets served off
+    // another machine on a LAN. It is not a browser-age problem: Safari 15.4+
+    // and Firefox 96+ both ship Web Locks.
+    //
+    // Electing every tab here would guarantee the lost update this module
+    // exists to prevent, rather than merely risking it. A degraded read-only
+    // tab is the better failure; serve over https:// or localhost to write.
+    return Promise.resolve(writer);
   }
 
   return new Promise((resolve) => {
-    let release = () => {};
-    const held = new Promise<void>((r) => { release = r; });
+    let settled = false;
+    const settle = () => { if (!settled) { settled = true; resolve(writer); } };
+
+    // Holding the lock for the life of the tab is the point: releasing it after
+    // the bootstrap would let a second tab start writing while this one is
+    // still reading its own aggregates.
+    const hold = () => new Promise<void>((r) => { release = r; });
 
     navigator.locks.request(LOCK, { ifAvailable: true }, (lock) => {
-      resolve({ elected: lock !== null, release });
-      // Holding the lock for the life of the tab is the point: releasing it
-      // after the bootstrap would let a second tab start writing while this one
-      // is still reading its own aggregates.
-      return lock === null ? Promise.resolve() : held;
-    });
+      if (lock === null) {
+        // Lost. Start as a reader immediately rather than blocking boot behind
+        // the winner's bootstrap, then queue for the lock so that closing the
+        // winner promotes this tab. Without this second request the survivor of
+        // two tabs is read-only for ever -- and on a fresh origin that is an
+        // empty dashboard that never fills, no matter how long it is left open.
+        settle();
+        navigator.locks.request(LOCK, () => {
+          elected = true;
+          return hold();
+        }).catch(() => { /* promotion is best-effort; stay a reader */ });
+        return Promise.resolve();
+      }
+      elected = true;
+      settle();
+      return hold();
+    }).catch(settle);
+    // request() rejects when the document is not fully active, on an opaque
+    // origin, and on InvalidStateError. Its promise is separate from the
+    // callback, so without that .catch the returned promise never settles at
+    // all and boot hangs on a blank shell with the rejection only in console.
   });
 }
 ```
@@ -1487,8 +1709,13 @@ git commit -m "Elect one writer per origin
 
 Two tabs both maintaining the scenario records and the marks is a lost update
 that does not self-heal. ifAvailable so the loser starts immediately as a
-reader rather than blocking behind the winner, and the lock is held for the
-life of the tab."
+reader rather than blocking behind the winner, a second blocking request so
+that closing the winner promotes the survivor instead of leaving it read-only
+for ever, and the lock is held for the life of the tab.
+
+No Web Locks means a non-secure context, not an old browser, so it fails closed
+as a reader: electing every tab would guarantee the lost update rather than
+risk it."
 ```
 
 ---
@@ -2106,7 +2333,7 @@ Expected: OK. `test_paths.py`, `test_statscsv.py`, `test_perf.py`, `test_shapes.
 - [ ] **Step 5: Run the oracle diff**
 
 Run: `nix shell nixpkgs#python3 --command bash -c 'cd web && npm run oracle'`
-Expected: 5 passed. Deleting the server must not move a single payload field.
+Expected: 9 passed. Deleting the server must not move a single payload field.
 
 - [ ] **Step 6: Rewrite the README**
 
