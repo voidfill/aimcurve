@@ -33,7 +33,7 @@
 
   A sequential `for (const r of rows) await req(store.get(r.id))` is the shape that fails, and it fails intermittently, which is worse than failing outright. Read everything a write needs *before* opening the write transaction.
 - **Eviction is survivable.** Losing the database costs a re-pick and one bootstrap. Treat a `persist()` refusal as normal rather than as a failure.
-- **Verification here is the integration pass**, on a machine with KovaaK's installed. Automated tests cover only the two indexer cases named in Task 4. Do not write tests that stub the browser into agreeing with you.
+- **Verification here is the integration pass**, on a machine with KovaaK's installed. Automated tests cover only the two indexer cases named in Task 5. Do not write tests that stub the browser into agreeing with you.
 
 ## What cannot be checked on the development machine
 
@@ -72,7 +72,9 @@ DELETED at the end: aimcurve/server.py, aimcurve/watch.py, aimcurve/web/,
 
 ## Review checkpoints
 
-Stop for review after **Task 4**, **Task 7** and **Task 10**.
+Stop for review after **Task 5**, **Task 7** and **Task 10**.
+
+**Task order is a dependency order, not a preference.** The source boundary is Task 4 because Task 5's indexer imports `source/types.ts` and `source/pool.ts`; writing the indexer first leaves its test failing on a missing import rather than on the module it is meant to be driving out.
 
 ---
 
@@ -740,7 +742,263 @@ alone, which is not a total order."
 
 ---
 
-### Task 4: The incremental indexer
+### Task 4: The source boundary
+
+**Files:**
+- Create: `web/src/source/types.ts`
+- Create: `web/src/source/pool.ts`
+- Create: `web/src/source/upload.ts`
+- Create: `web/src/source/picker.ts`
+
+**The indexer must never be able to tell which source it has.** That is the whole point of the boundary: step two adds `subscribe` to the picker source and changes nothing above it.
+
+A `FileList` from `<input webkitdirectory>` satisfies `list` and `read`. A `FileSystemDirectoryHandle` satisfies all three, but `subscribe` is left unimplemented here — this plan ships no live updates.
+
+- [ ] **Step 1: Write `web/src/source/types.ts`**
+
+```ts
+/** Where runs come from.
+ *
+ * Two implementations today and a third shape in mind. The indexer must never
+ * be able to tell which it has: step two implements `subscribe` on the picker
+ * source and changes nothing above this line.
+ */
+
+export interface RunFiles {
+  /** The Stats.csv text, absent if the run has no CSV (an orphan `.perf`). */
+  stats?: string;
+  /** The Performance.perf bytes, absent for the ~1 run in 7 that has none. */
+  perf?: Uint8Array;
+}
+
+export interface RunSource {
+  readonly kind: 'upload' | 'picker';
+  /** When the folder was enumerated, in epoch milliseconds. The app knows this
+   *  and nothing about what has happened since, which is exactly what the
+   *  staleness notice reports. */
+  readonly pickedAt: number;
+  /** The run basenames this source can offer -- a stats basename with
+   *  " Stats.csv" removed. */
+  list(): Promise<string[]>;
+  read(id: string): Promise<RunFiles>;
+  /** Absent in this plan. Step two implements it with a FileSystemObserver. */
+  subscribe?(fn: (ids: string[]) => void): () => void;
+}
+
+export const STATS_SUFFIX = ' Stats.csv';
+export const PERF_SUFFIX = ' Performance.perf';
+
+export function statsIdOf(filename: string): string | null {
+  return filename.endsWith(STATS_SUFFIX)
+    ? filename.slice(0, -STATS_SUFFIX.length) : null;
+}
+
+export function perfIdOf(filename: string): string | null {
+  return filename.endsWith(PERF_SUFFIX)
+    ? filename.slice(0, -PERF_SUFFIX.length) : null;
+}
+```
+
+- [ ] **Step 2: Write `web/src/source/pool.ts`**
+
+```ts
+/** Bounded-concurrency reads.
+ *
+ * Reading is 15 s of the browser design's 22 s bootstrap at 12k runs, and it is
+ * the only phase worth parallelising: 0.925 ms/file serial against 0.175 ms at
+ * 8 parallel on the machine that was measured.
+ *
+ * The pool size is deliberately not a constant tuned on one device. High
+ * concurrency does not help on a spinning disk or a network-redirected profile,
+ * and the measured curve is flat from 8 to 128, so the middle of that range is
+ * the safe default rather than the fastest observed point.
+ */
+
+export const DEFAULT_CONCURRENCY = 12;
+
+export async function readAll<T>(
+  items: readonly T[],
+  work: (item: T) => Promise<void>,
+  concurrency: number = DEFAULT_CONCURRENCY,
+): Promise<void> {
+  const width = Math.max(1, Math.min(concurrency, items.length));
+  let next = 0;
+  const workers = Array.from({ length: width }, async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      await work(items[i]);
+    }
+  });
+  await Promise.all(workers);
+}
+```
+
+- [ ] **Step 3: Write `web/src/source/upload.ts`**
+
+```ts
+/** A one-shot directory snapshot from <input type="file" webkitdirectory>.
+ *
+ * The entry point for anyone whose install is where Chrome refuses to let a
+ * page look: unlike the File System Access API this is not subject to the
+ * sensitive-path blocklist, so it reads a default
+ * `C:\Program Files (x86)\Steam\...` install directly, and it works in Firefox
+ * and Safari, which have no File System Access API at all.
+ *
+ * What it cannot do is look again without another user gesture. That is why
+ * there is no `subscribe` here and why the UI has to report the data's age.
+ */
+
+import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
+
+export function uploadSource(files: FileList | readonly File[]): RunSource {
+  const stats = new Map<string, File>();
+  const perfs = new Map<string, File>();
+
+  for (const file of Array.from(files)) {
+    // webkitRelativePath is the whole path under the chosen folder; only the
+    // final component names the run.
+    const name = file.name;
+    const statsId = statsIdOf(name);
+    if (statsId !== null) { stats.set(statsId, file); continue; }
+    const perfId = perfIdOf(name);
+    if (perfId !== null) perfs.set(perfId, file);
+  }
+
+  const pickedAt = Date.now();
+
+  return {
+    kind: 'upload',
+    pickedAt,
+    async list() {
+      // Stats files only: an orphan `.perf` with no CSV is not a run. Eight
+      // were observed in a real install.
+      return [...stats.keys()].sort();
+    },
+    async read(id: string): Promise<RunFiles> {
+      const out: RunFiles = {};
+      const csv = stats.get(id);
+      if (csv) out.stats = await csv.text();
+      const perf = perfs.get(id);
+      if (perf) out.perf = new Uint8Array(await perf.arrayBuffer());
+      return out;
+    },
+  };
+}
+```
+
+- [ ] **Step 4: Write `web/src/source/picker.ts`**
+
+```ts
+/** A directory the user granted through showDirectoryPicker().
+ *
+ * Preferred where it works: it is the same code past this boundary, it reads
+ * without copying every file into the page, and the handle can be stored so the
+ * folder is chosen once rather than per visit. It leaves the door open for step
+ * two, which adds `subscribe` here and nowhere else.
+ *
+ * It does not work on a default Windows install -- Chrome refuses any directory
+ * under Program Files, by every route -- so it must never be required. On Linux
+ * the default Steam path is not on Chromium's blocklist, so it works directly.
+ */
+
+import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
+
+export function supportsPicker(): boolean {
+  return typeof (globalThis as any).showDirectoryPicker === 'function';
+}
+
+/** Ask for the KovaaK's folder. Returns null if the user cancelled or the
+ *  browser refused the directory. */
+export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
+  if (!supportsPicker()) return null;
+  try {
+    return await (globalThis as any).showDirectoryPicker({
+      id: 'aimcurve-kovaaks',
+      // Read-only, always. aimcurve never writes to the game's folder.
+      mode: 'read',
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function subdirectory(
+  root: FileSystemDirectoryHandle, name: string,
+): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    return await root.getDirectoryHandle(name);
+  } catch {
+    // performances/ is genuinely optional: a fresh install has not created it,
+    // and 318 runs in a real install have no `.perf` at all.
+    return null;
+  }
+}
+
+export async function pickerSource(
+  root: FileSystemDirectoryHandle,
+): Promise<RunSource> {
+  const statsDir = await subdirectory(root, 'stats');
+  if (!statsDir) throw new Error('that folder has no stats/ directory');
+  const perfDir = await subdirectory(root, 'performances');
+  const pickedAt = Date.now();
+
+  return {
+    kind: 'picker',
+    pickedAt,
+    async list() {
+      const ids: string[] = [];
+      // .keys(), never .entries(): a names-only enumeration is the cheap one,
+      // and at 12k runs even that costs ~2.2 s per directory.
+      for await (const name of (statsDir as any).keys()) {
+        const id = statsIdOf(name);
+        if (id !== null) ids.push(id);
+      }
+      return ids.sort();
+    },
+    async read(id: string): Promise<RunFiles> {
+      const out: RunFiles = {};
+      try {
+        const handle = await statsDir.getFileHandle(`${id} Stats.csv`);
+        out.stats = await (await handle.getFile()).text();
+      } catch { /* the file went away between listing and reading */ }
+      if (perfDir) {
+        try {
+          const handle = await perfDir.getFileHandle(`${id} Performance.perf`);
+          out.perf = new Uint8Array(await (await handle.getFile()).arrayBuffer());
+        } catch { /* no .perf, which is the normal case for ~1 run in 7 */ }
+      }
+      return out;
+    },
+    // No subscribe. This plan ships no live updates; step two adds it here.
+  };
+}
+```
+
+The `perfIdOf` import in `picker.ts` is unused — remove it before committing.
+
+- [ ] **Step 5: Type-check**
+
+Run: `cd web && npx astro check`
+Expected: `0 errors`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add web/src/source
+git commit -m "Add the source boundary and its two implementations
+
+The indexer must never be able to tell which source it has: step two implements
+subscribe on the picker source and changes nothing above that line.
+
+The upload control is the one that reaches a default Windows install -- it is
+not subject to Chrome's sensitive-path blocklist and it works in Firefox and
+Safari -- so the picker is preferred where it works and never required."
+```
+
+---
+
+### Task 5: The incremental indexer
 
 **Files:**
 - Create: `web/src/db/indexer.ts`
@@ -1160,11 +1418,11 @@ a real install cannot produce on demand -- an out-of-order insert and a shape
 flip -- are what the tests cover."
 ```
 
-**REVIEW CHECKPOINT — stop here.** The database can be built and read. Everything after this is the browser.
+**REVIEW CHECKPOINT — stop here.** A folder can be enumerated and its runs indexed into a database that can then be read. Everything after this is the UI.
 
 ---
 
-### Task 5: Writer election
+### Task 6: Writer election
 
 **Files:**
 - Create: `web/src/db/writer.ts`
@@ -1231,262 +1489,6 @@ Two tabs both maintaining the scenario records and the marks is a lost update
 that does not self-heal. ifAvailable so the loser starts immediately as a
 reader rather than blocking behind the winner, and the lock is held for the
 life of the tab."
-```
-
----
-
-### Task 6: The source boundary
-
-**Files:**
-- Create: `web/src/source/types.ts`
-- Create: `web/src/source/pool.ts`
-- Create: `web/src/source/upload.ts`
-- Create: `web/src/source/picker.ts`
-
-**The indexer must never be able to tell which source it has.** That is the whole point of the boundary: step two adds `subscribe` to the picker source and changes nothing above it.
-
-A `FileList` from `<input webkitdirectory>` satisfies `list` and `read`. A `FileSystemDirectoryHandle` satisfies all three, but `subscribe` is left unimplemented here — this plan ships no live updates.
-
-- [ ] **Step 1: Write `web/src/source/types.ts`**
-
-```ts
-/** Where runs come from.
- *
- * Two implementations today and a third shape in mind. The indexer must never
- * be able to tell which it has: step two implements `subscribe` on the picker
- * source and changes nothing above this line.
- */
-
-export interface RunFiles {
-  /** The Stats.csv text, absent if the run has no CSV (an orphan `.perf`). */
-  stats?: string;
-  /** The Performance.perf bytes, absent for the ~1 run in 7 that has none. */
-  perf?: Uint8Array;
-}
-
-export interface RunSource {
-  readonly kind: 'upload' | 'picker';
-  /** When the folder was enumerated, in epoch milliseconds. The app knows this
-   *  and nothing about what has happened since, which is exactly what the
-   *  staleness notice reports. */
-  readonly pickedAt: number;
-  /** The run basenames this source can offer -- a stats basename with
-   *  " Stats.csv" removed. */
-  list(): Promise<string[]>;
-  read(id: string): Promise<RunFiles>;
-  /** Absent in this plan. Step two implements it with a FileSystemObserver. */
-  subscribe?(fn: (ids: string[]) => void): () => void;
-}
-
-export const STATS_SUFFIX = ' Stats.csv';
-export const PERF_SUFFIX = ' Performance.perf';
-
-export function statsIdOf(filename: string): string | null {
-  return filename.endsWith(STATS_SUFFIX)
-    ? filename.slice(0, -STATS_SUFFIX.length) : null;
-}
-
-export function perfIdOf(filename: string): string | null {
-  return filename.endsWith(PERF_SUFFIX)
-    ? filename.slice(0, -PERF_SUFFIX.length) : null;
-}
-```
-
-- [ ] **Step 2: Write `web/src/source/pool.ts`**
-
-```ts
-/** Bounded-concurrency reads.
- *
- * Reading is 15 s of the browser design's 22 s bootstrap at 12k runs, and it is
- * the only phase worth parallelising: 0.925 ms/file serial against 0.175 ms at
- * 8 parallel on the machine that was measured.
- *
- * The pool size is deliberately not a constant tuned on one device. High
- * concurrency does not help on a spinning disk or a network-redirected profile,
- * and the measured curve is flat from 8 to 128, so the middle of that range is
- * the safe default rather than the fastest observed point.
- */
-
-export const DEFAULT_CONCURRENCY = 12;
-
-export async function readAll<T>(
-  items: readonly T[],
-  work: (item: T) => Promise<void>,
-  concurrency: number = DEFAULT_CONCURRENCY,
-): Promise<void> {
-  const width = Math.max(1, Math.min(concurrency, items.length));
-  let next = 0;
-  const workers = Array.from({ length: width }, async () => {
-    for (;;) {
-      const i = next++;
-      if (i >= items.length) return;
-      await work(items[i]);
-    }
-  });
-  await Promise.all(workers);
-}
-```
-
-- [ ] **Step 3: Write `web/src/source/upload.ts`**
-
-```ts
-/** A one-shot directory snapshot from <input type="file" webkitdirectory>.
- *
- * The entry point for anyone whose install is where Chrome refuses to let a
- * page look: unlike the File System Access API this is not subject to the
- * sensitive-path blocklist, so it reads a default
- * `C:\Program Files (x86)\Steam\...` install directly, and it works in Firefox
- * and Safari, which have no File System Access API at all.
- *
- * What it cannot do is look again without another user gesture. That is why
- * there is no `subscribe` here and why the UI has to report the data's age.
- */
-
-import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
-
-export function uploadSource(files: FileList | readonly File[]): RunSource {
-  const stats = new Map<string, File>();
-  const perfs = new Map<string, File>();
-
-  for (const file of Array.from(files)) {
-    // webkitRelativePath is the whole path under the chosen folder; only the
-    // final component names the run.
-    const name = file.name;
-    const statsId = statsIdOf(name);
-    if (statsId !== null) { stats.set(statsId, file); continue; }
-    const perfId = perfIdOf(name);
-    if (perfId !== null) perfs.set(perfId, file);
-  }
-
-  const pickedAt = Date.now();
-
-  return {
-    kind: 'upload',
-    pickedAt,
-    async list() {
-      // Stats files only: an orphan `.perf` with no CSV is not a run. Eight
-      // were observed in a real install.
-      return [...stats.keys()].sort();
-    },
-    async read(id: string): Promise<RunFiles> {
-      const out: RunFiles = {};
-      const csv = stats.get(id);
-      if (csv) out.stats = await csv.text();
-      const perf = perfs.get(id);
-      if (perf) out.perf = new Uint8Array(await perf.arrayBuffer());
-      return out;
-    },
-  };
-}
-```
-
-- [ ] **Step 4: Write `web/src/source/picker.ts`**
-
-```ts
-/** A directory the user granted through showDirectoryPicker().
- *
- * Preferred where it works: it is the same code past this boundary, it reads
- * without copying every file into the page, and the handle can be stored so the
- * folder is chosen once rather than per visit. It leaves the door open for step
- * two, which adds `subscribe` here and nowhere else.
- *
- * It does not work on a default Windows install -- Chrome refuses any directory
- * under Program Files, by every route -- so it must never be required. On Linux
- * the default Steam path is not on Chromium's blocklist, so it works directly.
- */
-
-import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
-
-export function supportsPicker(): boolean {
-  return typeof (globalThis as any).showDirectoryPicker === 'function';
-}
-
-/** Ask for the KovaaK's folder. Returns null if the user cancelled or the
- *  browser refused the directory. */
-export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  if (!supportsPicker()) return null;
-  try {
-    return await (globalThis as any).showDirectoryPicker({
-      id: 'aimcurve-kovaaks',
-      // Read-only, always. aimcurve never writes to the game's folder.
-      mode: 'read',
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function subdirectory(
-  root: FileSystemDirectoryHandle, name: string,
-): Promise<FileSystemDirectoryHandle | null> {
-  try {
-    return await root.getDirectoryHandle(name);
-  } catch {
-    // performances/ is genuinely optional: a fresh install has not created it,
-    // and 318 runs in a real install have no `.perf` at all.
-    return null;
-  }
-}
-
-export async function pickerSource(
-  root: FileSystemDirectoryHandle,
-): Promise<RunSource> {
-  const statsDir = await subdirectory(root, 'stats');
-  if (!statsDir) throw new Error('that folder has no stats/ directory');
-  const perfDir = await subdirectory(root, 'performances');
-  const pickedAt = Date.now();
-
-  return {
-    kind: 'picker',
-    pickedAt,
-    async list() {
-      const ids: string[] = [];
-      // .keys(), never .entries(): a names-only enumeration is the cheap one,
-      // and at 12k runs even that costs ~2.2 s per directory.
-      for await (const name of (statsDir as any).keys()) {
-        const id = statsIdOf(name);
-        if (id !== null) ids.push(id);
-      }
-      return ids.sort();
-    },
-    async read(id: string): Promise<RunFiles> {
-      const out: RunFiles = {};
-      try {
-        const handle = await statsDir.getFileHandle(`${id} Stats.csv`);
-        out.stats = await (await handle.getFile()).text();
-      } catch { /* the file went away between listing and reading */ }
-      if (perfDir) {
-        try {
-          const handle = await perfDir.getFileHandle(`${id} Performance.perf`);
-          out.perf = new Uint8Array(await (await handle.getFile()).arrayBuffer());
-        } catch { /* no .perf, which is the normal case for ~1 run in 7 */ }
-      }
-      return out;
-    },
-    // No subscribe. This plan ships no live updates; step two adds it here.
-  };
-}
-```
-
-The `perfIdOf` import in `picker.ts` is unused — remove it before committing.
-
-- [ ] **Step 5: Type-check**
-
-Run: `cd web && npx astro check`
-Expected: `0 errors`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add web/src/source
-git commit -m "Add the source boundary and its two implementations
-
-The indexer must never be able to tell which source it has: step two implements
-subscribe on the picker source and changes nothing above that line.
-
-The upload control is the one that reaches a default Windows install -- it is
-not subject to Chrome's sensitive-path blocklist and it works in Firefox and
-Safari -- so the picker is preferred where it works and never required."
 ```
 
 ---
@@ -1940,6 +1942,8 @@ Add rules for `.pick`, `.lede`, `.promise`, `.pick-actions`, `.button`, `.hint`,
 git rm aimcurve/web/index.html
 ```
 
+This empties `aimcurve/web/`, so it no longer exists as a path. `git rm` has already staged the deletion, which is why Step 6 commits with `git add -A web` alone — naming `aimcurve/web` there would match nothing and abort the whole command with exit 128.
+
 - [ ] **Step 5: Build and look at it**
 
 Run: `cd web && npm run dev`
@@ -1951,7 +1955,7 @@ Expected: a `dist/` directory with `index.html` and hashed assets, and no error.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A web aimcurve/web
+git add -A web
 git commit -m "Add the shell and the first-run flow
 
 The page contradicts the browser's own dialog before it opens: Chrome says
@@ -2045,7 +2049,7 @@ again. That difference is the entire gap between this tier and live updates."
 ### Task 10: Retire the Python's HTTP surface
 
 **Files:**
-- Delete: `aimcurve/server.py`, `aimcurve/watch.py`, `aimcurve/web/`
+- Delete: `aimcurve/server.py`, `aimcurve/watch.py`
 - Delete: `tests/test_server.py`, `tests/test_watch.py`
 - Delete: `scripts/drive-client.mjs`
 - Modify: `aimcurve/__main__.py`, `README.md`
@@ -2062,9 +2066,11 @@ Expected: only `aimcurve/__main__.py` and the files about to be deleted. If `dum
 - [ ] **Step 2: Delete**
 
 ```bash
-git rm -r aimcurve/server.py aimcurve/watch.py aimcurve/web \
+git rm -r aimcurve/server.py aimcurve/watch.py \
           tests/test_server.py tests/test_watch.py scripts/drive-client.mjs
 ```
+
+`aimcurve/web/` is deliberately absent from that list: Task 7 moved its contents and Task 8 removed the last file, so the path is already gone. `git rm` validates every pathspec before it removes anything, so naming it here would abort the whole command with exit 128 and delete nothing at all.
 
 - [ ] **Step 3: Reduce `__main__.py` to the oracle**
 
