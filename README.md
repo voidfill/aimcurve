@@ -72,6 +72,9 @@ rail under every limit, scenario filter and cursor:
 
 ```
 cd web && npm run oracle
+
+# where there is no bare python3 -- this repository's own dev environment:
+nix shell nixpkgs#python3 --command bash -c 'cd web && npm run oracle'
 ```
 
 Numbers compare exactly, with no tolerance: the two implementations agree to

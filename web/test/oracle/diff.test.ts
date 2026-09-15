@@ -112,6 +112,9 @@ function dumpFromTypescript(s: Store) {
   };
 }
 
+// The timeout is spelled here as well as in vitest.oracle.config.ts because
+// `testTimeout` does not govern hooks -- that is `hookTimeout`, ten seconds by
+// default -- and all of the work is in this hook.
 beforeAll(() => {
   python = normalisePython(dumpFromPython());
   const store = buildStore(statsIds().map((id) => ingest(id, readStats(id), readPerf(id))));
@@ -120,8 +123,9 @@ beforeAll(() => {
 
 describe('oracle diff', () => {
   it('reached the Python at all', () => {
-    expect(Object.keys(python.runs)).toHaveLength(11);
-    expect(Object.keys(python.cases)).toHaveLength(11 * CASES.length);
+    const runs = statsIds().length;
+    expect(Object.keys(python.runs)).toHaveLength(runs);
+    expect(Object.keys(python.cases)).toHaveLength(runs * CASES.length);
   });
 
   it('agrees on every run payload', () => {

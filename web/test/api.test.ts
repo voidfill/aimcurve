@@ -18,8 +18,10 @@ describe('api', () => {
   });
 
   it('pages from a cursor, and answers an unknown one with nothing', () => {
-    // The oracle diff never passes a cursor, so this is the only thing holding
-    // the rail's pagination to the Python's.
+    // The oracle diff pages from every run id, so this is no longer the only
+    // thing holding the cursor to the Python's -- but it runs offline, and the
+    // unknown cursor is a case the diff cannot reach: the dump can only page
+    // from ids that exist.
     const first = getRuns(store, { limit: 3 });
     expect(getRuns(store, { limit: 3, before: first[2].id })[0].id)
       .toBe('Air Spectral Easy - Challenge - 2026.09.05-08.20.43');

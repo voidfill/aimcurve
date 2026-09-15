@@ -14,9 +14,9 @@ export const DURATION_TOLERANCE = 0.1;
  * left to right, so `sum([0.74, 0.85, 0.84, 0.77, 0.71]) / 5` is 0.782 there
  * and 0.7819999999999999 under a naive loop. The oracle sums a float series in
  * every smoothing window and in a handful of payload aggregates, so a naive
- * loop here drifts by an ulp on roughly one rate bucket in ten -- inside the
- * diff harness's tolerance, and therefore invisible exactly where it matters.
- * Reproduced rather than tolerated: it is nine lines.
+ * loop here drifts by an ulp on roughly one rate bucket in ten. The oracle
+ * diff compares exactly, so that drift is a failure rather than a rounding
+ * detail -- and reproducing the compensation is nine lines.
  */
 export function pySum(values: ArrayLike<number>, lo = 0, hi = values.length): number {
   let total = 0;

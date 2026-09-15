@@ -76,8 +76,10 @@ describe('smooth', () => {
     // CPython's builtin sum has carried a Neumaier compensation term since
     // 3.12, so this window is 0.782 there and 0.7819999999999999 under a naive
     // accumulation. 292 of the 2880 smoothed values over the fixture curves
-    // differ between the two, all by an ulp -- small enough for the oracle
-    // diff's tolerance to swallow, which is the reason to pin it here instead.
+    // differ between the two, all by an ulp. The oracle diff does catch that,
+    // since it compares exactly -- but it reports it as an ulp on some rate
+    // bucket deep in a payload, and only where Python is installed. This says
+    // which algorithm, in one line, offline.
     expect(smooth([0.74, 0.85, 0.84, 0.77, 0.71], 5)[2]).toBe(0.782);
   });
 });

@@ -7,13 +7,16 @@
  * to divide once rather than accumulate). A 1e-12 window hides exactly those
  * and nothing else.
  *
- * The one field that could ever legitimately need a tolerance is
- * `rate.band.lo` / `rate.band.hi`: the Python's `statistics.pstdev` works in
- * `Fraction` and rounds once at the end, and no float algorithm reproduces
- * that in general. It takes three comparable prior curves for a band to have
- * a standard deviation at all, and this corpus has no scenario with three --
- * so the case is unreachable here. If it ever becomes reachable, the answer is
- * an exact-rational stdev on the port, not a window on this comparison.
+ * The one thing left that could ever legitimately need a tolerance is the
+ * sigma inside `rate.band.lo` / `rate.band.hi`. Not the mean beside it:
+ * `statistics.fmean` is `fsum(column) / n`, and `pyFsum` reproduces it bit for
+ * bit. But `statistics.pstdev` sums the squared deviations exactly in
+ * `Fraction` before anything reaches a float, and no float algorithm
+ * reproduces that in general. It takes three comparable prior curves for a
+ * band to have a standard deviation at all, and no scenario in this corpus has
+ * more than two -- so the case is unreachable here. If it ever becomes
+ * reachable, the answer is an exact-rational stdev on the port, not a window
+ * on this comparison.
  */
 
 export interface Difference {
@@ -81,25 +84,37 @@ function render(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** How many differences a failure prints. Enough to see a pattern, few enough
+ *  that the first one is still on screen. */
+const REPORTED = 40;
+
 /** The differences as something a human reads, capped so it stays readable.
  *
  * Lives here rather than in the test because it is what a failure actually
  * shows: the assertions compare a bounded value and pass this as the message,
- * so that vitest renders forty formatted lines instead of its own diff of a
- * 258 KB array with the message scrolled off the top.
+ * so that vitest renders `REPORTED` formatted lines instead of its own diff of
+ * a 258 KB array with the message scrolled off the top.
  */
 export function report(differences: Difference[]): string {
   return differences
-    .slice(0, 40)
+    .slice(0, REPORTED)
     .map((d) => `  ${d.path}\n    python: ${render(d.python)}\n    ts:     ${render(d.typescript)}`)
     .join('\n');
 }
 
 /** Rewrite a Python-side document so that only real disagreements remain.
  *
- * Two normalisations, and only two -- see the plan. `ids` maps the Python's
- * row counters onto basenames, and the absolute paths a browser cannot have
- * are dropped.
+ * Three changes, and only three -- see the plan. `ids` maps the Python's row
+ * counters onto basenames; the absolute `stats_file` and `perf_file` a browser
+ * cannot have are dropped; and `has_perf` is derived from `perf_file` on the
+ * way out.
+ *
+ * That third one is a translation rather than a drop, which makes it the one
+ * that could mask a real bug: it asserts that `perf_file is not None` and
+ * `has_perf` mean the same thing. Today they do -- `index.attach_perf` writes
+ * the path only once the curve has decoded -- but if that ever stops holding,
+ * the two sides disagree about which runs are drawable and this comparison
+ * still reports nothing.
  */
 export function normalisePython(
   doc: Record<string, any>,
