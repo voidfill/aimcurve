@@ -53,15 +53,41 @@ docs/                    design specs and implementation plans
 
 ## Tests
 
+The Python:
+
 ```
 python -m unittest discover -s tests
 ```
 
-The unit tests cover the Python. The dashboard's browser half has one extra
-rig, kept out of the suite on purpose — it needs node and a live server, and a
-test that silently skips when it cannot find either reports green while
-covering nothing. Run it by hand after touching the rail, the paging, or the
-run-time formatting:
+The browser engine, offline and with no Python involved:
+
+```
+cd web && npm test
+```
+
+And the differential check, which runs both over the fixtures and compares
+every field of every payload — not just the default view, but each of the six
+metrics, five smoothing windows, four recent-N values, `same_cfg=0`, and the
+rail under every limit, scenario filter and cursor:
+
+```
+cd web && npm run oracle
+
+# where there is no bare python3 -- this repository's own dev environment:
+nix shell nixpkgs#python3 --command bash -c 'cd web && npm run oracle'
+```
+
+Numbers compare exactly, with no tolerance: the two implementations agree to
+the last bit today, and the only bugs this port has actually shipped were
+one-ulp ones that any tolerance would have hidden. It never skips either. If it
+cannot reach Python it fails, because a differential test that passes when it
+could only run one side reports green over nothing. Set `AIMCURVE_PYTHON` if
+`python3` is not what launches it.
+
+The Python dashboard's own client has one more rig, kept out of the suite on
+purpose — it needs node and a live server, and a test that silently skips when
+it cannot find either reports green while covering nothing. Run it by hand
+after touching the rail, the paging, or the run-time formatting:
 
 ```
 python -m aimcurve                 # one terminal
@@ -70,9 +96,11 @@ node scripts/drive-client.mjs     # another
 
 It loads `aimcurve/web/app.js` — the same file the browser gets, unmodified on
 disk — under a stub DOM, so it exercises the real client rather than a copy of
-it. What it cannot see is what the browser does for itself: CSS, layout, event
-dispatch. Those still want eyes on the page. Exit 0 passed, 1 failed, 2 could
-not reach the server; `--port=` or `--base=` if it is not on 8777.
+it. Exit 0 passed, 1 failed, 2 could not reach the server; `--port=` or
+`--base=` if it is not on 8777.
+
+What none of these cover is the browser itself: IndexedDB, the directory
+picker, CSS, layout, event dispatch. Those still want eyes on the page.
 
 ## Scope
 

@@ -1,0 +1,29 @@
+{
+  "name": "web",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "oracle": "vitest run --config vitest.oracle.config.ts"
+  },
+  "dependencies": {
+    "astro": "^7.3.2"
+  },
+  "allowScripts": {
+    "esbuild": true
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.0"
+  }
+}
