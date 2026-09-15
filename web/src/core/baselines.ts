@@ -35,9 +35,9 @@ export interface BaselineOpts {
   shape?: Shape;
 }
 
-export function baselines(
+export async function baselines(
   store: Store, id: string, opts: BaselineOpts = {},
-): Baselines {
+): Promise<Baselines> {
   const {
     recentN = DEFAULT_RECENT_N,
     sameCfg = true,
@@ -45,9 +45,9 @@ export function baselines(
     shape = 'timed',
   } = opts;
 
-  const focus = store.getRun(id);
+  const focus = await store.getRun(id);
   if (!focus) throw new Error(`no such run: ${id}`);
-  const rows = store.candidates(id, { sameCfg, durationTol, shape });
+  const rows = await store.candidates(id, { sameCfg, durationTol, shape });
 
   const result: Baselines = {
     pb: null,
@@ -76,7 +76,7 @@ export function baselines(
         score: pb.score,
         started_at: pb.started_at,
         is_true_pb: pb.id === truePb.id,
-        curve: store.getCurve(pb.id) ?? null,
+        curve: (await store.getCurve(pb.id)) ?? null,
       };
     }
   }
@@ -101,7 +101,7 @@ export function baselines(
     const runIds: string[] = [];
     for (const r of recent) {
       if (!r.has_perf) continue;
-      const curve = store.getCurve(r.id);
+      const curve = await store.getCurve(r.id);
       if (curve) {
         curves.push(curve);
         runIds.push(r.id);

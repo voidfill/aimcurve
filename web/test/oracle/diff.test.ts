@@ -76,49 +76,53 @@ function dumpFromPython(): Record<string, any> {
 }
 
 /** The same document `dump.build` produces, from the TypeScript. */
-function dumpFromTypescript(s: Store) {
+async function dumpFromTypescript(s: Store) {
   const ids = statsIds();
 
   const runs: Record<string, unknown> = {};
-  for (const id of ids) runs[id] = getRun(s, id, {});
+  for (const id of ids) runs[id] = await getRun(s, id, {});
 
   const cases: Record<string, unknown> = {};
   for (const id of ids) {
-    for (const [key, opts] of CASES) cases[`${id}|${key}`] = getRun(s, id, opts);
+    for (const [key, opts] of CASES) cases[`${id}|${key}`] = await getRun(s, id, opts);
   }
 
   const rails: Record<string, unknown> = {};
-  for (const limit of [0, 1, 5]) rails[`limit=${limit}`] = getRuns(s, { limit });
-  rails['same_cfg=0'] = getRuns(s, { limit: ALL, sameCfg: false });
-  for (const row of getScenarios(s)) {
-    rails[`scenario=${row.scenario}`] = getRuns(s, { limit: ALL, scenario: row.scenario });
+  for (const limit of [0, 1, 5]) rails[`limit=${limit}`] = await getRuns(s, { limit });
+  rails['same_cfg=0'] = await getRuns(s, { limit: ALL, sameCfg: false });
+  for (const row of await getScenarios(s)) {
+    rails[`scenario=${row.scenario}`] =
+      await getRuns(s, { limit: ALL, scenario: row.scenario });
   }
-  for (const id of ids) rails[`before=${id}`] = getRuns(s, { limit: ALL, before: id });
+  for (const id of ids) rails[`before=${id}`] = await getRuns(s, { limit: ALL, before: id });
 
   // getHealth also answers awaiting_perf and watcher_errors. Both read a live
   // watcher's counters, which the Python dump has no watcher to read and so
   // does not emit; there is nothing on the other side to compare them against.
-  const { runs: n, curves, failed, scenarios } = getHealth(s);
+  const { runs: n, curves, failed, scenarios } = await getHealth(s);
+
+  const days: Record<string, unknown> = {};
+  for (const day of await s.days()) days[day] = await s.day(day);
 
   return {
     runs,
     cases,
-    rail: getRuns(s, { limit: ALL }),
+    rail: await getRuns(s, { limit: ALL }),
     rails,
-    scenarios: getScenarios(s),
-    days: Object.fromEntries(s.days().map((d) => [d, s.day(d)])),
+    scenarios: await getScenarios(s),
+    days,
     health: { runs: n, curves, failed, scenarios },
-    session: getSession(s),
+    session: await getSession(s),
   };
 }
 
 // The timeout is spelled here as well as in vitest.oracle.config.ts because
 // `testTimeout` does not govern hooks -- that is `hookTimeout`, ten seconds by
 // default -- and all of the work is in this hook.
-beforeAll(() => {
+beforeAll(async () => {
   python = normalisePython(dumpFromPython());
   const store = buildStore(statsIds().map((id) => ingest(id, readStats(id), readPerf(id))));
-  mine = dumpFromTypescript(store);
+  mine = await dumpFromTypescript(store);
 }, 120_000);
 
 describe('oracle diff', () => {

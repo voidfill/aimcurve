@@ -59,25 +59,28 @@ export interface Counts {
  */
 export type SlotMetric = 'ttk' | 'share';
 
+/** Every method is async because IndexedDB has no synchronous read. The
+ *  in-memory implementation answers from a Map and still returns a promise, so
+ *  the payload builder cannot tell the two apart. */
 export interface Store {
-  getRun(id: string): Run | undefined;
-  getScenario(name: string): Scenario | undefined;
-  getCurve(id: string): Curve | undefined;
-  getKills(id: string): Kill[];
+  getRun(id: string): Promise<Run | undefined>;
+  getScenario(name: string): Promise<Scenario | undefined>;
+  getCurve(id: string): Promise<Curve | undefined>;
+  getKills(id: string): Promise<Kill[]>;
 
   /** Other runs of the same scenario this one can fairly be judged against,
    *  oldest first. Excludes the focused run. */
-  candidates(id: string, opts: CandidateOpts): Run[];
+  candidates(id: string, opts: CandidateOpts): Promise<Run[]>;
 
   /** The rail: newest first, already marked against the whole history. */
-  page(limit: number, opts: PageOpts): RailRow[];
+  page(limit: number, opts: PageOpts): Promise<RailRow[]>;
 
-  bestBySlot(ids: readonly string[], metric: SlotMetric): Map<number, number>;
+  bestBySlot(ids: readonly string[], metric: SlotMetric): Promise<Map<number, number>>;
 
-  scenarioList(): ScenarioListRow[];
+  scenarioList(): Promise<ScenarioListRow[]>;
   /** `day` is an ISO date, `YYYY-MM-DD`. */
-  day(day: string): SessionRow[];
+  day(day: string): Promise<SessionRow[]>;
   /** Every date that has runs, ascending. */
-  days(): string[];
-  counts(): Counts;
+  days(): Promise<string[]>;
+  counts(): Promise<Counts>;
 }

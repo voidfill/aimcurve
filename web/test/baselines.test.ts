@@ -16,8 +16,8 @@ const store = buildStore(statsIds().map((id) => ingest(id, readStats(id), readPe
 const opts = { recentN: 10, sameCfg: true, durationTol: 0.1 };
 
 describe('baselines', () => {
-  it('resolves the PB and the recent form of a race run', () => {
-    const b = baselines(store, AIR_B, { ...opts, shape: 'race' });
+  it('resolves the PB and the recent form of a race run', async () => {
+    const b = await baselines(store, AIR_B, { ...opts, shape: 'race' });
     expect(b.candidates).toBe(1);
     expect(b.true_pb).toEqual({
       run_id: AIR_A, score: 906.138184, started_at: '2026-09-03T19:08:37',
@@ -30,8 +30,8 @@ describe('baselines', () => {
     expect(b.recent.run_ids).toEqual([AIR_A]);
   });
 
-  it('has no recent form on the oldest run of a scenario', () => {
-    const b = baselines(store, AIR_A, { ...opts, shape: 'race' });
+  it('has no recent form on the oldest run of a scenario', async () => {
+    const b = await baselines(store, AIR_A, { ...opts, shape: 'race' });
     // The newer run is still a candidate and still the PB -- "recent" means
     // prior, but "best" means best.
     expect(b.candidates).toBe(1);
@@ -42,17 +42,17 @@ describe('baselines', () => {
     expect(b.recent.run_ids).toBeNull();
   });
 
-  it('reports a true PB it cannot draw', () => {
+  it('reports a true PB it cannot draw', async () => {
     // Neither Air Spectral Easy run has a .perf, so there is a real PB and no
     // overlay. Presenting a non-PB as the PB is the failure this avoids.
-    const b = baselines(store, SPECTRAL_A, { ...opts, shape: 'race' });
+    const b = await baselines(store, SPECTRAL_A, { ...opts, shape: 'race' });
     expect(b.true_pb!.run_id).toBe(SPECTRAL_B);
     expect(b.pb).toBeNull();
     expect(b.recent.curve).toBeNull();
   });
 
-  it('resolves a timed run against its prior', () => {
-    const b = baselines(store, GROUND_B, { ...opts, shape: 'timed' });
+  it('resolves a timed run against its prior', async () => {
+    const b = await baselines(store, GROUND_B, { ...opts, shape: 'timed' });
     expect(b.true_pb!.run_id).toBe(GROUND_A);
     expect(b.pb!.run_id).toBe(GROUND_A);
     expect(b.recent.n).toBe(1);
@@ -61,18 +61,18 @@ describe('baselines', () => {
     expect(b.recent.run_ids).toEqual([GROUND_A]);
   });
 
-  it('keeps curves and their run ids index-aligned', () => {
+  it('keeps curves and their run ids index-aligned', async () => {
     // A race curve is resampled against its own run's elapsed_s. Misaligning
     // these two lists rescales a slow run onto someone else's clock, which
     // hides it inside a band that looks normal.
-    const b = baselines(store, AIR_B, { ...opts, shape: 'race' });
+    const b = await baselines(store, AIR_B, { ...opts, shape: 'race' });
     expect(b.recent.curve).toHaveLength(b.recent.run_ids!.length);
     expect(b.recent.curve![0].buckets)
-      .toBe(store.getCurve(b.recent.run_ids![0])!.buckets);
+      .toBe((await store.getCurve(b.recent.run_ids![0]))!.buckets);
   });
 
-  it('degrades to nothing for a scenario with one run', () => {
-    const b = baselines(store, EASTER, { ...opts, shape: 'timed' });
+  it('degrades to nothing for a scenario with one run', async () => {
+    const b = await baselines(store, EASTER, { ...opts, shape: 'timed' });
     expect(b).toEqual({
       pb: null, true_pb: null,
       recent: { n: 0, mean_score: null, curve: null, run_ids: null },
@@ -80,24 +80,26 @@ describe('baselines', () => {
     });
   });
 
-  it('treats a non-positive recent_n as none, not as all', () => {
+  it('treats a non-positive recent_n as none, not as all', async () => {
     // Python's prior[-0:] is every prior run and a negative slice drops from
     // the front. Neither is a request; both are clamped.
     for (const recentN of [0, -5]) {
-      expect(baselines(store, AIR_B, { ...opts, recentN, shape: 'race' }).recent.n)
-        .toBe(0);
+      const b = await baselines(store, AIR_B, { ...opts, recentN, shape: 'race' });
+      expect(b.recent.n).toBe(0);
     }
   });
 
-  it('drops peers at a different sensitivity when asked to', () => {
+  it('drops peers at a different sensitivity when asked to', async () => {
     // Every run of a fixture scenario shares its cm/360, so the flag has to be
     // given something to bite on: asserting `candidates` on the corpus as it
     // stands passes with the filter deleted.
     const rows = statsIds().map((id) => ingest(id, readStats(id), readPerf(id)));
     rows.find((r) => r.run.id === AIR_A)!.run.cfg_key = '45.0';
     const mixed = buildStore(rows);
-    expect(baselines(mixed, AIR_B, { ...opts, shape: 'race' }).candidates).toBe(0);
-    expect(baselines(mixed, AIR_B, { ...opts, sameCfg: false, shape: 'race' }).candidates)
+    expect((await baselines(mixed, AIR_B, { ...opts, shape: 'race' })).candidates)
+      .toBe(0);
+    expect((await baselines(
+      mixed, AIR_B, { ...opts, sameCfg: false, shape: 'race' })).candidates)
       .toBe(1);
   });
 });

@@ -131,9 +131,9 @@ const DEFAULT_SCENARIO = (name: string): Scenario => ({
  *  two bare Errors apart without reading their messages. */
 export class UnknownRunError extends Error {}
 
-export function buildRunPayload(
+export async function buildRunPayload(
   store: Store, id: string, opts: PayloadOpts = {},
-): Payload {
+): Promise<Payload> {
   const {
     metric = 'score', smoothing = 5, recentN = DEFAULT_RECENT_N, sameCfg = true,
   } = opts;
@@ -141,13 +141,14 @@ export function buildRunPayload(
   // the accepted set is the Python's ValueError, which its server answers 400.
   if (!(metric in METRICS)) throw new RangeError(`unknown metric: ${metric}`);
 
-  const run = store.getRun(id);
+  const run = await store.getRun(id);
   if (!run) throw new UnknownRunError(`no such run: ${id}`);
 
-  const scenario = store.getScenario(run.scenario) ?? DEFAULT_SCENARIO(run.scenario);
+  const scenario = (await store.getScenario(run.scenario))
+    ?? DEFAULT_SCENARIO(run.scenario);
   const isRace = scenario.shape === RACE;
 
-  const curve = store.getCurve(id) ?? null;
+  const curve = (await store.getCurve(id)) ?? null;
   const buckets = curve ? curve.series.score.length : 0;
   // A race plots damage/s whatever `metric` says -- the shape fixes the y
   // series, so every one of the six buttons would redraw the identical line.
@@ -159,7 +160,7 @@ export function buildRunPayload(
   // both places, here and in `compare.baselines`, because the slice quirk it
   // guards against (recent_n=0 meaning "every prior run") is reachable from an
   // unvalidated query string.
-  const base = baselines(store, id, {
+  const base = await baselines(store, id, {
     recentN, sameCfg, durationTol: DURATION_TOLERANCE, shape: scenario.shape,
   });
 
@@ -186,21 +187,24 @@ export function buildRunPayload(
     },
   };
 
-  if (isRace) fillRace(store, payload, run, scenario, curve, base, smoothing, sameCfg);
-  else fillTimed(store, payload, run, scenario, curve, base, metric, smoothing, sameCfg);
+  if (isRace) await fillRace(store, payload, run, scenario, curve, base, smoothing, sameCfg);
+  else {
+    await fillTimed(
+      store, payload, run, scenario, curve, base, metric, smoothing, sameCfg);
+  }
   return payload;
 }
 
 /** Native per-second grid, score units -- plus bot windows where the scenario
  *  spends its clock on a rotation of bots that never die. */
-function fillTimed(
+async function fillTimed(
   store: Store, payload: Payload, run: Run, scenario: Scenario,
   curve: Curve | null, base: Baselines, metric: string, smoothing: number,
   sameCfg: boolean,
-): void {
+): Promise<void> {
   const mine = curve ? series(curve, metric) : [];
   payload.rate.mine = smooth(mine, smoothing);
-  const kills = store.getKills(run.id);
+  const kills = await store.getKills(run.id);
   payload.marks.kills = kills.map((k) => k.t);
   // A window boundary is the scenario's, not the player's, so it falls at the
   // same second in every run. That is what `aligned` means to the chart: draw
@@ -208,8 +212,8 @@ function fillTimed(
   if (scenario.windowed) {
     payload.marks.aligned = true;
     payload.marks.labels = kills.map((k) => k.bot);
-    payload.windows = botWindows(store, run, base, sameCfg);
-    payload.window_summary = windowSummary(store, run, base);
+    payload.windows = await botWindows(store, run, base, sameCfg);
+    payload.window_summary = await windowSummary(store, run, base);
   }
 
   if (curve && base.pb && base.pb.curve) {
@@ -241,10 +245,10 @@ function fillTimed(
 }
 
 /** Progress axis, damage rate, seconds-based delta, shared kill marks. */
-function fillRace(
+async function fillRace(
   store: Store, payload: Payload, run: Run, scenario: Scenario,
   curve: Curve | null, base: Baselines, smoothing: number, sameCfg: boolean,
-): void {
+): Promise<void> {
   const bots = scenario.bots || 1;
   const steps = raceGrid(bots);
   payload.axis = { kind: 'progress', label: '% of pool', n: steps };
@@ -266,7 +270,8 @@ function fillRace(
     payload.rate.mine = smooth(rate, smoothing);
   }
 
-  const pbRun = base.pb && base.pb.curve ? store.getRun(base.pb.run_id) : undefined;
+  const pbRun = base.pb && base.pb.curve
+    ? await store.getRun(base.pb.run_id) : undefined;
   if (mineEdges.length && base.pb?.curve && pbRun?.elapsed_s) {
     const [baseEdges, baseRate] = resampleRace(
       base.pb.curve.series.hits, pbRun.elapsed_s, steps);
@@ -288,13 +293,17 @@ function fillRace(
     // run's: scaling every band member onto someone else's clock moves a real
     // Air Pure Medium run by up to ~15%, hiding a slow run inside a band that
     // looks normal.
-    base.recent.curve.forEach((recent, i) => {
-      const recentRun = store.getRun(base.recent.run_ids![i]);
-      if (!recentRun?.elapsed_s) return;
+    // A `for` over indices rather than `forEach`: an async callback passed to
+    // `forEach` is never awaited, so the band would be built from an empty
+    // array and the `if (curves.length)` below would silently skip it.
+    for (let i = 0; i < base.recent.curve.length; i++) {
+      const recent = base.recent.curve[i];
+      const recentRun = await store.getRun(base.recent.run_ids![i]);
+      if (!recentRun?.elapsed_s) continue;
       const [, recentRate] = resampleRace(
         recent.series.hits, recentRun.elapsed_s, steps);
       if (recentRate.length) curves.push(recentRate);
-    });
+    }
     if (curves.length) {
       const raw = makeBand(curves);
       payload.rate.band = {
@@ -305,7 +314,7 @@ function fillRace(
     }
   }
 
-  payload.splits = raceSplits(store, run, base, sameCfg);
+  payload.splits = await raceSplits(store, run, base, sameCfg);
   // Name the boundaries after the bots that hold them, reusing the rows the
   // split table already loaded. A run that quit early names fewer bots than the
   // scenario has; the chart falls back to the ordinal for the rest.
@@ -320,10 +329,10 @@ function fillRace(
  * Itself because `best` is a ceiling: on the run that set it the column has to
  * read that run's own number and the gap has to be zero, not blank.
  */
-function peerIds(
+async function peerIds(
   store: Store, run: Run, sameCfg: boolean, shape: Scenario['shape'],
-): string[] {
-  const rows = store.candidates(run.id, {
+): Promise<string[]> {
+  const rows = await store.candidates(run.id, {
     sameCfg, durationTol: DURATION_TOLERANCE, shape,
   });
   return [...rows.map((r) => r.id), run.id];
@@ -346,20 +355,22 @@ function sumTtk(kills: Iterable<Kill>): number {
  * version but moved by up to a second across versions, so it is carried as this
  * run's own residual and simply shown.
  */
-function raceSplits(
+async function raceSplits(
   store: Store, run: Run, base: Baselines, sameCfg: boolean,
-): SplitRow[] {
-  const mine = store.getKills(run.id);
+): Promise<SplitRow[]> {
+  const mine = await store.getKills(run.id);
   if (!mine.length || !run.elapsed_s) return [];
 
   const baseByIdx = new Map<number, Kill>();
   if (base.pb) {
-    for (const k of store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
+    for (const k of await store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
   }
 
   // Fastest this bot has ever gone down, this run included -- the column says
   // what the ceiling is, so the run that set it must show itself.
-  const best = store.bestBySlot(peerIds(store, run, sameCfg, RACE), 'ttk');
+  // Hoisted above the `map` below, which cannot await.
+  const best = await store.bestBySlot(
+    await peerIds(store, run, sameCfg, RACE), 'ttk');
 
   const rows: SplitRow[] = mine.map((kill) => {
     const other = baseByIdx.get(kill.idx);
@@ -391,7 +402,7 @@ function raceSplits(
   const mineDead = run.elapsed_s - sumTtk(mine);
   let baseDead: number | null = null;
   if (baseByIdx.size && base.pb) {
-    const baseRun = store.getRun(base.pb.run_id);
+    const baseRun = await store.getRun(base.pb.run_id);
     if (baseRun?.elapsed_s) baseDead = baseRun.elapsed_s - sumTtk(baseByIdx.values());
   }
   // Dead time is the gap between bots, not a bot: it is part of the total but
@@ -429,11 +440,11 @@ function share(kill: Kill | undefined): number | null {
  * toward the denominator, which is the Python's explicit guard rather than
  * `share`'s: a hole here reads as damage offered and not taken.
  */
-function windowSummary(
+async function windowSummary(
   store: Store, run: Run, base: Baselines,
-): { mine: number | null; base: number | null } {
-  const overall = (runId: string): number | null => {
-    const kills = store.getKills(runId);
+): Promise<{ mine: number | null; base: number | null }> {
+  const overall = async (runId: string): Promise<number | null> => {
+    const kills = await store.getKills(runId);
     // Totalled the way the Python's builtin sums a float series, so the two
     // cannot disagree in the last bits of a ratio shown to twelve places.
     const done = pySum(
@@ -443,8 +454,8 @@ function windowSummary(
     return possible ? done / possible : null;
   };
   return {
-    mine: overall(run.id),
-    base: base.pb ? overall(base.pb.run_id) : null,
+    mine: await overall(run.id),
+    base: base.pb ? await overall(base.pb.run_id) : null,
   };
 }
 
@@ -455,15 +466,15 @@ function windowSummary(
  * offers is a constant. The share of it you took is the same number in every
  * scenario, and it is what the window was for.
  */
-function botWindows(
+async function botWindows(
   store: Store, run: Run, base: Baselines, sameCfg: boolean,
-): WindowRow[] {
-  const kills = store.getKills(run.id);
+): Promise<WindowRow[]> {
+  const kills = await store.getKills(run.id);
   if (!kills.length) return [];
 
   const baseByIdx = new Map<number, Kill>();
   if (base.pb) {
-    for (const k of store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
+    for (const k of await store.getKills(base.pb.run_id)) baseByIdx.set(k.idx, k);
   }
 
   // The same recent-N the chart's band is built from, so the stepper moves both
@@ -478,7 +489,7 @@ function botWindows(
   // counter on this side to sort by.
   const recentByIdx = new Map<number, number[]>();
   for (const recentId of base.recent.run_ids ?? []) {
-    for (const k of store.getKills(recentId)) {
+    for (const k of await store.getKills(recentId)) {
       const value = share(k);
       if (value === null) continue;
       const pool = recentByIdx.get(k.idx);
@@ -487,8 +498,10 @@ function botWindows(
     }
   }
 
-  // The most of this window anyone has taken, this run included.
-  const best = store.bestBySlot(peerIds(store, run, sameCfg, TIMED), 'share');
+  // The most of this window anyone has taken, this run included. Hoisted above
+  // the `map` below, which cannot await.
+  const best = await store.bestBySlot(
+    await peerIds(store, run, sameCfg, TIMED), 'share');
 
   return kills.map((kill) => {
     const mine = share(kill);

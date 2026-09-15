@@ -34,7 +34,7 @@ export interface Health {
   watcher_errors: number;
 }
 
-export function getRuns(store: Store, opts: RunsOpts): RailRow[] {
+export async function getRuns(store: Store, opts: RunsOpts): Promise<RailRow[]> {
   const { limit = DEFAULT_LIMIT, scenario = null, before = null, sameCfg = true } = opts;
   // The same bounds `server.py` puts on the query string, kept here rather than
   // in Plan B's shim: a range is what the answer means, not how it was asked
@@ -46,25 +46,25 @@ export function getRuns(store: Store, opts: RunsOpts): RailRow[] {
   return store.page(limit, { scenario, before, sameCfg });
 }
 
-export function getRun(store: Store, id: string, opts: PayloadOpts): Payload {
+export function getRun(store: Store, id: string, opts: PayloadOpts): Promise<Payload> {
   return buildRunPayload(store, id, opts);
 }
 
-export function getScenarios(store: Store): ScenarioListRow[] {
+export function getScenarios(store: Store): Promise<ScenarioListRow[]> {
   return store.scenarioList();
 }
 
-export function getSession(
+export async function getSession(
   store: Store, day?: string,
-): { day: string | null; runs: SessionRow[] } {
+): Promise<{ day: string | null; runs: SessionRow[] }> {
   // No day means the most recent one that has runs, which is what
   // `MAX(substr(started_at,1,10))` answers in the Python -- null on an empty
   // index rather than today's date, because an empty day is not a session.
-  const days = store.days();
+  const days = await store.days();
   const target = day ?? days[days.length - 1] ?? null;
-  return { day: target, runs: target === null ? [] : store.day(target) };
+  return { day: target, runs: target === null ? [] : await store.day(target) };
 }
 
-export function getHealth(store: Store): Health {
-  return { ...store.counts(), awaiting_perf: 0, watcher_errors: 0 };
+export async function getHealth(store: Store): Promise<Health> {
+  return { ...(await store.counts()), awaiting_perf: 0, watcher_errors: 0 };
 }

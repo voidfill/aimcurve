@@ -15,8 +15,8 @@ const store = buildStore(statsIds().map((id) => ingest(id, readStats(id), readPe
 const build = (id: string, o = {}) => buildRunPayload(store, id, o);
 
 describe('buildRunPayload, timed', () => {
-  it('carries the run, its scenario and a seconds axis', () => {
-    const p = build(GROUND_B);
+  it('carries the run, its scenario and a seconds axis', async () => {
+    const p = await build(GROUND_B);
     expect(p.run.id).toBe(GROUND_B);
     expect(p.run.buckets).toBe(60);
     expect(p.run.score).toBe(2009);
@@ -25,8 +25,8 @@ describe('buildRunPayload, timed', () => {
     expect(p.axis).toEqual({ kind: 'time', label: 'seconds', n: 60 });
   });
 
-  it('smooths the rate series but never the delta', () => {
-    const p = build(GROUND_B);
+  it('smooths the rate series but never the delta', async () => {
+    const p = await build(GROUND_B);
     expect(p.rate.metric).toBe('score');
     expect(p.rate.unit).toBe('score');
     expect(p.rate.mine.slice(0, 4))
@@ -34,8 +34,8 @@ describe('buildRunPayload, timed', () => {
     expect(p.delta.values!.slice(0, 4)).toEqual([34, 66, 54, 52]);
   });
 
-  it('ends the delta exactly at the score difference', () => {
-    const p = build(GROUND_B);
+  it('ends the delta exactly at the score difference', async () => {
+    const p = await build(GROUND_B);
     expect(p.delta.unit).toBe('points');
     expect(p.delta.final).toBe(2009 - 1814);
     expect(p.delta.compare_until).toBe(60);
@@ -44,63 +44,65 @@ describe('buildRunPayload, timed', () => {
     });
   });
 
-  it('names the same baseline in the delta and in the headline', () => {
-    const p = build(GROUND_B);
+  it('names the same baseline in the delta and in the headline', async () => {
+    const p = await build(GROUND_B);
     expect(p.delta.baseline!.run_id).toBe(p.baselines.pb!.run_id);
   });
 
-  it('marks a windowed scenario with shared, named boundaries', () => {
-    const p = build(GROUND_B);
+  it('marks a windowed scenario with shared, named boundaries', async () => {
+    const p = await build(GROUND_B);
     expect(p.marks.aligned).toBe(true);
     expect(p.marks.labels).toEqual(['Ground 1 Bot', 'Ground 2 Bot', 'Ground 3 Bot']);
     expect(p.marks.kills.map((v) => +v.toFixed(3)))
       .toEqual([18.997, 39.398, 59.8]);
   });
 
-  it('marks an ordinary scenario with the run\'s own kills, unaligned', () => {
-    const p = build(RELOAD);
+  it('marks an ordinary scenario with the run\'s own kills, unaligned', async () => {
+    const p = await build(RELOAD);
     expect(p.marks.aligned).toBe(false);
     expect(p.marks.labels).toEqual([]);
     expect(p.marks.kills).toHaveLength(52);
   });
 
-  it('renders zero kill marks when nothing ever dies', () => {
+  it('renders zero kill marks when nothing ever dies', async () => {
     // 1090 of 2360 real runs have no kill rows. It is the normal case.
-    const p = build(TRACKING);
+    const p = await build(TRACKING);
     expect(p.marks.kills).toEqual([]);
     expect(p.splits).toEqual([]);
     expect(p.windows).toEqual([]);
   });
 
-  it('offers efficiency only where damage is booked per tick', () => {
+  it('offers efficiency only where damage is booked per tick', async () => {
     // 5928 shots against 5.93 damage possible: the per-second ratio is a flat
     // zero rather than a measurement.
-    expect(build(GROUND_B).metrics).toEqual(['score', 'shots', 'hits', 'kills', 'accuracy']);
-    expect(build(RELOAD).metrics)
+    expect((await build(GROUND_B)).metrics)
+      .toEqual(['score', 'shots', 'hits', 'kills', 'accuracy']);
+    expect((await build(RELOAD)).metrics)
       .toEqual(['score', 'shots', 'hits', 'kills', 'accuracy', 'efficiency']);
   });
 
-  it('offers no metric buttons at all on a race', () => {
+  it('offers no metric buttons at all on a race', async () => {
     // The shape fixes the y series; six buttons would redraw one line.
-    expect(build(AIR_B).metrics).toEqual([]);
+    expect((await build(AIR_B)).metrics).toEqual([]);
   });
 
-  it('computes a ratio metric per bucket', () => {
-    const p = build(RELOAD, { metric: 'accuracy', smoothing: 0 });
+  it('computes a ratio metric per bucket', async () => {
+    const p = await build(RELOAD, { metric: 'accuracy', smoothing: 0 });
     expect(p.rate.metric).toBe('accuracy');
     expect(p.rate.mine.slice(0, 6)).toEqual([0, 1, 1, 0, 1, 1]);
   });
 
-  it('rejects a metric it does not know', () => {
-    expect(() => build(GROUND_B, { metric: 'nonsense' })).toThrow(/unknown metric/);
+  it('rejects a metric it does not know', async () => {
+    await expect(build(GROUND_B, { metric: 'nonsense' }))
+      .rejects.toThrow(/unknown metric/);
   });
 
-  it('rejects a run it does not have', () => {
-    expect(() => build('no such run')).toThrow(/no such run/);
+  it('rejects a run it does not have', async () => {
+    await expect(build('no such run')).rejects.toThrow(/no such run/);
   });
 
-  it('charts alone when there is nothing to compare against', () => {
-    const p = build(EASTER);
+  it('charts alone when there is nothing to compare against', async () => {
+    const p = await build(EASTER);
     expect(p.axis.n).toBe(0);
     expect(p.rate.mine).toEqual([]);
     expect(p.rate.pb).toBeNull();
@@ -110,10 +112,10 @@ describe('buildRunPayload, timed', () => {
     expect(p.baselines.candidates).toBe(0);
   });
 
-  it('draws no band when there is only one prior run', () => {
+  it('draws no band when there is only one prior run', async () => {
     // The band exists but collapses; with no prior run at all it is absent.
-    expect(build(GROUND_A).rate.band).toBeNull();
-    expect(build(GROUND_B).rate.band).not.toBeNull();
-    expect(build(GROUND_B, { recentN: 0 }).rate.band).toBeNull();
+    expect((await build(GROUND_A)).rate.band).toBeNull();
+    expect((await build(GROUND_B)).rate.band).not.toBeNull();
+    expect((await build(GROUND_B, { recentN: 0 })).rate.band).toBeNull();
   });
 });

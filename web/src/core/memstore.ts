@@ -96,12 +96,12 @@ export function buildStore(rows: readonly Ingested[]): Store {
     values.length ? pySum(values) / values.length : null;
 
   return {
-    getRun: (id) => runs.get(id),
-    getScenario: (name) => scenarios.get(name),
-    getCurve: (id) => curves.get(id),
-    getKills: (id) => kills.get(id) ?? [],
+    getRun: async (id) => runs.get(id),
+    getScenario: async (name) => scenarios.get(name),
+    getCurve: async (id) => curves.get(id),
+    getKills: async (id) => kills.get(id) ?? [],
 
-    candidates(id: string, opts: CandidateOpts): Run[] {
+    async candidates(id: string, opts: CandidateOpts): Promise<Run[]> {
       const focus = runs.get(id);
       if (!focus) throw new Error(`no such run: ${id}`);
       let rows2 = newestFirst
@@ -123,7 +123,7 @@ export function buildStore(rows: readonly Ingested[]): Store {
       return rows2;
     },
 
-    page(limit: number, opts: PageOpts): RailRow[] {
+    async page(limit: number, opts: PageOpts): Promise<RailRow[]> {
       let rows2 = newestFirst;
       if (opts.scenario) rows2 = rows2.filter((r) => r.scenario === opts.scenario);
       if (opts.before != null) {
@@ -144,7 +144,9 @@ export function buildStore(rows: readonly Ingested[]): Store {
         .map((r) => railRow(r, opts.sameCfg));
     },
 
-    bestBySlot(ids: readonly string[], metric: SlotMetric): Map<number, number> {
+    async bestBySlot(
+      ids: readonly string[], metric: SlotMetric,
+    ): Promise<Map<number, number>> {
       const best = new Map<number, number>();
       for (const id of ids) {
         for (const kill of kills.get(id) ?? []) {
@@ -169,7 +171,7 @@ export function buildStore(rows: readonly Ingested[]): Store {
       return best;
     },
 
-    scenarioList(): ScenarioListRow[] {
+    async scenarioList(): Promise<ScenarioListRow[]> {
       const out: ScenarioListRow[] = [];
       for (const [name, group] of byScenario) {
         const scenarioRuns = group.map((g) => g.run).sort(byTimeThenId);
@@ -196,7 +198,7 @@ export function buildStore(rows: readonly Ingested[]): Store {
         a.last_played === b.last_played ? 0 : a.last_played < b.last_played ? 1 : -1);
     },
 
-    day(day: string): SessionRow[] {
+    async day(day: string): Promise<SessionRow[]> {
       return newestFirst
         .filter((r) => r.started_at.slice(0, 10) === day)
         .sort(byTimeThenId)
@@ -206,11 +208,11 @@ export function buildStore(rows: readonly Ingested[]): Store {
         }));
     },
 
-    days(): string[] {
+    async days(): Promise<string[]> {
       return [...new Set(newestFirst.map((r) => r.started_at.slice(0, 10)))].sort();
     },
 
-    counts(): Counts {
+    async counts(): Promise<Counts> {
       return {
         runs: runs.size, curves: curves.size, failed, scenarios: scenarios.size,
       };
