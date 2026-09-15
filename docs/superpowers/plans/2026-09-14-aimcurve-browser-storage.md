@@ -61,7 +61,8 @@ web/src/source/picker.ts    a FileSystemDirectoryHandle
 web/src/source/pool.ts      bounded-concurrency reads
 web/src/ui/app.js           moved from aimcurve/web/, api() repointed
 web/src/ui/style.css        moved
-web/src/ui/vendor/          moved
+web/public/vendor/          moved -- public/, not src/: uPlot's IIFE build only
+                            sets its global as a classic top-level <script>
 web/src/pages/index.astro   the shell
 web/src/boot.ts             picks a source, elects a writer, indexes, renders
 web/test/packed.test.ts
@@ -236,6 +237,13 @@ export async function requestPersistence(): Promise<boolean> {
 export const META_INDEXED = 'indexed';
 export const META_READ_AT = 'read_at';
 export const META_PERSISTED = 'persisted';
+/** The directory handle the index was built from, so a reload does not downgrade
+ *  a picker user to re-enumerating their whole install. Handles survive
+ *  structured clone, which is why they can live here at all. Task 9 uses both. */
+export const META_HANDLE = 'handle';
+/** The name of that folder, so picking a *different* install is noticed rather
+ *  than silently merged into the same rail for ever. */
+export const META_ROOT_NAME = 'root_name';
 ```
 
 - [ ] **Step 2: Install the test dependency**
@@ -478,6 +486,7 @@ Two places need care because they are inside callbacks:
 
 - `fillRace`'s band loop uses `base.recent.curve.forEach` with an `await` inside. Convert it to a `for` loop over indices.
 - `raceSplits` and `botWindows` call `store.getKills` in a `map`. Hoist the awaits above the `map`.
+- `getSession` indexes the result of `store.days()` directly (`days[days.length - 1]`). A missed `await` there does not throw — it reads `.length` off a promise and answers `{ day: undefined, runs: [] }`, an empty session panel with no error anywhere. `astro check` catches it, which is why Step 4 runs it.
 
 - [ ] **Step 3: Update the tests**
 
@@ -1725,13 +1734,15 @@ risk it."
 **Files:**
 - Move: `aimcurve/web/app.js` → `web/src/ui/app.js`
 - Move: `aimcurve/web/style.css` → `web/src/ui/style.css`
-- Move: `aimcurve/web/vendor/` → `web/src/ui/vendor/`
+- Move: `aimcurve/web/vendor/` → `web/public/vendor/`
 - Create: `web/src/ui/api-shim.js`
-- Modify: `web/src/ui/app.js` (eleven edits, all listed below)
+- Modify: `web/src/ui/app.js` (every edit is listed below, in Steps 3–8)
 
 `app.js` is 1019 lines and none of its rendering changes. Two things do: run ids are strings now, and there is no server to fetch from.
 
 Move with `git mv` so the history follows. `index.html` does **not** move — Task 8 rewrites it as an Astro page.
+
+**Vendor goes to `web/public/`, not `web/src/`.** uPlot's IIFE build publishes its global only when it runs as a classic top-level `<script>`, and Astro serves `public/` but not `src/`. From `src/` the only route left is a bundled `import`, where `var uPlot` is module-scoped and invisible to `app.js` — and `app.js:194` calls `uPlot.sync('kv')` at module evaluation, so the page dies with a `ReferenceError` before a pixel renders. Keep exactly one copy, in `public/`.
 
 - [ ] **Step 1: Move the files**
 
@@ -1739,7 +1750,7 @@ Move with `git mv` so the history follows. `index.html` does **not** move — Ta
 mkdir -p web/src/ui
 git mv aimcurve/web/app.js web/src/ui/app.js
 git mv aimcurve/web/style.css web/src/ui/style.css
-git mv aimcurve/web/vendor web/src/ui/vendor
+git mv aimcurve/web/vendor web/public/vendor
 ```
 
 - [ ] **Step 2: Write the shim `app.js` will call**
@@ -1752,7 +1763,7 @@ Create `web/src/ui/api-shim.js`:
    app.js move over near-verbatim and what lets the oracle diff keep meaning
    something about what the browser actually renders. */
 
-import { getHealth, getRun, getRuns, getScenarios, getSession } from '../core/api.ts';
+import { getHealth, getRun, getRuns, getScenarios, getSession } from '../core/api';
 
 /** Set once at boot, before app.js runs. */
 let store = null;
@@ -1830,11 +1841,12 @@ Because `app.js` is wrapped in an IIFE, hoist the import to the top of the file,
 
 - [ ] **Step 4: Make run ids strings**
 
-Nine edits, each a single line. Line numbers are from the file as it stands before this task.
+Ten edits, each a single line. Line numbers are from the file as it stands before this task.
 
 | Site | Before | After |
 |---|---|---|
 | `parseHash`, ~117 | `runId: view === 'run' && /^\d+$/.test(seg[1] \|\| '') ? +seg[1] : null` | `runId: view === 'run' && seg[1] ? decodeURIComponent(seg[1]) : null` |
+| `loadRun`, ~782 | `` api(`/api/run/${id}?metric=...`) `` | `` api(`/api/run/${encodeURIComponent(id)}?metric=...`) `` |
 | `formatHash`, ~124 | `(runId == null ? '' : '/' + runId)` | `(runId == null ? '' : '/' + encodeURIComponent(runId))` |
 | `loadMore`, ~180 | `'&before=' + A.runs[A.runs.length - 1].id` | `'&before=' + encodeURIComponent(A.runs[A.runs.length - 1].id)` |
 | `applyRoute`, ~825 | `findIndex(el => +el.dataset.id === id)` | `findIndex(el => el.dataset.id === id)` |
@@ -1843,6 +1855,16 @@ Nine edits, each a single line. Line numbers are from the file as it stands befo
 | keyboard move, ~982 | `go({ runId: +el.dataset.id }, true)` | `go({ runId: el.dataset.id }, true)` |
 | keyboard move, ~983 | `loadRun(+el.dataset.id)` | `loadRun(el.dataset.id)` |
 | `renderRunList`, ~701 | `` ol.querySelector(`[data-id="${newId}"]`) `` | `` ol.querySelector(`[data-id="${cssEscape(newId)}"]`) `` |
+
+**The `loadRun` edit is the one that is easy to miss, and it is the one that bites.** Run ids are KovaaK's basenames, so every reserved character is reachable in real scenario names:
+
+```
+"Pokeball Frenzy 100% - ..."  -> URIError: URI malformed, thrown out of loadRun
+"Is it a hit? - ..."          -> id truncated at the '?', and all four options
+                                 silently revert to the shim's defaults
+```
+
+The `?` case is the dangerous one because it is silent: `getRun` throws `UnknownRunError`, `applyRoute` swallows it and falls back to `A.runs[0]`, and the user is shown **a different run than the one they clicked, at the wrong smoothing, with no error anywhere.** `loadRun` has no `catch` at three of its five call sites.
 
 - [ ] **Step 5: Escape what now goes into HTML attributes**
 
@@ -1861,7 +1883,7 @@ const cssEscape = s => (window.CSS && CSS.escape) ? CSS.escape(s)
   : String(s).replace(/["\\]/g, '\\$&');
 ```
 
-Then wrap these five interpolations:
+Then wrap these seven interpolations:
 
 | Line | Before | After |
 |---|---|---|
@@ -1870,8 +1892,23 @@ Then wrap these five interpolations:
 | ~747 | `<tr data-run="${rs.at(-1).id}">` | `<tr data-run="${esc(rs.at(-1).id)}">` |
 | ~747 | `<td class="name">${nm}</td>` | `<td class="name">${esc(nm)}</td>` |
 | ~770 | `data-scenario="${s.scenario}" ... <td class="name">${s.scenario}</td>` | `data-scenario="${esc(s.scenario)}" ... <td class="name">${esc(s.scenario)}</td>` |
+| `renderSplits`, ~528 | `<td class="bot">${s.bot}</td>` | `<td class="bot">${esc(s.bot)}</td>` |
+| `renderWindows`, ~571 | `<td class="bot">${r.bot}</td>` | `<td class="bot">${esc(r.bot)}</td>` |
 
-- [ ] **Step 6: Retire the SSE client**
+Bot names are game data on exactly the same footing as scenario names — they come out of the `.perf` file, not out of aimcurve — so they need the same treatment. They are easy to overlook because they are the only unescaped interpolations outside the rail and the tables above.
+
+- [ ] **Step 6: Stop the empty state promising a watcher**
+
+Nothing watches the folder any more — the page reads a snapshot taken when the user last picked. Two strings in the empty state still say otherwise, and because `getHealth` hardcodes `awaiting_perf: 0` the `awaiting_perf` branch is dead and the **false** side is what always renders:
+
+| Line | Before | After |
+|---|---|---|
+| ~864 | `'aimcurve is watching your stats folder'` | `'Snapshot of your stats folder'` |
+| ~873 | `'The next run you finish lands here about a second after it ends.'` | `'Play a scenario, then use Re-read folder to pick it up.'` |
+
+Leave the `awaiting_perf ?` conditionals themselves in place; Task 9 gives the badge something true to say.
+
+- [ ] **Step 7: Retire the SSE client**
 
 There is no event stream in this plan. Replace the whole `SSE` block's `connect()` body and the boot line.
 
@@ -1920,20 +1957,29 @@ export function start() { return refresh(false); }
 
 `refresh()` must also stop reacting to `awaiting_perf` and `watcher_errors` as live conditions — leave the code, since `getHealth` reports both as 0, and Task 9 gives the badge something true to say.
 
-- [ ] **Step 7: Make the module's exports reachable**
+- [ ] **Step 8: Make the module's exports reachable**
 
-`app.js` is wrapped in `(function () { ... })()`. Exporting from inside it is not legal. Remove the IIFE wrapper entirely — a module has its own scope, which is what the IIFE was for. Delete the opening `(function () {` / `'use strict';` preamble and the closing `})();`, and de-indent if the file indents inside it.
+`app.js` is wrapped in an IIFE and exporting from inside one is not legal. Remove the wrapper entirely — a module has its own scope, which is what the IIFE was for.
 
-- [ ] **Step 8: Add a status style for the new state**
+The opening is an **arrow** IIFE, at `app.js:3`:
+
+```js
+(() => {
+'use strict';
+```
+
+Delete those two lines and the closing `})();`, then de-indent if the file indents inside them. (Searching for `(function () {` finds nothing — that is a different wrapper than the one this file actually uses.)
+
+- [ ] **Step 9: Add a status style for the new state**
 
 In `web/src/ui/style.css`, find the `[data-state=...]` rules on `#status` and add a `snapshot` variant alongside `live`, `connecting` and `down`. Use the same treatment as `live` but in the muted colour — this state is normal, not a warning.
 
-- [ ] **Step 9: Type-check and test**
+- [ ] **Step 10: Type-check and test**
 
 Run: `cd web && npm test && npx astro check`
 Expected: all passed, `0 errors`. `astro check` will not type-check `app.js` unless `checkJs` is on; leave it off.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add -A web/src/ui aimcurve/web
@@ -1965,7 +2011,9 @@ The first thing a new user does is read a dialog that says *"Upload 11,000 files
 
 - [ ] **Step 1: Write the shell**
 
-Create `web/src/pages/index.astro`, carrying over the whole body of `aimcurve/web/index.html` between `<body>` and `</body>`, and adding the picker panel in front of it:
+Create `web/src/pages/index.astro`, carrying over the whole body of `aimcurve/web/index.html` between `<body>` and `</body>`, and adding the picker panel in front of it.
+
+**Do not wrap the carried-over markup in a container.** `style.css:42-46` sizes the whole dashboard off a body grid — `body { display:grid; grid-template-rows:auto minmax(0,1fr) }`, whose two rows are `<header class="topbar">` and `<main class="view run-view">`. A wrapping `<main id="app">` is a plain block, so the `minmax(0,1fr)` chain that bounds the charts and the rail never reaches them and the layout collapses. It would also nest `<main>` inside `<main>`, which the spec forbids, because the carried markup already has one. Toggle a class on `<body>` instead and keep every dashboard element a direct child of it.
 
 ```astro
 ---
@@ -1977,9 +2025,9 @@ import '../ui/style.css';
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>aimcurve</title>
-  <link rel="stylesheet" href="/ui/vendor/uPlot.min.css" />
+  <link rel="stylesheet" href="/vendor/uPlot.min.css" />
 </head>
-<body>
+<body class="picking">
   <section id="pick" class="pick">
     <h1>aimcurve</h1>
     <p class="lede">Your KovaaK's run history, read in this tab.</p>
@@ -1991,9 +2039,14 @@ import '../ui/style.css';
     </p>
     <p class="promise">aimcurve never writes to your KovaaK's install.</p>
 
+    <!-- Exactly one of these is shown. Two identically-labelled controls side
+         by side is a coin toss, and the picker's error handler says "try the
+         folder button below instead" -- which has to refer to something the
+         user can tell apart. boot.ts reveals #pickDir and hides #pickUploadLabel
+         when showDirectoryPicker exists, and leaves this default otherwise. -->
     <div class="pick-actions">
       <button id="pickDir" hidden>Choose your KovaaK's folder</button>
-      <label class="button" for="pickUpload">Choose your KovaaK's folder</label>
+      <label class="button" id="pickUploadLabel" for="pickUpload">Choose folder (upload)</label>
       <input id="pickUpload" type="file" webkitdirectory multiple hidden />
     </div>
     <p class="hint">
@@ -2006,12 +2059,29 @@ import '../ui/style.css';
     <p id="pickError" class="error" hidden></p>
   </section>
 
-  <!-- The dashboard, hidden until there is something to show. -->
-  <main id="app" hidden>
-    <!-- carried over verbatim from aimcurve/web/index.html -->
+  <!-- Carried over verbatim from aimcurve/web/index.html, and staying direct
+       children of <body> so the body grid still sizes them. `body.picking`
+       hides them; boot.ts drops that class when there is something to show.
+
+       Two edits to the carried markup, both in the topbar:
+         - #status ships data-state="stale", not "live" (see below)
+         - #repick is added next to it -->
+  <header class="topbar">
+    <!-- ... brand and nav, verbatim ... -->
+    <div class="top-right">
+      <div class="health" id="health" hidden></div>
+      <button id="repick" class="button ghost">Re-read folder</button>
+      <div class="status" id="status" data-state="stale">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="status-label">—</span>
+      </div>
+    </div>
+  </header>
+  <main class="view run-view" id="view-run">
+    <!-- ... carried over verbatim ... -->
   </main>
 
-  <script src="/ui/vendor/uPlot.iife.min.js" is:inline></script>
+  <script src="/vendor/uPlot.iife.min.js" is:inline></script>
   <script>
     import '../boot.ts';
   </script>
@@ -2019,7 +2089,9 @@ import '../ui/style.css';
 </html>
 ```
 
-Copy `web/src/ui/vendor/` into `web/public/ui/vendor/` so the two `href`/`src` paths above resolve, or import the CSS and script through Vite instead — either is fine, but uPlot ships as a UMD bundle that sets a global, so if it is imported it must still end up on `window` before `app.js` runs.
+**The status badge must not ship saying "live" in green.** The carried markup is `data-state="live"` with the label `live`, and nothing overwrites it until `setSnapshotAge` runs *after* `await start()` — hundreds of milliseconds on a real corpus, and for ever if `start()` rejects. There is no live anything in this plan: no watcher, no event stream. Ship it neutral and let the first real reading fill it in. Add a `.status[data-state="stale"]` rule in Step 3 alongside the picker styles.
+
+`#repick` belongs here rather than in Task 9. Task 9 gives it its behaviour, but `showDashboard` hides `#pick`, so without a control in the topbar a returning visitor at this commit has no way to re-read their folder at all — their only option is clearing site data. That contradicts the plan's own rule that at every earlier commit there is still something that runs. Wire it to a plain `location.reload()` here; Task 9 replaces that.
 
 - [ ] **Step 2: Write the boot sequence**
 
@@ -2044,7 +2116,19 @@ import { pickDirectory, pickerSource, supportsPicker } from './source/picker';
 import type { RunSource } from './source/types';
 import { uploadSource } from './source/upload';
 import { useStore } from './ui/api-shim.js';
-import { setSnapshotAge, start } from './ui/app.js';
+
+// app.js is imported dynamically, and that is load-bearing. It does DOM work at
+// module evaluation -- `uPlot.sync('kv')` at :194, `ro.observe` at :477,
+// loadCtrl()/buildSegs() at :896, a hashchange listener at :828 -- all before
+// start() is ever called. A static `import { start } from './ui/app.js'` runs
+// every one of those the moment boot.ts is evaluated, which is before main()
+// has called useStore(). So the shim must be pointed at a store BEFORE this
+// import is awaited, not merely before start() is called.
+let ui: typeof import('./ui/app.js') | null = null;
+async function loadUi() {
+  if (!ui) ui = await import('./ui/app.js');
+  return ui;
+}
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -2054,39 +2138,85 @@ async function lastReadAt(db: IDBDatabase): Promise<number | null> {
   return row?.value ?? null;
 }
 
+/** Past which age the UI stops being quiet about it. One place, because Task 9
+ *  styles the control off the same threshold the label is computed from. */
+export const STALE_MS = 60 * 60_000;
+
+/** The bare age -- 'just now', '5 min ago'. Callers add any prefix, so that the
+ *  null case does not have to read "read never". */
 function describeAge(readAt: number | null): string {
-  if (readAt === null) return 'no data';
-  const minutes = Math.round((Date.now() - readAt) / 60_000);
+  if (readAt === null) return 'never';
+  const ms = Date.now() - readAt;
+  // A clock that moved backwards, or a file written by a machine slightly ahead
+  // of this one, gives a negative age. Rounding that would print "-3 min ago";
+  // it passed the old `< 2` test and rendered "just now" only by accident.
+  if (ms <= 0) return 'just now';
+  // floor, not round, everywhere. Rounding made 59 min 40 s print "1 h ago"
+  // while the styling -- which compares the raw age against one hour -- still
+  // called it fresh, so the label and the colour disagreed for twenty seconds
+  // out of every hour.
+  const minutes = Math.floor(ms / 60_000);
   if (minutes < 2) return 'just now';
   if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
+  const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} days ago`;
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+/** 'read 5 min ago', or 'never read' -- never 'read never'. */
+function describeRead(readAt: number | null): string {
+  return readAt === null ? 'never read' : `read ${describeAge(readAt)}`;
 }
 
 async function showDashboard(db: IDBDatabase): Promise<void> {
+  // useStore first, then the import: see the note on loadUi above.
   useStore(createStore(db));
-  el('pick').hidden = true;
-  el('app').hidden = false;
+  const { setSnapshotAge, start } = await loadUi();
+  // Not `el('app').hidden = false`: the dashboard's elements are direct
+  // children of <body> so that the body grid can size them, and a class is
+  // what reveals them.
+  document.body.classList.remove('picking');
   await start();
-  setSnapshotAge(`read ${describeAge(await lastReadAt(db))}`);
+  setSnapshotAge(describeRead(await lastReadAt(db)));
+}
+
+/** Say something in whichever panel is actually on screen.
+ *
+ * #status lives in the topbar, which `body.picking` hides -- so a message
+ * written there before the dashboard is revealed is written into a hidden
+ * element and the user sees nothing at all.
+ */
+async function announce(message: string): Promise<void> {
+  if (document.body.classList.contains('picking')) {
+    const progress = el<HTMLParagraphElement>('pickProgress');
+    progress.hidden = false;
+    progress.textContent = message;
+  } else {
+    (await loadUi()).setSnapshotAge(message);
+  }
 }
 
 async function indexFrom(db: IDBDatabase, source: RunSource): Promise<void> {
-  const progress = el<HTMLParagraphElement>('pickProgress');
-  progress.hidden = false;
-  progress.textContent = 'Looking at the folder…';
+  // Not `el('pickProgress')` directly: on a re-index the dashboard is already
+  // up and #pick is hidden, so writing there gives a 22-second pass with no
+  // feedback whatsoever. `announce` picks whichever panel is on screen.
+  await announce('Looking at the folder…');
 
   const pending = await pendingIds(db, source);
   if (!pending.length) {
-    progress.textContent = 'Nothing new.';
+    await announce('Nothing new.');
   } else {
+    let last = 0;
     await indexInto(db, source, pending, (p) => {
-      progress.textContent = p.phase === 'reading'
+      // At 12k runs this fires 12,000 times; repainting on every one is most of
+      // what makes the pass feel slow. Four times a second is plenty.
+      if (p.done !== p.total && Date.now() - last < 250) return;
+      last = Date.now();
+      void announce(p.phase === 'reading'
         ? `Reading ${p.done} of ${p.total} runs…`
         : p.phase === 'writing'
           ? `Storing ${p.done} of ${p.total}…`
-          : `Classifying ${p.done} of ${p.total} scenarios…`;
+          : `Classifying ${p.done} of ${p.total} scenarios…`);
     });
   }
 
@@ -2111,21 +2241,46 @@ async function main(): Promise<void> {
     await showDashboard(db);
   }
 
-  if (!writer.elected) {
-    // Another tab owns the writing. This one reads and says so.
-    setSnapshotAge('another tab is indexing');
-    return;
-  }
-
-  const fail = (message: string) => {
+  const fail = async (message: string) => {
+    if (!document.body.classList.contains('picking')) {
+      // Past the first index #pickError is inside the hidden panel, so an error
+      // written there is invisible. Say it where the user is looking.
+      await announce(message);
+      return;
+    }
     const error = el<HTMLParagraphElement>('pickError');
     error.hidden = false;
     error.textContent = message;
   };
 
+  // Task 9 replaces this with a real re-pick. Until then a reload is enough to
+  // mean the control is not a lie.
+  el<HTMLButtonElement>('repick').addEventListener(
+    'click', () => location.reload());
+
+  if (!writer.elected) {
+    // Another tab owns the writing. This one reads, and says so wherever the
+    // user is actually looking.
+    //
+    // Returning here before the controls below are bound is what made an empty
+    // database in a second tab a terminal dead end: #pick stayed on screen with
+    // a visible folder button that opened the directory dialog and then did
+    // nothing at all, for ever, because no change listener had been attached.
+    await announce(counts.runs > 0
+      ? 'another tab is indexing'
+      : 'Another aimcurve tab is indexing this folder. This tab will show your ' +
+        'history once that finishes — reload to check.');
+    el<HTMLButtonElement>('pickDir').hidden = true;
+    el<HTMLLabelElement>('pickUploadLabel').hidden = true;
+    return;
+  }
+
   if (supportsPicker()) {
+    // Exactly one control, so that "try the folder button below instead" names
+    // something distinguishable.
     const button = el<HTMLButtonElement>('pickDir');
     button.hidden = false;
+    el<HTMLLabelElement>('pickUploadLabel').hidden = true;
     button.addEventListener('click', async () => {
       const handle = await pickDirectory();
       if (!handle) return;
@@ -2133,19 +2288,27 @@ async function main(): Promise<void> {
         await indexFrom(db, await pickerSource(handle));
       } catch (e) {
         // Chrome refuses any directory under Program Files, by every route.
-        // The upload control is not subject to that, and is still on the page.
-        fail(`${(e as Error).message}. Try the folder button below instead.`);
+        // The upload control is not subject to that, so bring it back and point
+        // at it -- the message has to name a control that is actually on screen.
+        el<HTMLLabelElement>('pickUploadLabel').hidden = false;
+        await fail(`${(e as Error).message}. Try “Choose folder (upload)” instead.`);
       }
     });
   }
 
   el<HTMLInputElement>('pickUpload').addEventListener('change', async (event) => {
-    const files = (event.target as HTMLInputElement).files;
+    const input = event.target as HTMLInputElement;
+    const files = input.files;
     if (!files?.length) return;
     try {
       await indexFrom(db, uploadSource(files));
     } catch (e) {
-      fail((e as Error).message);
+      await fail((e as Error).message);
+    } finally {
+      // Chrome fires no `change` when the same directory is chosen twice in a
+      // row unless the value is cleared -- and re-picking the same folder is
+      // the common case, not the rare one.
+      input.value = '';
     }
   });
 }
@@ -2161,7 +2324,21 @@ main().catch((e) => {
 
 - [ ] **Step 3: Style the picker panel**
 
-Add rules for `.pick`, `.lede`, `.promise`, `.pick-actions`, `.button`, `.hint`, `.progress` and `.error` to `web/src/ui/style.css`, following the variables already defined at the top of that file. The `.promise` paragraphs should read as reassurance rather than as a warning — they are the answer to a question the browser is about to ask badly.
+Add rules for `.pick`, `.lede`, `.promise`, `.pick-actions`, `.button`, `.button.ghost`, `.hint`, `.progress` and `.error` to `web/src/ui/style.css`, following the variables already defined at the top of that file. The `.promise` paragraphs should read as reassurance rather than as a warning — they are the answer to a question the browser is about to ask badly.
+
+Three more rules carry the panel toggle and the new badge state:
+
+```css
+/* The dashboard is sized by the body grid (grid-template-rows:auto minmax(0,1fr)
+   at :46), so its elements have to stay direct children of <body>. Showing and
+   hiding a whole panel is therefore a class on <body>, not a wrapper element. */
+body.picking > :not(#pick) { display: none }
+body:not(.picking) > #pick { display: none }
+body.picking { grid-template-rows: minmax(0, 1fr) }
+
+/* There is nothing live to report: no watcher, no event stream. */
+.status[data-state="stale"] { color: var(--faint) }
+```
 
 - [ ] **Step 4: Delete the old shell**
 
@@ -2173,8 +2350,11 @@ This empties `aimcurve/web/`, so it no longer exists as a path. `git rm` has alr
 
 - [ ] **Step 5: Build and look at it**
 
+Run: `cd web && npx astro check`
+Expected: `0 errors`. **`astro build` does not type-check**, and `boot.ts` has the widest cross-module type surface in this plan — the shim, the store, the indexer, the writer and both sources all meet here. Running only the build would let every one of those mismatches through.
+
 Run: `cd web && npm run dev`
-Open the printed URL. Expected: the picker panel, with the "nothing is uploaded" paragraph above both buttons.
+Open the printed URL. Expected: the picker panel, with the "nothing is uploaded" paragraph above a single folder button. The status badge in the topbar is not visible yet, and when it becomes visible it is grey and reads `—`, never green and `live`.
 
 Run: `cd web && npm run build`
 Expected: a `dist/` directory with `index.html` and hashed assets, and no error.
@@ -2201,6 +2381,7 @@ before, so the one prompt is not spent on an empty database."
 
 **Files:**
 - Modify: `web/src/boot.ts`
+- Modify: `web/src/db/schema.ts` (two more meta keys)
 - Modify: `web/src/pages/index.astro`
 - Modify: `web/src/ui/style.css`
 
@@ -2208,58 +2389,130 @@ before, so the one prompt is not spent on an empty database."
 
 The browser design left *how loudly* open. The decision here: **state the age, always; prompt only past an hour.** A snapshot ten minutes old is not worth interrupting anyone about; one from yesterday is, because the user has almost certainly played since.
 
-- [ ] **Step 1: Add the re-pick control to the shell**
+- [ ] **Step 1: Give the re-pick control its real markup**
 
-In `web/src/pages/index.astro`, inside the dashboard's header alongside `#status`, add:
+Task 8 already put a placeholder `#repick` in the topbar next to `#status`, bound to `location.reload()`, so that there was a way back at that commit. Replace the placeholder in `web/src/pages/index.astro` with:
 
 ```html
-<button id="repick" class="repick" title="Read the folder again">
+<button id="repick" class="repick" data-stale="0" title="Read the folder again">
   <span id="repickAge">—</span>
   <span class="repick-do">refresh</span>
 </button>
 ```
+
+and drop the `location.reload()` binding from `boot.ts` — Step 2 replaces it.
 
 - [ ] **Step 2: Keep the source and wire the button**
 
 In `web/src/boot.ts`, hold the last source used and re-run the incremental path against it:
 
 ```ts
-/** The source this tab last read from. A picker handle stays usable, so
- *  re-reading is silent; an upload snapshot does not, so it needs the dialog
- *  again. That difference is the whole gap between this tier and step two. */
+/** The source this tab last read from. A picker handle stays usable across a
+ *  reload -- but only if it was stored, because this is a module-level `let`
+ *  and a reload empties it. An upload snapshot cannot be stored at all, so it
+ *  needs the dialog again. That difference is the whole gap between this tier
+ *  and step two. */
 let current: RunSource | null = null;
 
+/** A directory handle survives a reload only if it is put in IndexedDB --
+ *  structured clone handles them, and nothing else does. Without this, `current`
+ *  is null after every reload and a picker user is silently downgraded to
+ *  re-enumerating their whole install through the upload dialog. */
+async function saveHandle(db: IDBDatabase, handle: FileSystemDirectoryHandle) {
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ key: META_HANDLE, value: handle });
+  await done(tx);
+}
+
+/** Restore it, and re-ask for permission.
+ *
+ * A stored handle is not a standing grant: after a restart the permission is
+ * back to 'prompt', and requestPermission() must be called from a user gesture.
+ * It can also come back 'denied' -- the folder moved, or the user revoked it --
+ * which is a normal outcome and not an error. Null means "fall back to asking".
+ */
+async function restoreHandle(db: IDBDatabase): Promise<FileSystemDirectoryHandle | null> {
+  const row = await req<{ value: FileSystemDirectoryHandle } | undefined>(
+    db.transaction('meta').objectStore('meta').get(META_HANDLE));
+  const handle = row?.value;
+  if (!handle) return null;
+  const opts = { mode: 'read' as const };
+  if (await (handle as any).queryPermission(opts) === 'granted') return handle;
+  return await (handle as any).requestPermission(opts) === 'granted' ? handle : null;
+}
+
 async function repick(db: IDBDatabase): Promise<void> {
+  const handle = current?.kind === 'picker' ? null : await restoreHandle(db);
   if (current?.kind === 'picker') {
-    // The handle is still granted, so this needs no gesture at all.
     await indexFrom(db, current);
     return;
   }
+  if (handle) {
+    await indexFrom(db, await pickerSource(handle));
+    return;
+  }
+  // The upload path opens Chrome's "Upload N files to this site?" dialog. The
+  // preamble is emphatic that the page must contradict that wording BEFORE the
+  // dialog appears -- and re-pick is every read after the first, not an edge
+  // case. Clicking the input while #pick is hidden fires that dialog with
+  // nothing on screen answering it.
+  document.body.classList.add('picking');
   el<HTMLInputElement>('pickUpload').click();
 }
 
 function renderAge(readAt: number | null): void {
   el('repickAge').textContent = describeAge(readAt);
-  const stale = readAt !== null && Date.now() - readAt > 60 * 60_000;
+  // The same threshold the label is computed from, so the colour and the words
+  // can never disagree. See STALE_MS and the floor/round note in Task 8.
+  const stale = readAt !== null && Date.now() - readAt > STALE_MS;
   el('repick').dataset.stale = stale ? '1' : '0';
 }
 ```
 
-Set `current` in `indexFrom`, call `renderAge` from `showDashboard`, refresh it on a one-minute interval so the label does not freeze at "just now", and bind `#repick`'s click to `repick(db)`.
+Add `META_HANDLE` to `db/schema.ts` alongside the other meta keys. Set `current` in `indexFrom`, call `saveHandle` when a picker source is chosen, call `renderAge` from `showDashboard`, refresh it on a one-minute interval so the label does not freeze at "just now", and bind `#repick`'s click to `repick(db)`.
 
-- [ ] **Step 3: Style the two states**
+- [ ] **Step 3: Notice when the folder is not the same folder**
+
+`pendingIds` is a pure set difference and `indexInto` only ever adds, so picking a *different* install merges the two into one rail permanently, with no way to separate them afterwards. Nothing records which folder the index came from. Record one, and ask before merging:
+
+```ts
+/** The folder this index was built from. Not an identity -- two installs can
+ *  share a name -- but enough to catch the case that silently corrupts the
+ *  index, which is picking a different folder by accident. */
+async function checkSameFolder(db: IDBDatabase, name: string): Promise<boolean> {
+  const row = await req<{ value: string } | undefined>(
+    db.transaction('meta').objectStore('meta').get(META_ROOT_NAME));
+  if (row?.value === undefined || row.value === name) return true;
+  return confirm(
+    `This index was built from “${row.value}”, and you picked “${name}”.\n\n` +
+    `Adding it will merge both installs into one history, permanently. ` +
+    `Cancel to keep the existing index.`);
+}
+```
+
+Call it from `indexFrom` before indexing, bail if it returns false, and write `META_ROOT_NAME` after a successful pass.
+
+**Two things this deliberately does not solve**, both of which need a product decision rather than a patch — flag them rather than inventing an answer:
+
+- A *replace* option. Today the only choices are merge or cancel; there is no "forget the old one and start again" short of clearing site data.
+- **Deleted runs never leave the index.** The set difference only ever grows it, so a run deleted from disk stays in the rail for ever. Reconciling would mean diffing the full listing against `META_INDEXED` on every pass and deleting the difference, which is a real change to the indexing contract.
+
+- [ ] **Step 4: Style the two states**
 
 `[data-stale="0"]` is quiet — the muted colour, no border. `[data-stale="1"]` gets the accent treatment the `#status` down state already uses. Nothing animates and nothing blocks the page; the data on screen is still real, it is just old.
 
-- [ ] **Step 4: Look at it**
+- [ ] **Step 5: Verify**
+
+Run: `cd web && npx astro check`
+Expected: `0 errors`.
 
 Run: `cd web && npm run dev`
-Expected: the age reads "just now" after an index, and the control is quiet.
+Expected: the age reads "just now" after an index, and the control is quiet. Re-pick with a picker handle re-reads with no dialog; re-pick without one shows the picker panel, with the "nothing is uploaded" paragraph, *before* the browser's upload dialog appears.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add web/src/boot.ts web/src/pages/index.astro web/src/ui/style.css
+git add web/src/boot.ts web/src/db/schema.ts web/src/pages/index.astro web/src/ui/style.css
 git commit -m "Report how old the data is, and make re-reading one click
 
 The app knows when it last read the folder and nothing about what has happened
@@ -2287,8 +2540,21 @@ Do this last, so that at every earlier commit there is still something that runs
 
 - [ ] **Step 1: Check nothing still imports them**
 
-Run: `grep -rn "server\|watch" aimcurve/ tests/ --include=*.py`
-Expected: only `aimcurve/__main__.py` and the files about to be deleted. If `dump.py` or `payload.py` import either, Task 1 of Plan A was not done as written — fix that before deleting.
+Run: `grep -rnE "^\s*(from|import)\b.*\b(server|watch)\b" aimcurve/ tests/ --include=*.py`
+
+Expected, and nothing else — every one of these is a file this task deletes or rewrites:
+
+```
+aimcurve/__main__.py:6:from . import dump, paths, server
+aimcurve/server.py:15:from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+aimcurve/server.py:17:from . import index, payload, watch
+tests/test_server.py:14:from aimcurve import index, paths, payload, server  # noqa: E402
+tests/test_watch.py:12:from aimcurve import index, paths, watch  # noqa: E402
+```
+
+If `dump.py` or `payload.py` appear, Task 1 of Plan A was not done as written — fix that before deleting.
+
+Grep for imports, not for words. The unanchored `grep -rn "server\|watch"` matches **66 lines**, nearly all of it prose — including comments inside `dump.py`, the very file this step names as its tripwire. It reports a problem on a perfectly clean tree, which trains you to skip the step.
 
 - [ ] **Step 2: Delete**
 
@@ -2328,7 +2594,9 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run the Python suite**
 
 Run: `nix shell nixpkgs#python3 --command python3 -m unittest discover -s tests`
-Expected: OK. `test_paths.py`, `test_statscsv.py`, `test_perf.py`, `test_shapes.py`, `test_shapes_integration.py`, `test_compare.py`, `test_index.py` and `test_dump.py` remain.
+Expected: **OK, 79 tests** — down from 104, and that drop is correct, not a regression. `test_server.py` contributed 21 and `test_watch.py` 4. A checklist still carrying 104 will read the right outcome as a failure.
+
+`test_paths.py`, `test_statscsv.py`, `test_perf.py`, `test_shapes.py`, `test_shapes_integration.py`, `test_compare.py`, `test_index.py` and `test_dump.py` remain.
 
 - [ ] **Step 5: Run the oracle diff**
 
@@ -2337,7 +2605,13 @@ Expected: 9 passed. Deleting the server must not move a single payload field.
 
 - [ ] **Step 6: Rewrite the README**
 
-It currently opens with `python -m aimcurve` as the product. Replace the installation and layout sections. The claims that must survive, because they are the reason anyone reads this: nothing to install, nothing leaves the machine, it never writes to the KovaaK's install, and it shows *where in the run* the difference happened. The claim that must go: "about a second after a run ends" — there are no live updates in this tier, and saying otherwise is the one lie the page could tell.
+It currently opens with `python -m aimcurve` as the product. Replace the installation and layout sections. The claims that must survive, because they are the reason anyone reads this: nothing to install, nothing leaves the machine, it never writes to the KovaaK's install, and it shows *where in the run* the difference happened. The claim that must go: "about a second after a run ends" — there are no live updates in this tier, and saying otherwise is the one lie the page could tell. (Task 7 Step 6 already removed the two strings that said it in `app.js`; this is the README half of the same fix.)
+
+**Three passages outside "installation and layout" also go stale.** They are easy to miss because the step names only those two sections:
+
+- **`README.md:19-25`**, the "Where this is going" blockquote. It says the browser rewrite is *being* written and "until it lands, the Python here is the product". It has landed; that is this task. Delete the blockquote or rewrite it in the past tense.
+- **`README.md:83-100`**, the whole **Tests** subsection on `scripts/drive-client.mjs`. Step 2 deletes that file, so the instructions to run it — and the `python -m aimcurve` / `node scripts/drive-client.mjs` block — describe something that no longer exists. Delete the subsection.
+- The oracle paragraph just above it stays, and is worth keeping verbatim: it is the only place that records *why* there is no tolerance.
 
 New layout section:
 
@@ -2347,6 +2621,8 @@ web/                     the app: Astro, TypeScript, no server
   src/db/                the IndexedDB index
   src/source/            where runs are read from
   src/ui/                the dashboard
+  public/                served as-is, including vendor/ (uPlot)
+  test/                  the TypeScript tests, and test/oracle/ the diff
 aimcurve/                the frozen Python, kept as the oracle
 tests/                   the Python's tests and the shared fixtures
 references/kovaaks.md    on-disk format notes, verified against a real install
