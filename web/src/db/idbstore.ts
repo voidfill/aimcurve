@@ -108,7 +108,11 @@ export function createStore(db: IDBDatabase): Store {
         const request = index.openCursor(range, 'prev');
         request.onsuccess = () => {
           const cursor = request.result;
-          if (!cursor || out.length >= limit) return resolve();
+          // SQLite reads a negative LIMIT as no limit at all, and memstore
+          // says so at core/memstore.ts:141. `out.length >= limit` is already
+          // true at `0 >= -1`, so the walk stopped on the first row and
+          // page(-1) answered [] where memstore answers every row.
+          if (!cursor || (limit >= 0 && out.length >= limit)) return resolve();
           const row = cursor.value as StoredRun;
           // The cursor's bound is on started_at alone, which has second
           // resolution and no uniqueness constraint. The pair comparison is

@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createStore } from '../src/db/idbstore';
 import { indexInto, pendingIds } from '../src/db/indexer';
-import { openDatabase } from '../src/db/schema';
+import { META_PENDING_SCENARIOS, openDatabase } from '../src/db/schema';
 import type { RunSource } from '../src/source/types';
 import { readPerf, readStats, statsIds } from './fixtures';
 
@@ -24,7 +24,34 @@ function fixtureSource(ids: string[]): RunSource {
   };
 }
 
+/** A `.perf` whose one sample carries an absurd timestamp -- what a flipped
+ *  exponent byte in the float32 produces. It is valid protobuf, so `parsePerf`
+ *  gets all the way to `new Float32Array(buckets)` and throws a RangeError
+ *  rather than a PerfError, which `ingest` re-throws instead of recording. */
+function absurdPerf(): Uint8Array {
+  const timestamp = new Uint8Array(4);
+  new DataView(timestamp.buffer).setFloat32(0, 1e38, true);
+  // field 2 (sample) { field 1 = the timestamp, field 7 (score) { 1: 5 } }
+  return new Uint8Array([0x12, 0x09, 0x0d, ...timestamp, 0x3a, 0x02, 0x08, 0x05]);
+}
+
 let db: IDBDatabase;
+
+/** The `failed` row for a basename, or undefined. */
+function failureRow(id: string): Promise<any> {
+  return new Promise((resolve) => {
+    const r = db.transaction('failed').objectStore('failed').get(id);
+    r.onsuccess = () => resolve(r.result);
+  });
+}
+
+/** The scenarios still awaiting classification. */
+function pendingScenarioRow(): Promise<any> {
+  return new Promise((resolve) => {
+    const r = db.transaction('meta').objectStore('meta').get(META_PENDING_SCENARIOS);
+    r.onsuccess = () => resolve(r.result);
+  });
+}
 
 beforeEach(async () => {
   // A fresh factory per test: fake-indexeddb is global state otherwise.
@@ -156,6 +183,84 @@ describe('indexInto', () => {
       id: AIR_B, best_before: 906.138184, played_before: 1,
     });
     expect(after[1]).toMatchObject({ id: AIR_A, played_before: 0 });
+  });
+
+  it('keeps the run when a corrupt .perf throws past PerfError', async () => {
+    // A bit-flip that `parsePerf` did not anticipate comes out as a RangeError,
+    // which `ingest` re-throws. Swallowing that as "the stats file could not be
+    // read" threw the run away even though its CSV parsed perfectly -- and past
+    // MAX_TRIES the basename is marked known, so repairing the file could never
+    // bring the run back. Only deleting the database recovered it.
+    const corrupt: RunSource = {
+      ...fixtureSource([AIR_A]),
+      async read() { return { stats: readStats(AIR_A), perf: absurdPerf() }; },
+    };
+
+    const first = await indexInto(db, corrupt, [AIR_A]);
+    expect(first).toMatchObject({ runs: 1, curves: 0, failed: 1, skipped: 0 });
+    expect((await createStore(db).getRun(AIR_A))!.has_perf).toBe(false);
+    expect((await failureRow(AIR_A)).tries).toBe(1);
+    expect((await failureRow(AIR_A)).last_error).toContain('typed array length');
+    // Not marked known, so the next pass re-reads it.
+    expect(await pendingIds(db, corrupt)).toEqual([AIR_A]);
+
+    const second = await indexInto(db, corrupt, [AIR_A]);
+    expect(second).toMatchObject({ runs: 1, curves: 0, failed: 1, skipped: 0 });
+    expect((await failureRow(AIR_A)).tries).toBe(2);
+
+    // And the repaired file recovers: the curve lands and the failed row goes.
+    const fixed = await indexInto(db, fixtureSource([AIR_A]), [AIR_A]);
+    expect(fixed).toMatchObject({ runs: 1, curves: 1, failed: 0, skipped: 0 });
+    expect(await failureRow(AIR_A)).toBeUndefined();
+    expect((await createStore(db).getRun(AIR_A))!.has_perf).toBe(true);
+  });
+
+  it('is only unreadable when the stats file itself will not parse', async () => {
+    // The distinction the case above rests on: a throw from the CSV is still
+    // genuinely unreadable, so no run is written and nothing is counted.
+    const noCsv: RunSource = {
+      ...fixtureSource([AIR_A]),
+      async read() { throw new Error('NotFoundError'); },
+    };
+    const result = await indexInto(db, noCsv, [AIR_A]);
+    expect(result).toMatchObject({ runs: 0, curves: 0, failed: 1 });
+    expect(await createStore(db).getRun(AIR_A)).toBeUndefined();
+  });
+
+  it('repairs a classification interrupted after the runs were committed', async () => {
+    // The run rows and the `indexed` set commit before the classify phase runs.
+    // A tab closed in between left the runs marked known with no scenario
+    // record and no marks, and nothing ever re-triggered it: pendingIds is a
+    // set difference against `indexed`, so every later refresh said "skipped".
+    const ids = [AIR_A, SPECTRAL_A];
+    const source = fixtureSource(ids);
+    await expect(indexInto(db, source, ids, (p) => {
+      if (p.phase === 'classifying') throw new Error('tab closed');
+    })).rejects.toThrow('tab closed');
+
+    const store = createStore(db);
+    // Both runs are in, and exactly one of the two scenarios was classified.
+    expect(await store.counts()).toMatchObject({ runs: 2, scenarios: 1 });
+    expect(await pendingIds(db, source)).toEqual([]);
+
+    // A plain refresh with nothing new to read must still finish the job.
+    const again = await indexInto(db, source, ids);
+    expect(again).toMatchObject({ runs: 0, skipped: 2 });
+    expect(await store.counts()).toMatchObject({ runs: 2, scenarios: 2 });
+    expect((await store.getScenario('Air Pure Medium'))!.shape).toBe('race');
+    expect((await store.getScenario('Air Spectral Easy'))!.shape).toBe('timed');
+    // Drained, so the next refresh does not reclassify the world again.
+    expect((await pendingScenarioRow()).value).toEqual([]);
+  });
+
+  it('counts a basename repeated in one batch once', async () => {
+    // memstore drops a repeated id whole (core/memstore.ts:31-35) because
+    // `run.stats_file` is UNIQUE and the index inserts OR IGNORE. The indexer
+    // used to write it twice and count it twice, so the totals disagreed with
+    // the rows.
+    const result = await indexInto(db, fixtureSource([AIR_A]), [AIR_A, AIR_A]);
+    expect(result).toEqual({ runs: 1, curves: 1, failed: 0, skipped: 0 });
+    expect(await createStore(db).counts()).toMatchObject({ runs: 1, curves: 1 });
   });
 
   it('reports progress as it goes', async () => {

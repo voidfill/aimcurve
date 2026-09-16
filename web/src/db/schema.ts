@@ -131,6 +131,16 @@ export async function requestPersistence(): Promise<boolean> {
 export const META_INDEXED = 'indexed';
 export const META_READ_AT = 'read_at';
 export const META_PERSISTED = 'persisted';
+/** Scenarios written but not yet classified.
+ *
+ * The run rows and the `indexed` set commit in one transaction, and the
+ * classify phase runs after it -- a whole bootstrap's worth of work later. A
+ * tab closed in between used to leave the runs marked known with no scenario
+ * record and no marks, and nothing re-triggered it, because `pendingIds` is a
+ * set difference against `indexed`. This set is written in that same
+ * transaction and cleared only once classification has finished, so the next
+ * pass drains whatever was left. */
+export const META_PENDING_SCENARIOS = 'pending_scenarios';
 /** The directory handle the index was built from, so a reload does not downgrade
  *  a picker user to re-enumerating their whole install. Handles survive
  *  structured clone, which is why they can live here at all. Task 9 uses both. */

@@ -14,7 +14,7 @@ import { readAll } from '../source/pool';
 import type { RunSource } from '../source/types';
 import { pack, unpack, type PackedKills } from './packed';
 import {
-  done, MAX_TRIES, META_INDEXED, META_READ_AT, req,
+  done, MAX_TRIES, META_INDEXED, META_PENDING_SCENARIOS, META_READ_AT, req,
   type StoredCurve, type StoredFailure, type StoredRun,
 } from './schema';
 
@@ -50,6 +50,17 @@ export async function pendingIds(db: IDBDatabase, source: RunSource): Promise<st
   return (await source.list()).filter((id) => !known.has(id));
 }
 
+/** Scenarios a previous pass wrote runs for but did not finish classifying. */
+async function pendingScenarios(db: IDBDatabase): Promise<string[]> {
+  const row = await req<{ key: string; value: string[] } | undefined>(
+    db.transaction('meta').objectStore('meta').get(META_PENDING_SCENARIOS));
+  return row?.value ?? [];
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Every recorded failure, read in one request before any write opens.
  *
  * Read up front rather than looked up inside the write loop: an await on a
@@ -82,9 +93,19 @@ export async function indexInto(
 ): Promise<IndexResult> {
   const known = await indexedSet(db);
   const failed = await failures(db);
-  const wanted = options.force ? [...ids] : ids.filter((id) => !known.has(id));
+  // Whatever a previous pass wrote runs for but never finished classifying.
+  // Carried into this pass's `touched` set so it is reclassified alongside it.
+  const carried = await pendingScenarios(db);
+  // A basename repeated in one batch is one file, not two. memstore drops the
+  // repeat whole for the same reason (core/memstore.ts:31-35): the index's
+  // `run.stats_file` is UNIQUE and it inserts OR IGNORE, so the first row wins
+  // there too. Letting the second through writes the same row twice and counts
+  // it twice, so `IndexResult` stops agreeing with `counts()`.
+  const requested = [...new Set(ids)];
+  const wanted = options.force
+    ? requested : requested.filter((id) => !known.has(id));
   const result: IndexResult = {
-    runs: 0, curves: 0, failed: 0, skipped: ids.length - wanted.length,
+    runs: 0, curves: 0, failed: 0, skipped: requested.length - wanted.length,
   };
   if (!wanted.length) {
     // Record that we looked, even with nothing to do. Returning here without
@@ -93,6 +114,10 @@ export async function indexInto(
     const meta = db.transaction('meta', 'readwrite');
     meta.objectStore('meta').put({ key: META_READ_AT, value: Date.now() });
     await done(meta);
+    // An interrupted classification is repaired here too, and this is the path
+    // it has to be repaired on: once the runs are marked known, "nothing new"
+    // is every refresh from then on.
+    await drain(db, carried, onProgress);
     return result;
   }
 
@@ -111,12 +136,36 @@ export async function indexInto(
     // exactly what the failed store and MAX_TRIES exist for.
     try {
       const { stats, perf } = await source.read(id);
-      if (stats !== undefined) parsed.push(ingest(id, stats, perf));
       // The picker source answers a vanished file with an empty result rather
       // than a throw, so an absent CSV is the same condition, not a no-op.
-      else unreadable.set(id, 'the stats file could not be read');
+      if (stats === undefined) {
+        unreadable.set(id, 'the stats file could not be read');
+      } else if (perf === undefined) {
+        parsed.push(ingest(id, stats));
+      } else {
+        try {
+          parsed.push(ingest(id, stats, perf));
+        } catch (error) {
+          // `ingest` turns a rejected `.perf` into `error` only for the
+          // failures `parsePerf` anticipated; it re-throws anything else, and a
+          // bit-flipped timestamp is a RangeError out of `new Float32Array`.
+          // Letting that reach the outer catch recorded the run as *unreadable*
+          // -- "the stats file could not be read" -- when the CSV had parsed
+          // perfectly, so no run was written at all. Past MAX_TRIES the
+          // basename is then marked known, and repairing the file could never
+          // bring the run back: only deleting the database could.
+          //
+          // Re-ingesting without the `.perf` puts it on the `error` path
+          // instead, which is where the plan says a rejected `.perf` belongs:
+          // the run and its kills are written, only the curve is missing, and
+          // the basename stays out of `known` so a repaired file is retried. A
+          // throw from `ingest(id, stats)` alone is still genuinely unreadable,
+          // and falls through to the outer catch.
+          parsed.push({ ...ingest(id, stats), error: message(error) });
+        }
+      }
     } catch (error) {
-      unreadable.set(id, error instanceof Error ? error.message : String(error));
+      unreadable.set(id, message(error));
     }
     onProgress?.({ phase: 'reading', done: ++read, total: wanted.length });
   }, options.concurrency);
@@ -161,7 +210,7 @@ export async function indexInto(
     }
   }
 
-  const touched = new Set<string>();
+  const touched = new Set<string>(carried);
   for (const [i, row] of parsed.entries()) {
     if (!row.run.scenario || !row.run.started_at) continue;
     touched.add(row.run.scenario);
@@ -216,6 +265,12 @@ export async function indexInto(
     onProgress?.({ phase: 'writing', done: i + 1, total: parsed.length });
   }
 
+  // Written in the SAME transaction as the run rows and `indexed`, so the two
+  // cannot disagree: either the runs are known and their scenarios are recorded
+  // as owing a classification, or neither happened. Committing `indexed` alone
+  // and classifying afterwards left an interrupted pass unrepairable, because
+  // nothing after it ever looked at those scenarios again.
+  write.objectStore('meta').put({ key: META_PENDING_SCENARIOS, value: [...touched] });
   write.objectStore('meta').put({ key: META_INDEXED, value: [...known] });
   // The time of THIS pass, not source.pickedAt. pickedAt is set once, when the
   // handle was opened, and a re-pick reuses the same source object -- so
@@ -224,8 +279,26 @@ export async function indexInto(
   write.objectStore('meta').put({ key: META_READ_AT, value: Date.now() });
   await done(write);
 
-  await reclassify(db, [...touched], onProgress);
+  await drain(db, [...touched], onProgress);
   return result;
+}
+
+/** Classify every scenario owing one, and only then forget that they owed it.
+ *
+ * Cleared in one write at the end rather than per scenario: an interruption
+ * halfway then re-classifies the whole set on the next pass, which is redundant
+ * work but never a wrong answer -- `reclassify` folds over all of a scenario's
+ * runs, so running it twice lands on the same rows.
+ */
+async function drain(
+  db: IDBDatabase, scenarios: readonly string[],
+  onProgress?: (p: IndexProgress) => void,
+): Promise<void> {
+  if (!scenarios.length) return;
+  await reclassify(db, scenarios, onProgress);
+  const meta = db.transaction('meta', 'readwrite');
+  meta.objectStore('meta').put({ key: META_PENDING_SCENARIOS, value: [] });
+  await done(meta);
 }
 
 /** Recompute the shape and the marks of every scenario the batch touched.
