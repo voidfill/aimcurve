@@ -74,6 +74,10 @@ a{color:var(--band)} a:hover{color:var(--ink)}
 .status{display:flex; align-items:center; gap:7px; font:400 11px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--faint)}
 .status .dot{width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px color-mix(in oklab,currentColor 14%,transparent)}
 .status[data-state="live"]{color:var(--good)}
+/* A snapshot is the normal resting state of this tier, not a warning: same
+   steady dot as "live", in the muted colour, because it reports the data's
+   age rather than a connection. */
+.status[data-state="snapshot"]{color:var(--faint)}
 .status[data-state="connecting"]{color:var(--pb)}
 .status[data-state="down"]{color:var(--bad)}
 .status[data-state="connecting"] .dot{animation:pulse 1.4s ease-in-out infinite}

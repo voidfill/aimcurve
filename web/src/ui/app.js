@@ -1,9 +1,10 @@
 /* aimcurve — app.js
-   Plain ES2020, no build step. Talks to the Python server on the same origin. */
-(() => {
-'use strict';
-
-const API = '';                    // same origin
+   Plain ES2020, loaded as a module. Reads the index in this tab, not a server. */
+/* ── fetch layer ─────────────────────────────────────────── */
+/* Answered in this tab, from IndexedDB, by exactly the code the Python's HTTP
+   handlers used to call. Nothing is requested over the network and nothing
+   leaves the machine. */
+import { api } from './api-shim.js';
 
 /* ── helpers ─────────────────────────────────────────────── */
 const $  = (s, r = document) => r.querySelector(s);
@@ -45,6 +46,15 @@ const runStamp = iso => {
 
 const runTitle = iso => new Date(iso).toLocaleString('en-US',
   { dateStyle: 'full', timeStyle: 'medium' });
+
+/* Scenario names are the game's, not ours, and they reach the DOM through
+   template strings. A name containing a quote would otherwise break out of the
+   attribute it sits in. */
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+/* querySelector needs CSS escaping, which is a different alphabet from HTML's. */
+const cssEscape = s => (window.CSS && CSS.escape) ? CSS.escape(s)
+  : String(s).replace(/["\\]/g, '\\$&');
 
 const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 let C = {};
@@ -114,14 +124,14 @@ function parseHash() {
   const view = VIEWS.includes(seg[0]) ? seg[0] : 'run';
   return {
     view,
-    runId: view === 'run' && /^\d+$/.test(seg[1] || '') ? +seg[1] : null,
+    runId: view === 'run' && seg[1] ? decodeURIComponent(seg[1]) : null,
     scenario: new URLSearchParams(qs || '').get('scenario') || null
   };
 }
 
 function formatHash({ view, runId, scenario }) {
   if (view !== 'run') return '#/' + view;                 // the rail is run-view state
-  return '#/run' + (runId == null ? '' : '/' + runId) +
+  return '#/run' + (runId == null ? '' : '/' + encodeURIComponent(runId)) +
          (scenario ? '?scenario=' + encodeURIComponent(scenario) : '');
 }
 
@@ -135,13 +145,6 @@ function go(patch, replace) {
   if (next === location.hash) return;
   if (replace) history.replaceState(null, '', next);
   else location.hash = next;
-}
-
-/* ── fetch layer ─────────────────────────────────────────── */
-async function api(path) {
-  const r = await fetch(API + path);
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
 }
 
 /* The rail loads a page at a time and grows as you scroll. 100 runs reached
@@ -177,7 +180,7 @@ async function loadMore() {
   A.loading = true;
   const gen = A.railGen;
   try {
-    const older = await api(railQuery('&before=' + A.runs[A.runs.length - 1].id));
+    const older = await api(railQuery('&before=' + encodeURIComponent(A.runs[A.runs.length - 1].id)));
     if (gen !== A.railGen) return;                // the rail was replaced under us
     A.runs = A.runs.concat(older);
     A.more = older.length === RAIL_PAGE;
@@ -525,7 +528,7 @@ function renderSplits(p) {
     `<thead><tr><th>bot</th><th class="barh">time per bot</th><th>this run</th>
        <th>PB run</th><th>Δ PB</th><th>best</th><th>Δ run</th></tr></thead><tbody>` +
     p.splits.map(s => `<tr class="${worst.includes(s.idx) ? 'w' : ''}">
-      <td class="bot">${s.bot}</td><td class="barc">${bar(s)}</td>
+      <td class="bot">${esc(s.bot)}</td><td class="barc">${bar(s)}</td>
       <td>${num(s.mine, 2)}</td><td>${num(s.base, 2)}</td>
       <td>${cell(s.delta)}</td><td class="pb">${num(s.best, 2)}</td>
       <td>${cell(s.delta_adj)}</td></tr>`).join('') +
@@ -568,7 +571,7 @@ function renderWindows(p) {
       const tint = r.delta == null ? '' : r.delta > 0 ? ' dn' : r.delta < 0 ? ' up' : '';
       const width = r.mine == null ? 0 : clamp(r.mine, 0, 1) * 100;
       return `<tr class="${worst.includes(r.idx) ? 'w' : ''}">
-        <td class="bot">${r.bot}</td>
+        <td class="bot">${esc(r.bot)}</td>
         <td class="barc"><span class="bar${tint}"><i style="width:${width.toFixed(2)}%"></i></span></td>
         <td>${r.mine == null ? '—' : pct(r.mine, 1)}</td>
         <td>${r.base == null ? '—' : pct(r.base, 1)}</td>
@@ -685,20 +688,20 @@ function renderRunList(newId, keepScroll) {
     const sign = !d ? 'flat' : d > 0 ? 'up' : 'down';
     const mark = d != null ? (d > 0 ? '▲' : d < 0 ? '▼' : '') + Math.abs(d * 100).toFixed(1) + '%'
       : r.played_before ? '—' : 'first';
-    return `<li class="run" role="option" data-id="${r.id}" data-i="${i}"
+    return `<li class="run" role="option" data-id="${esc(r.id)}" data-i="${i}"
       aria-selected="${r.id === A.focusedId}"
       data-same="${focused && r.scenario === focused.scenario ? 1 : 0}"
       data-pb="${pb ? 1 : 0}" data-nocurve="${r.buckets ? 0 : 1}" data-sign="${sign}"
       data-shape="${r.shape || 'timed'}">
       <span class="t" title="${runTitle(r.started_at)}">${runTime(r.started_at)}</span>
-      <span class="name">${r.scenario}</span>
+      <span class="name">${esc(r.scenario)}</span>
       <span class="right"><span class="sc">${num(r.score, 1)}</span>
       <span class="d" title="${RAIL_DELTA_HINT}">${mark}</span></span>
     </li>`;
   }).join('');
 
   if (newId != null) {
-    const el = ol.querySelector(`[data-id="${newId}"]`);
+    const el = ol.querySelector(`[data-id="${cssEscape(newId)}"]`);
     if (el) { el.classList.add('enter'); setTimeout(() => el.classList.remove('enter'), 600); }
   }
   const sel = keepScroll ? null : ol.querySelector('[aria-selected="true"]');
@@ -744,7 +747,7 @@ async function renderSession() {
       const bars = rs.map(r => `<i style="height:${4 + (mx === mn ? 14 : (r.score - mn) / (mx - mn) * 14)}px" data-pb="${r.score === mx ? 1 : 0}"></i>`).join('');
       const mean = rs.reduce((a, b) => a + b.score, 0) / rs.length;
       const acc = rs.reduce((a, b) => a + b.accuracy, 0) / rs.length;
-      return `<tr data-run="${rs.at(-1).id}"><td class="name">${nm}</td><td class="n">${rs.length}</td>
+      return `<tr data-run="${esc(rs.at(-1).id)}"><td class="name">${esc(nm)}</td><td class="n">${rs.length}</td>
         <td class="n pb">${num(mx, 1)}</td><td class="n">${num(mean, 1)}</td><td class="n">${pct(acc, 1)}</td>
         <td><div class="bars">${bars}</div></td><td class="n" title="${runTitle(rs.at(-1).started_at)}">${runTime(rs.at(-1).started_at)}</td></tr>`;
     }).join('') + '</tbody>';
@@ -767,7 +770,7 @@ async function renderScenarios() {
       // % of PB means "pb time / recent time" for a race, same column and same
       // bar as the timed "recent / pb" -- both read "higher is closer to PB".
       const relTitle = isRace ? ' title="PB time / recent time · 100% is PB pace"' : '';
-      return `<tr data-scenario="${s.scenario}" data-shape="${s.shape || 'timed'}"><td class="name">${s.scenario}</td><td class="n">${s.runs}</td>
+      return `<tr data-scenario="${esc(s.scenario)}" data-shape="${s.shape || 'timed'}"><td class="name">${esc(s.scenario)}</td><td class="n">${s.runs}</td>
         <td class="n pb">${num(s.pb, 1)}</td><td class="n">${form == null ? '—' : num(form, 1)}</td>
         <td class="n"${relTitle}>${rel == null ? '—' : (rel * 100).toFixed(1) + '%'}</td>
         <td><div class="formbar"><i style="width:${w}%"></i></div></td>
@@ -779,7 +782,7 @@ async function renderScenarios() {
 /* ═══════════════════════════ LOADING ══════════════════════ */
 async function loadRun(id, isNew) {
   const c = A.ctrl;
-  const p = await api(`/api/run/${id}?metric=${c.metric}&smoothing=${c.smoothing}&recent_n=${c.recent_n}&same_cfg=${c.same_cfg ? 1 : 0}`);
+  const p = await api(`/api/run/${encodeURIComponent(id)}?metric=${c.metric}&smoothing=${c.smoothing}&recent_n=${c.recent_n}&same_cfg=${c.same_cfg ? 1 : 0}`);
   if (!p) return;
   // Fall back only onto a metric this run actually offers, and only when that
   // is a different one. A race offers none at all -- its y series is fixed by
@@ -822,7 +825,7 @@ async function applyRoute(isNew) {
 
   if (isNew || !A.payload || id !== A.focusedId) await loadRun(id, isNew);
   else renderRunList();                                  // same run, new filter or view
-  A.kbd = $$('.run', $('#runlist')).findIndex(el => +el.dataset.id === id);
+  A.kbd = $$('.run', $('#runlist')).findIndex(el => el.dataset.id === id);
 }
 
 addEventListener('hashchange', () => applyRoute(false));
@@ -861,7 +864,7 @@ async function refresh(isNew) {
       $('#headline').dataset.state = 'empty';
       $('#hlScenario').textContent = h.awaiting_perf ? 'Building index…' : 'Waiting for your first run';
       $('#hlTime').textContent = '—'; $('#hlDur').textContent = '—';
-      $('#hlCfg').textContent = h.awaiting_perf ? `${h.curves} of ${h.runs} parsed` : 'aimcurve is watching your stats folder';
+      $('#hlCfg').textContent = h.awaiting_perf ? `${h.curves} of ${h.runs} parsed` : 'Snapshot of your stats folder';
       $('#hlScore').textContent = '—'; $('#hlDeltaPct').textContent = '—';
       $('#hlDelta').dataset.sign = 'none';
       $('#hlArrow').textContent = '·';
@@ -870,7 +873,7 @@ async function refresh(isNew) {
       $('#hlDeltaSub').textContent = h.awaiting_perf ? 'first launch — this runs once' : 'play a scenario to begin';
       $('#hlStats').innerHTML = '';
       $('#chartRate').hidden = true; $('#rateEmpty').hidden = false;
-      $('#rateEmpty').innerHTML = `<strong>${h.awaiting_perf ? 'indexing' : 'no runs yet'}</strong><span>${h.awaiting_perf ? 'Reading the history in your stats folder. The first chart appears as soon as a run with per-second data is parsed.' : 'The next run you finish lands here about a second after it ends.'}</span>`;
+      $('#rateEmpty').innerHTML = `<strong>${h.awaiting_perf ? 'indexing' : 'no runs yet'}</strong><span>${h.awaiting_perf ? 'Reading the history in your stats folder. The first chart appears as soon as a run with per-second data is parsed.' : 'Play a scenario, then use Re-read folder to pick it up.'}</span>`;
       $('#chartDelta').hidden = true; $('#deltaEmpty').hidden = false;
       $('#deltaEmpty').innerHTML = '<span>—</span>';
       $('#splitPanel').hidden = true;
@@ -940,7 +943,7 @@ function setView(v) {
 /* run list interaction — these navigate, and applyRoute does the work */
 $('#runlist').addEventListener('click', e => {
   const li = e.target.closest('.run'); if (!li) return;
-  go({ runId: +li.dataset.id });
+  go({ runId: li.dataset.id });
 });
 $('#railFilter').addEventListener('click', () => go({ scenario: null }));
 
@@ -954,7 +957,7 @@ $('#runlist').addEventListener('scroll', () => {
 $('#sessionTable').addEventListener('click', e => {
   const tr = e.target.closest('tr[data-run]'); if (!tr) return;
   // the run picked here can belong to a scenario the rail is filtering out
-  go({ view: 'run', runId: +tr.dataset.run, scenario: null });
+  go({ view: 'run', runId: tr.dataset.run, scenario: null });
 });
 $('#scenTable').addEventListener('click', e => {
   const tr = e.target.closest('tr[data-scenario]'); if (!tr) return;
@@ -979,8 +982,8 @@ document.addEventListener('keydown', e => {
     const el = items[A.kbd]; el.classList.add('kbd');
     $('#runlist').scrollTop = clamp(el.offsetTop - $('#runlist').clientHeight / 2, 0, $('#runlist').scrollHeight);
     // arrowing is a scrub, not a destination — keep it out of the back stack
-    go({ runId: +el.dataset.id }, true);
-    loadRun(+el.dataset.id);
+    go({ runId: el.dataset.id }, true);
+    loadRun(el.dataset.id);
   };
   if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -994,26 +997,13 @@ function setStatus(state, label) {
   const s = $('#status'); s.dataset.state = state;
   s.querySelector('.status-label').textContent = label;
 }
-let es = null, retry = 0;
-function connect() {
-  setStatus('connecting', 'connecting');
-  es = new EventSource(API + '/events');
-  es.onopen = () => { retry = 0; setStatus('live', 'live'); };
-  es.onmessage = ev => {
-    let m = {}; try { m = JSON.parse(ev.data); } catch (_) {}
-    if (m.type === 'run') refresh(true);
-  };
-  es.onerror = () => {
-    es.close();
-    retry = Math.min(retry + 1, 6);
-    setStatus('down', `reconnecting ${retry * 2}s`);
-    setTimeout(connect, retry * 2000);
-  };
-}
+/* No event stream: this tier reads the folder once, when you pick it. The
+   status badge therefore reports the data's age rather than a connection --
+   the app knows when it last looked and nothing about what has happened
+   since. Step two replaces this with a FileSystemObserver. */
+export function setSnapshotAge(label) { setStatus('snapshot', label); }
 
 /* ═══════════════════════════ BOOT ═════════════════════════ */
 readColors();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); if (A.payload) renderCharts(A.payload); });
-refresh(false).then(connect);
-
-})();
+export function start() { return refresh(false); }
