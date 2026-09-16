@@ -73,6 +73,7 @@ a{color:var(--band)} a:hover{color:var(--ink)}
   border-radius:var(--r); background:var(--bg-raise); color:var(--ink);
   font:500 12px/1.2 var(--mono); cursor:pointer; text-decoration:none;
 }
+.button[hidden],.pick-actions button[hidden]{display:none}
 .button:hover,.pick-actions button:hover{border-color:var(--faint); background:var(--line)}
 .button.ghost{min-height:28px; padding:5px 9px; background:transparent; color:var(--dim); font-weight:400}
 .hint{margin:13px 0 0; color:var(--faint); font-size:12px; text-wrap:pretty}
