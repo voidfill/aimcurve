@@ -53,6 +53,41 @@ a{color:var(--band)} a:hover{color:var(--ink)}
 ::selection{background:color-mix(in oklab,var(--band) 40%,transparent)}
 :focus-visible{outline:1px solid var(--band); outline-offset:2px}
 
+/* ── first run ───────────────────────────────────────────── */
+.pick{
+  place-self:center; width:min(620px,calc(100% - 32px)); max-height:100%;
+  overflow-y:auto; padding:clamp(24px,5vw,48px);
+  border:1px solid var(--line); border-radius:var(--r); background:var(--bg-panel);
+}
+.pick h1{font:500 clamp(24px,4vw,34px)/1 var(--mono); letter-spacing:-.04em}
+.lede{margin:12px 0 28px; color:var(--dim); font-size:15px}
+.promise{
+  margin:12px 0; padding-left:14px; border-left:2px solid var(--band);
+  color:var(--dim); font-size:14px; text-wrap:pretty;
+}
+.promise strong{color:var(--ink); font-weight:600}
+.pick-actions{display:flex; align-items:center; gap:10px; margin-top:28px}
+.button,.pick-actions button{
+  appearance:none; display:inline-flex; align-items:center; justify-content:center;
+  min-height:34px; padding:7px 13px; border:1px solid var(--line-2);
+  border-radius:var(--r); background:var(--bg-raise); color:var(--ink);
+  font:500 12px/1.2 var(--mono); cursor:pointer; text-decoration:none;
+}
+.button:hover,.pick-actions button:hover{border-color:var(--faint); background:var(--line)}
+.button.ghost{min-height:28px; padding:5px 9px; background:transparent; color:var(--dim); font-weight:400}
+.hint{margin:13px 0 0; color:var(--faint); font-size:12px; text-wrap:pretty}
+.hint code{font-family:var(--mono); color:var(--dim)}
+.progress,.error{margin:20px 0 0; font:400 12px/1.5 var(--mono)}
+.progress{color:var(--dim)}
+.error{color:var(--bad)}
+
+/* The dashboard is sized by the body grid (grid-template-rows:auto minmax(0,1fr)
+   above), so its elements have to stay direct children of <body>. Showing and
+   hiding a whole panel is therefore a class on <body>, not a wrapper element. */
+body.picking > :not(#pick){display:none}
+body:not(.picking) > #pick{display:none}
+body.picking{grid-template-rows:minmax(0,1fr)}
+
 /* ── top bar ─────────────────────────────────────────────── */
 .topbar{
   display:flex; align-items:center; gap:22px;
@@ -78,6 +113,7 @@ a{color:var(--band)} a:hover{color:var(--ink)}
    steady dot as "live", in the muted colour, because it reports the data's
    age rather than a connection. */
 .status[data-state="snapshot"]{color:var(--faint)}
+.status[data-state="stale"]{color:var(--faint)}
 .status[data-state="connecting"]{color:var(--pb)}
 .status[data-state="down"]{color:var(--bad)}
 .status[data-state="connecting"] .dot{animation:pulse 1.4s ease-in-out infinite}

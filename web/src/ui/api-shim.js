@@ -21,7 +21,7 @@ export async function api(path) {
 
   if (route === '/api/runs') {
     return getRuns(store, {
-      limit: Number(p.get('limit') ?? 50),
+      limit: Number(p.get('limit') || 50),
       scenario: p.get('scenario') || null,
       before: p.get('before') || null,
       sameCfg: flag(p, 'same_cfg', '1'),
@@ -37,9 +37,9 @@ export async function api(path) {
   if (route.startsWith('/api/run/')) {
     const id = decodeURIComponent(route.slice('/api/run/'.length));
     return getRun(store, id, {
-      metric: p.get('metric') ?? 'score',
-      smoothing: Number(p.get('smoothing') ?? 5),
-      recentN: Number(p.get('recent_n') ?? 10),
+      metric: p.get('metric') || 'score',
+      smoothing: Number(p.get('smoothing') || 5),
+      recentN: Number(p.get('recent_n') || 10),
       sameCfg: flag(p, 'same_cfg', '1'),
     });
   }

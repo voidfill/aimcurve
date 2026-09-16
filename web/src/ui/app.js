@@ -5,6 +5,7 @@
    handlers used to call. Nothing is requested over the network and nothing
    leaves the machine. */
 import { api } from './api-shim.js';
+import { formatHash, parseHash } from './route.js';
 
 /* ── helpers ─────────────────────────────────────────────── */
 const $  = (s, r = document) => r.querySelector(s);
@@ -116,25 +117,6 @@ function saveCtrl() {
 
 /* ── hash routing ────────────────────────────────────────── */
 /* #/run · #/run/<id> · #/run/<id>?scenario=<name> · #/session · #/scenarios */
-const VIEWS = ['run', 'session', 'scenarios'];
-
-function parseHash() {
-  const [path, qs] = location.hash.replace(/^#\/?/, '').split('?');
-  const seg = path.split('/').filter(Boolean);
-  const view = VIEWS.includes(seg[0]) ? seg[0] : 'run';
-  return {
-    view,
-    runId: view === 'run' && seg[1] ? decodeURIComponent(seg[1]) : null,
-    scenario: new URLSearchParams(qs || '').get('scenario') || null
-  };
-}
-
-function formatHash({ view, runId, scenario }) {
-  if (view !== 'run') return '#/' + view;                 // the rail is run-view state
-  return '#/run' + (runId == null ? '' : '/' + encodeURIComponent(runId)) +
-         (scenario ? '?scenario=' + encodeURIComponent(scenario) : '');
-}
-
 /* Patch the current route and navigate. Assigning location.hash fires
    hashchange, so applyRoute stays the one place that acts on a route.
    replace = true writes the URL without a history entry — and without firing
@@ -666,7 +648,7 @@ function renderRunList(newId, keepScroll) {
       ? 'No runs of this scenario yet. Esc clears the filter.'
       : A.health && A.health.awaiting_perf
       ? 'Building the index from your KovaaK\'s stats folder. Runs appear as they are parsed.'
-      : 'No runs yet. Finish a scenario and it shows up here about a second later.'}</li>`;
+      : 'No runs yet. Re-read your folder after finishing a scenario to update this snapshot.'}</li>`;
     $('#railFoot').textContent = '';
     return;
   }
@@ -806,7 +788,7 @@ async function loadRun(id, isNew) {
 /* The one place a route is acted on: the hash decides the view, the focused
    run and the rail filter, and nothing else writes those three. */
 async function applyRoute(isNew) {
-  const r = parseHash();
+  const r = parseHash(location.hash);
   if (r.view === 'run') A.filterScenario = r.scenario;   // the filter is run-view state,
   setView(r.view);                                       // so a sheet route leaves it alone
 
