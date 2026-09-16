@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   paintedFrames: 0,
   clicks: [] as Array<{ id: string; paintedFrames: number; picking: boolean }>,
   reloads: 0,
+  writer: { elected: true, release() {} },
 }));
 
 function source(kind: RunSource['kind'], rootName: string): RunSource {
@@ -54,7 +55,7 @@ vi.mock('../src/db/schema', () => ({
 }));
 
 vi.mock('../src/db/writer', () => ({
-  electWriter: async () => ({ elected: true, release() {} }),
+  electWriter: async () => state.writer,
 }));
 
 vi.mock('../src/source/picker', () => ({
@@ -185,6 +186,7 @@ beforeEach(() => {
   state.paintedFrames = 0;
   state.clicks = [];
   state.reloads = 0;
+  state.writer.elected = true;
 
   elements = new Map(ids.map((id) => [id, new FakeElement(id)]));
   body = new FakeElement('body');
@@ -319,6 +321,41 @@ describe('snapshot age', () => {
 });
 
 describe('re-picking', () => {
+  it('does not re-pick while this tab is not elected writer', async () => {
+    const handle = directoryHandle('FPSAimTrainer');
+    state.runs = 1;
+    state.meta.set('handle', handle);
+    state.meta.set('read_at', Date.now());
+    state.writer.elected = false;
+    const { main } = await import('../src/boot');
+    await main();
+
+    element('repick').click();
+    await settle();
+
+    expect((handle as any).queryPermission).not.toHaveBeenCalled();
+    expect(state.indexCalls).toHaveLength(0);
+  });
+
+  it('uses the same bound listener after this tab is promoted to writer', async () => {
+    const handle = directoryHandle('FPSAimTrainer');
+    state.runs = 1;
+    state.meta.set('handle', handle);
+    state.meta.set('read_at', Date.now());
+    state.writer.elected = false;
+    const { main } = await import('../src/boot');
+    await main();
+
+    element('repick').click();
+    await settle();
+    state.writer.elected = true;
+    element('repick').click();
+    await settle();
+
+    expect((handle as any).queryPermission).toHaveBeenCalledTimes(1);
+    expect(state.indexCalls.map((picked) => picked.rootName)).toEqual(['FPSAimTrainer']);
+  });
+
   it('reuses the current picker source without opening a dialog', async () => {
     const picked = source('picker', 'FPSAimTrainer');
     const { indexFrom, main } = await import('../src/boot');

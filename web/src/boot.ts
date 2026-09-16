@@ -228,6 +228,7 @@ export async function main(): Promise<void> {
   };
 
   el<HTMLButtonElement>('repick').addEventListener('click', () => {
+    if (!writer.elected) return;
     void repick(db).catch((e) => fail((e as Error).message));
   });
 
