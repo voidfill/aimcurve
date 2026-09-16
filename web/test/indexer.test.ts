@@ -16,6 +16,7 @@ const SPECTRAL_B = 'Air Spectral Easy - Challenge - 2026.09.11-18.37.39';
 function fixtureSource(ids: string[]): RunSource {
   return {
     kind: 'upload',
+    rootName: 'FPSAimTrainer',
     pickedAt: Date.now(),
     async list() { return ids; },
     async read(id: string) {

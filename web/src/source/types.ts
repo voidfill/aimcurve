@@ -14,6 +14,9 @@ export interface RunFiles {
 
 export interface RunSource {
   readonly kind: 'upload' | 'picker';
+  /** The selected folder's display name. This is not a durable identity; it is
+   *  the guardrail that catches an accidental pick of a different install. */
+  readonly rootName: string;
   /** When the folder was enumerated, in epoch milliseconds. The app knows this
    *  and nothing about what has happened since, which is exactly what the
    *  staleness notice reports. */

@@ -9,7 +9,8 @@
 import { createStore } from './db/idbstore';
 import { indexInto, pendingIds } from './db/indexer';
 import {
-  done, META_READ_AT, openDatabase, req, requestPersistence, META_PERSISTED,
+  done, META_HANDLE, META_PERSISTED, META_READ_AT, META_ROOT_NAME,
+  openDatabase, req, requestPersistence,
 } from './db/schema';
 import { electWriter } from './db/writer';
 import { pickDirectory, pickerSource, supportsPicker } from './source/picker';
@@ -31,6 +32,12 @@ async function loadUi() {
 }
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** The source this tab last read from. Picker sources can be reused directly;
+ *  upload snapshots need a new browser gesture and another file selection. */
+let current: RunSource | null = null;
+
+let ageTimer: ReturnType<typeof setInterval> | null = null;
 
 async function lastReadAt(db: IDBDatabase): Promise<number | null> {
   const row = await req<{ value: number } | undefined>(
@@ -68,6 +75,12 @@ function describeRead(readAt: number | null): string {
   return readAt === null ? 'never read' : `read ${describeAge(readAt)}`;
 }
 
+function renderAge(readAt: number | null): void {
+  el('repickAge').textContent = describeAge(readAt);
+  const stale = readAt !== null && Date.now() - readAt > STALE_MS;
+  el('repick').dataset.stale = stale ? '1' : '0';
+}
+
 async function showDashboard(db: IDBDatabase): Promise<void> {
   // useStore first, then the import: see the note on loadUi above.
   useStore(createStore(db));
@@ -77,7 +90,11 @@ async function showDashboard(db: IDBDatabase): Promise<void> {
   // what reveals them.
   document.body.classList.remove('picking');
   await start();
-  setSnapshotAge(describeRead(await lastReadAt(db)));
+  const readAt = await lastReadAt(db);
+  setSnapshotAge(describeRead(readAt));
+  renderAge(readAt);
+  if (ageTimer !== null) clearInterval(ageTimer);
+  ageTimer = setInterval(() => renderAge(readAt), 60_000);
 }
 
 /** Say something in whichever panel is actually on screen.
@@ -96,7 +113,63 @@ async function announce(message: string): Promise<void> {
   }
 }
 
+/** Store a picker handle only after its source has been accepted and indexed. */
+async function saveHandle(db: IDBDatabase, handle: FileSystemDirectoryHandle) {
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ key: META_HANDLE, value: handle });
+  await done(tx);
+}
+
+/** A stored handle still needs a permission check after a browser restart. */
+async function restoreHandle(db: IDBDatabase): Promise<FileSystemDirectoryHandle | null> {
+  const row = await req<{ value: FileSystemDirectoryHandle } | undefined>(
+    db.transaction('meta').objectStore('meta').get(META_HANDLE));
+  const handle = row?.value;
+  if (!handle) return null;
+  const opts = { mode: 'read' as const };
+  if (await (handle as any).queryPermission(opts) === 'granted') return handle;
+  return await (handle as any).requestPermission(opts) === 'granted' ? handle : null;
+}
+
+/** Folder names are only a guardrail, but they catch the accidental merge that
+ *  otherwise cannot be undone from this UI. */
+async function checkSameFolder(db: IDBDatabase, name: string): Promise<boolean> {
+  const row = await req<{ value: string } | undefined>(
+    db.transaction('meta').objectStore('meta').get(META_ROOT_NAME));
+  if (row?.value === undefined || row.value === name) return true;
+  return confirm(
+    `This index was built from “${row.value}”, and you picked “${name}”.\n\n` +
+    `Adding it will merge both installs into one history, permanently. ` +
+    `Cancel to keep the existing index.`);
+}
+
+/** Two animation frames guarantee the newly revealed privacy copy has painted
+ *  before Chrome opens its upload confirmation modal. */
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+async function repick(db: IDBDatabase): Promise<void> {
+  const handle = current?.kind === 'picker' ? null : await restoreHandle(db);
+  if (current?.kind === 'picker') {
+    await indexFrom(db, current);
+    return;
+  }
+  if (handle) {
+    const source = await pickerSource(handle);
+    await indexFrom(db, source);
+    if (current === source) await saveHandle(db, handle);
+    return;
+  }
+  document.body.classList.add('picking');
+  await afterPaint();
+  el<HTMLInputElement>('pickUpload').click();
+}
+
 export async function indexFrom(db: IDBDatabase, source: RunSource): Promise<void> {
+  if (!await checkSameFolder(db, source.rootName)) return;
   // Not `el('pickProgress')` directly: on a re-index the dashboard is already
   // up and #pick is hidden, so writing there gives a 22-second pass with no
   // feedback whatsoever. `announce` picks whichever panel is on screen.
@@ -122,7 +195,10 @@ export async function indexFrom(db: IDBDatabase, source: RunSource): Promise<voi
   const persisted = await requestPersistence();
   const write = db.transaction('meta', 'readwrite');
   write.objectStore('meta').put({ key: META_PERSISTED, value: persisted });
+  write.objectStore('meta').put({ key: META_ROOT_NAME, value: source.rootName });
   await done(write);
+
+  current = source;
 
   await showDashboard(db);
 }
@@ -151,10 +227,9 @@ export async function main(): Promise<void> {
     error.textContent = message;
   };
 
-  // Task 9 replaces this with a real re-pick. Until then a reload is enough to
-  // mean the control is not a lie.
-  el<HTMLButtonElement>('repick').addEventListener(
-    'click', () => location.reload());
+  el<HTMLButtonElement>('repick').addEventListener('click', () => {
+    void repick(db).catch((e) => fail((e as Error).message));
+  });
 
   if (!writer.elected) {
     // Another tab owns the writing. This one reads, and says so wherever the
@@ -187,7 +262,9 @@ export async function main(): Promise<void> {
         return;
       }
       try {
-        await indexFrom(db, await pickerSource(handle));
+        const source = await pickerSource(handle);
+        await indexFrom(db, source);
+        if (current === source) await saveHandle(db, handle);
       } catch (e) {
         // Chrome refuses any directory under Program Files, by every route.
         // The upload control is not subject to that, so bring it back and point

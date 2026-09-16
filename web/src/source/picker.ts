@@ -53,6 +53,7 @@ export async function pickerSource(
 
   return {
     kind: 'picker',
+    rootName: root.name,
     pickedAt,
     async list() {
       const ids: string[] = [];

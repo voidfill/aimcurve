@@ -106,6 +106,20 @@ body.picking{grid-template-rows:minmax(0,1fr)}
 .vtab:hover{color:var(--ink); background:var(--bg-raise)}
 .vtab[aria-selected="true"]{color:var(--ink); background:var(--bg-raise); box-shadow:inset 0 0 0 1px var(--line-2)}
 .top-right{margin-left:auto; display:flex; align-items:center; gap:16px}
+.repick{
+  appearance:none; display:inline-flex; align-items:center; gap:7px;
+  min-height:28px; padding:5px 9px; border:1px solid transparent;
+  border-radius:var(--r); background:transparent; cursor:pointer;
+  font:400 11px/1 var(--mono); letter-spacing:.02em;
+}
+.repick[data-stale="0"]{color:var(--faint); border-color:transparent}
+.repick[data-stale="1"]{
+  color:var(--bad); border-color:color-mix(in oklab,var(--bad) 42%,transparent);
+  background:var(--bad-soft);
+}
+.repick[data-stale="0"]:hover{color:var(--ink); border-color:var(--line-2); background:var(--bg-raise)}
+.repick[data-stale="1"]:hover{border-color:var(--bad)}
+.repick-do{text-transform:uppercase; letter-spacing:.1em}
 .health{font:400 11px/1 var(--mono); color:var(--faint); letter-spacing:.02em}
 .status{display:flex; align-items:center; gap:7px; font:400 11px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--faint)}
 .status .dot{width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px color-mix(in oklab,currentColor 14%,transparent)}

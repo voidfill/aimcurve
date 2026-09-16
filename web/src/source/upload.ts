@@ -13,11 +13,13 @@
 import { perfIdOf, statsIdOf, type RunFiles, type RunSource } from './types';
 
 export function uploadSource(files: FileList | readonly File[]): RunSource {
+  const chosen = Array.from(files);
+  const rootName = chosen[0]?.webkitRelativePath.split('/')[0] ?? '';
   const stats = new Map<string, File>();
   const perfs = new Map<string, File>();
   let sawStatsDir = false;
 
-  for (const file of Array.from(files)) {
+  for (const file of chosen) {
     // webkitRelativePath is the whole path under the chosen folder, e.g.
     // "FPSAimTrainer/stats/Foo - Challenge - 2026.09.03-19.08.37 Stats.csv",
     // and it is the parent directory that has to be checked -- not just the
@@ -49,6 +51,7 @@ export function uploadSource(files: FileList | readonly File[]): RunSource {
 
   return {
     kind: 'upload',
+    rootName,
     pickedAt,
     async list() {
       // Stats files only: an orphan `.perf` with no CSV is not a run. Eight

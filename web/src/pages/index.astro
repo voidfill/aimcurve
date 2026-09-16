@@ -54,7 +54,10 @@ import '../ui/style.css';
 
     <div class="top-right">
       <div class="health" id="health" hidden></div>
-      <button id="repick" class="button ghost">Re-read folder</button>
+      <button id="repick" class="repick" data-stale="0" title="Read the folder again">
+        <span id="repickAge">—</span>
+        <span class="repick-do">refresh</span>
+      </button>
       <div class="status" id="status" data-state="stale">
         <span class="dot" aria-hidden="true"></span>
         <span class="status-label">—</span>

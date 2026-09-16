@@ -27,6 +27,7 @@ beforeEach(async () => {
   const ids = statsIds();
   const source: RunSource = {
     kind: 'upload',
+    rootName: 'FPSAimTrainer',
     pickedAt: Date.now(),
     async list() { return ids; },
     async read(id: string) { return { stats: readStats(id), perf: readPerf(id) }; },
