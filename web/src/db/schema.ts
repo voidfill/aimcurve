@@ -7,11 +7,13 @@
  */
 
 import type { RunMarks, Scenario, SeriesName, Run } from '../core/types';
+import type { ScenarioListRow } from '../core/store';
 
 export const DB_NAME = 'aimcurve';
 export const SCHEMA_VERSION = 1;
 
-/** How many times a file is re-parsed before it is given up on.
+/** Total failed read/parse attempts in an automatic retry budget. A manual
+ *  folder refresh can start another budget for an exhausted failure.
  *
  * A parse that failed because the file was still being written is a retry, not
  * a failure. Without a ceiling a genuinely corrupt file is either re-parsed
@@ -25,6 +27,12 @@ export interface StoredRun extends Run {
   /** null when the run has no per-second data. The rail's marker. */
   buckets: number | null;
   marks: RunMarks;
+}
+
+/** Classification and its list aggregate commit together. Optional only for
+ *  caches written before aggregates were maintained; boot recovery fills it. */
+export interface StoredScenario extends Scenario {
+  summary?: ScenarioListRow;
 }
 
 /** Seven ArrayBuffers, in the order `SERIES` declares. IndexedDB stores them
@@ -139,7 +147,7 @@ export const META_PERSISTED = 'persisted';
  * record and no marks, and nothing re-triggered it, because `pendingIds` is a
  * set difference against `indexed`. This set is written in that same
  * transaction and cleared only once classification has finished, so the next
- * pass drains whatever was left. */
+ * writer boot or next pass drains whatever was left. */
 export const META_PENDING_SCENARIOS = 'pending_scenarios';
 /** The directory handle the index was built from, so a reload does not downgrade
  *  a picker user to re-enumerating their whole install. Handles survive

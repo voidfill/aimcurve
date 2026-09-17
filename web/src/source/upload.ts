@@ -22,23 +22,25 @@ export function uploadSource(files: FileList | readonly File[]): RunSource {
   for (const file of chosen) {
     // webkitRelativePath is the whole path under the chosen folder, e.g.
     // "FPSAimTrainer/stats/Foo - Challenge - 2026.09.03-19.08.37 Stats.csv",
-    // and it is the parent directory that has to be checked -- not just the
-    // filename. Matching on the name alone indexes every "* Stats.csv"
-    // anywhere in the tree: a backup folder, or a second install, with the last
-    // File silently winning a name collision. The picker source reads strictly
-    // stats/ and performances/, and the indexer must never be able to tell the
-    // two sources apart.
+    // Only direct children of this root belong to the selected installation.
+    // Matching a parent name alone also accepts backup/stats/ and can pair a
+    // CSV with a different installation's performance file.
     const parts = file.webkitRelativePath.split('/');
-    if (parts.length < 2) continue;  // no directory information: not ours
-    const dir = parts[parts.length - 2];
-    const name = parts[parts.length - 1];
+    if (parts.length !== 3 || parts[0] !== rootName) continue;
+    const [, dir, name] = parts;
     if (dir === 'stats') {
       sawStatsDir = true;
       const statsId = statsIdOf(name);
-      if (statsId !== null) stats.set(statsId, file);
+      if (statsId !== null) {
+        if (stats.has(statsId)) throw new Error(`duplicate stats file: ${name}`);
+        stats.set(statsId, file);
+      }
     } else if (dir === 'performances') {
       const perfId = perfIdOf(name);
-      if (perfId !== null) perfs.set(perfId, file);
+      if (perfId !== null) {
+        if (perfs.has(perfId)) throw new Error(`duplicate performance file: ${name}`);
+        perfs.set(perfId, file);
+      }
     }
   }
 

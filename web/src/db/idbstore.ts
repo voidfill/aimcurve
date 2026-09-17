@@ -1,21 +1,18 @@
 /** The Store, backed by IndexedDB.
  *
- * Every query here was written and timed against this layout at 12k runs by
- * the browser design; the comments carry the numbers so a future rewrite has
- * to beat something rather than guess.
+ * Timing numbers in the comments come from the browser design's prototype.
+ * They are reference measurements, not measurements of this implementation;
+ * the real-browser/full-corpus integration pass is still outstanding.
  */
 
-import { DURATION_TOLERANCE, pySum } from '../core/compare';
 import { RACE } from '../core/shapes';
 import type {
   CandidateOpts, Counts, PageOpts, ScenarioListRow, SessionRow, SlotMetric, Store,
 } from '../core/store';
 import { SERIES } from '../core/types';
-import type { Curve, Kill, RailRow, Run, Scenario, Series } from '../core/types';
+import type { Curve, RailRow, Run, Scenario, Series } from '../core/types';
 import { unpack, type PackedKills } from './packed';
-import { done, req, type StoredCurve, type StoredRun } from './schema';
-
-const RECENT_FORM_N = 10;
+import { req, type StoredCurve, type StoredRun, type StoredScenario } from './schema';
 
 function compareRuns(a: { started_at: string; id: string },
                      b: { started_at: string; id: string }): number {
@@ -56,7 +53,12 @@ export function createStore(db: IDBDatabase): Store {
       return row ? toRun(row) : undefined;
     },
 
-    getScenario: (name) => get<Scenario>('scenarios', name),
+    async getScenario(name) {
+      const stored = await get<StoredScenario>('scenarios', name);
+      if (!stored) return undefined;
+      const { summary, ...scenario } = stored;
+      return scenario;
+    },
 
     async getCurve(id) {
       const row = await get<StoredCurve>('curves', id);
@@ -174,37 +176,15 @@ export function createStore(db: IDBDatabase): Store {
       return best;
     },
 
-    /** The maintained aggregate, read whole. The full scan this replaces is
-     *  247 ms at 12k runs and is only the rebuild path. */
+    /** Reads only maintained summaries. The design's 247 ms full-scan figure
+     *  belongs to its prototype; this branch still needs real-corpus timing. */
     async scenarioList(): Promise<ScenarioListRow[]> {
-      const scenarios = await req<Scenario[]>(
+      const scenarios = await req<StoredScenario[]>(
         db.transaction('scenarios').objectStore('scenarios').getAll());
-      const out: ScenarioListRow[] = [];
-      for (const scenario of scenarios) {
-        const rows = await ofScenario(scenario.name);
-        if (!rows.length) continue;
-        const scored = rows.filter((r) => r.score !== null);
-        const byScore = [...scored].sort((a, b) => (b.score as number) - (a.score as number));
-        const recent = rows.slice(-RECENT_FORM_N);
-        // pySum, not reduce: SQLite's AVG has summed with Neumaier
-        // compensation since 3.42, and memstore.ts:96 matches it. A plain
-        // left-to-right sum is invisible on the fixtures -- no scenario has
-        // enough runs -- and diverges against a real install.
-        const mean = (values: number[]) =>
-          values.length ? pySum(values) / values.length : null;
-        out.push({
-          scenario: scenario.name,
-          runs: rows.length,
-          pb: byScore.length ? (byScore[0].score as number) : null,
-          last_played: rows[rows.length - 1].started_at,
-          shape: scenario.shape,
-          pb_elapsed: byScore.length ? byScore[0].elapsed_s : null,
-          recent_elapsed: mean(
-            recent.map((r) => r.elapsed_s).filter((v): v is number => v !== null)),
-          recent_form: mean(
-            recent.map((r) => r.score).filter((v): v is number => v !== null)),
-        });
-      }
+      const out = scenarios.map((scenario) => {
+        if (!scenario.summary) throw new Error('history needs classification recovery');
+        return scenario.summary;
+      });
       // 0 on equality, not -1: an inconsistent comparator sorts unpredictably,
       // and the oracle compares this list positionally. memstore.ts:195-196
       // spells the equal case out for the same reason.

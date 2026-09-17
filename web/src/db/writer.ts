@@ -17,6 +17,7 @@ export interface Writer {
   /** Whether this tab holds the write lock *now*. False for a tab that lost,
    *  and true from the moment it is promoted. Read it, do not cache it. */
   readonly elected: boolean;
+  subscribe(listener: () => void): () => void;
   release(): void;
 }
 
@@ -24,8 +25,10 @@ export interface Writer {
 export function electWriter(): Promise<Writer> {
   let elected = false;
   let release = () => {};
+  const listeners = new Set<() => void>();
   const writer: Writer = {
     get elected() { return elected; },
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     release() { release(); elected = false; },
   };
 
@@ -62,6 +65,7 @@ export function electWriter(): Promise<Writer> {
         settle();
         navigator.locks.request(LOCK, () => {
           elected = true;
+          for (const listener of listeners) listener();
           return hold();
         }).catch(() => { /* promotion is best-effort; stay a reader */ });
         return Promise.resolve();

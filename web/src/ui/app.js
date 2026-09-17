@@ -817,6 +817,9 @@ async function refresh(isNew) {
   // Without this the page would sit on stale data after a failed request and
   // still claim "live".
   try {
+    // A folder refresh can add peers, upgrade curves, or change classification
+    // without changing the selected ID. Keep focus, invalidate its derivations.
+    A.payload = null;
     A.health = await api('/api/health');
     const h = A.health;
     const hEl = $('#health');

@@ -9,13 +9,14 @@
 import { ingest } from '../core/ingest';
 import { materialiseMarks } from '../core/marks';
 import { refreshScenario, type ScenarioInput } from '../core/scenario';
-import { SERIES, type Curve, type Kill, type Run, type Scenario, type Shape } from '../core/types';
+import { SERIES, type Curve, type Kill, type Run, type Shape } from '../core/types';
 import { readAll } from '../source/pool';
 import type { RunSource } from '../source/types';
 import { pack, unpack, type PackedKills } from './packed';
+import { scenarioSummary } from './scenario-summary';
 import {
   done, MAX_TRIES, META_INDEXED, META_PENDING_SCENARIOS, META_READ_AT, req,
-  type StoredCurve, type StoredFailure, type StoredRun,
+  type StoredCurve, type StoredFailure, type StoredRun, type StoredScenario,
 } from './schema';
 
 export interface IndexProgress {
@@ -35,7 +36,35 @@ export interface IndexOptions {
   /** Re-read basenames already in the `indexed` set. Used to upgrade a run
    *  whose `.perf` arrived after its CSV. */
   force?: boolean;
+  /** A manual folder refresh also retries exhausted failures and runs missing
+   *  a curve or a complete CSV summary. Ordinary automatic passes stay bounded. */
+  refreshIncomplete?: boolean;
   concurrency?: number;
+}
+
+// Web Locks serialize tabs, not calls within the elected tab. Key by database
+// name so separate connections in this realm share the same queue as recovery.
+const writes = new Map<string, Promise<unknown>>();
+function serialize<T>(db: IDBDatabase, work: () => Promise<T>): Promise<T> {
+  const next = (writes.get(db.name) ?? Promise.resolve()).then(work, work);
+  const tail = next.catch(() => {});
+  writes.set(db.name, tail);
+  void tail.then(() => { if (writes.get(db.name) === tail) writes.delete(db.name); });
+  return next;
+}
+
+/** Resume committed work without touching the source or changing its age.
+ *  The caller must hold this origin's writer lock. */
+export function recoverClassification(db: IDBDatabase): Promise<void> {
+  return serialize(db, async () => drain(db, await pendingClassification(db)));
+}
+
+/** Includes records from caches predating maintained list summaries. */
+export async function pendingClassification(db: IDBDatabase): Promise<string[]> {
+  const pending = await pendingScenarios(db);
+  const scenarios = await req<StoredScenario[]>(
+    db.transaction('scenarios').objectStore('scenarios').getAll());
+  return [...new Set([...pending, ...scenarios.filter((s) => !s.summary).map((s) => s.name)])];
 }
 
 async function indexedSet(db: IDBDatabase): Promise<Set<string>> {
@@ -84,15 +113,30 @@ function toStoredCurve(runId: string, curve: Curve): StoredCurve {
   return { run_id: runId, buckets: curve.buckets, duration_s: curve.duration_s, series };
 }
 
-export async function indexInto(
+export function indexInto(
   db: IDBDatabase,
   source: RunSource,
   ids: readonly string[],
   onProgress?: (p: IndexProgress) => void,
   options: IndexOptions = {},
 ): Promise<IndexResult> {
+  return serialize(db, () => indexBatch(db, source, ids, onProgress, options));
+}
+
+async function indexBatch(
+  db: IDBDatabase, source: RunSource, ids: readonly string[],
+  onProgress: ((p: IndexProgress) => void) | undefined, options: IndexOptions,
+): Promise<IndexResult> {
   const known = await indexedSet(db);
   const failed = await failures(db);
+  const incomplete = new Set<string>();
+  if (options.refreshIncomplete) {
+    const rows = await req<StoredRun[]>(db.transaction('runs').objectStore('runs').getAll());
+    for (const row of rows) {
+      if (!row.has_perf || row.score === null || row.avg_fps === null) incomplete.add(row.id);
+    }
+    for (const id of failed.keys()) incomplete.add(id);
+  }
   // Whatever a previous pass wrote runs for but never finished classifying.
   // Carried into this pass's `touched` set so it is reclassified alongside it.
   const carried = await pendingScenarios(db);
@@ -102,8 +146,8 @@ export async function indexInto(
   // there too. Letting the second through writes the same row twice and counts
   // it twice, so `IndexResult` stops agreeing with `counts()`.
   const requested = [...new Set(ids)];
-  const wanted = options.force
-    ? requested : requested.filter((id) => !known.has(id));
+  const wanted = requested.filter((id) => options.force || incomplete.has(id)
+    || (!known.has(id) && (failed.get(id)?.tries ?? 0) < MAX_TRIES));
   const result: IndexResult = {
     runs: 0, curves: 0, failed: 0, skipped: requested.length - wanted.length,
   };
@@ -140,9 +184,20 @@ export async function indexInto(
       // than a throw, so an absent CSV is the same condition, not a no-op.
       if (stats === undefined) {
         unreadable.set(id, 'the stats file could not be read');
-      } else if (perf === undefined) {
-        parsed.push(ingest(id, stats));
       } else {
+        const csv = ingest(id, stats);
+        // The pure parser intentionally accepts sparse input for the oracle.
+        // At the live file boundary require a summary and the final settings
+        // field emitted by the supported CSV format before caching success.
+        if (csv.run.scenario && csv.run.started_at
+            && (csv.run.score === null || csv.run.avg_fps === null)) {
+          throw new Error('the stats file is incomplete (missing Score or Avg FPS)');
+        }
+        if (perf === undefined) {
+          parsed.push(csv);
+          onProgress?.({ phase: 'reading', done: ++read, total: wanted.length });
+          return;
+        }
         try {
           parsed.push(ingest(id, stats, perf));
         } catch (error) {
@@ -161,7 +216,7 @@ export async function indexInto(
           // the basename stays out of `known` so a repaired file is retried. A
           // throw from `ingest(id, stats)` alone is still genuinely unreadable,
           // and falls through to the outer catch.
-          parsed.push({ ...ingest(id, stats), error: message(error) });
+          parsed.push({ ...csv, error: message(error) });
         }
       }
     } catch (error) {
@@ -181,6 +236,15 @@ export async function indexInto(
   const failedStore = write.objectStore('failed');
 
   const now = new Date().toISOString();
+  const recordFailure = (id: string, error: string) => {
+    const previous = failed.get(id)?.tries ?? 0;
+    // Manual refresh starts a new budget only after the previous one ran out.
+    const tries = (previous >= MAX_TRIES ? 0 : previous) + 1;
+    failedStore.put({ basename: id, tries, last_error: error, last_try: now });
+    result.failed += 1;
+    if (tries >= MAX_TRIES) known.add(id);
+    else known.delete(id);
+  };
 
   // A file whose basename does not match the expected shape parses to an empty
   // scenario and an empty started_at. That is permanent -- re-reading it will
@@ -196,18 +260,7 @@ export async function indexInto(
   // Files that could not be read at all. Not added to `known`: the whole point
   // is that the next pass tries again.
   for (const [id, message] of unreadable) {
-    const previous = failed.get(id);
-    if ((previous?.tries ?? 0) < MAX_TRIES) {
-      failedStore.put({
-        basename: id, tries: (previous?.tries ?? 0) + 1,
-        last_error: message, last_try: now,
-      });
-      result.failed += 1;
-    } else {
-      // Out of tries. Mark it known so it stops being re-read, and leave the
-      // failed row standing as the record of why.
-      known.add(id);
-    }
+    recordFailure(id, message);
   }
 
   const touched = new Set<string>(carried);
@@ -226,18 +279,7 @@ export async function indexInto(
       // The previous count comes from the map read before this transaction
       // opened. Looking it up here would mean awaiting a request mid-write,
       // which deactivates the transaction and fails every put after it.
-      const previous = failed.get(row.run.id);
-      if ((previous?.tries ?? 0) < MAX_TRIES) {
-        failedStore.put({
-          basename: row.run.id,
-          tries: (previous?.tries ?? 0) + 1,
-          last_error: row.error,
-          last_try: now,
-        });
-        result.failed += 1;
-      } else {
-        known.add(row.run.id);
-      }
+      recordFailure(row.run.id, row.error);
     } else {
       known.add(row.run.id);
       // A file that used to fail and now parses must stop being reported as
@@ -342,7 +384,9 @@ async function reclassify(
     const marks = materialiseMarks(rows, shapeOf);
 
     const write = db.transaction(['runs', 'scenarios'], 'readwrite');
-    write.objectStore('scenarios').put(scenario satisfies Scenario);
+    write.objectStore('scenarios').put({
+      ...scenario, summary: scenarioSummary(scenario, rows),
+    } satisfies StoredScenario);
     for (const row of rows) {
       const updated = marks.get(row.id);
       if (updated) write.objectStore('runs').put({ ...row, marks: updated });

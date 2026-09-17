@@ -15,7 +15,17 @@ const state = vi.hoisted(() => ({
   paintedFrames: 0,
   clicks: [] as Array<{ id: string; paintedFrames: number; picking: boolean }>,
   reloads: 0,
-  writer: { elected: true, release() {} },
+  uiLoaded: false,
+  storeReady: false,
+  uiSawStore: false,
+  starts: 0,
+  recoveries: 0,
+  startSawRecovery: false,
+  indexGate: null as Promise<void> | null,
+  inaccessibleHandles: new Set<string>(),
+  promoteDuringCounts: false,
+  promotions: [] as (() => void)[],
+  writer: { elected: true, release() {}, subscribe(fn: () => void) { state.promotions.push(fn); } },
 }));
 
 function source(kind: RunSource['kind'], rootName: string): RunSource {
@@ -30,16 +40,25 @@ function source(kind: RunSource['kind'], rootName: string): RunSource {
 
 vi.mock('../src/db/idbstore', () => ({
   createStore: () => ({
-    counts: async () => ({ runs: state.runs, curves: 0, failed: 0, scenarios: 0 }),
+    counts: async () => {
+      if (state.promoteDuringCounts) { state.writer.elected = true; state.promoteDuringCounts = false; }
+      return { runs: state.runs, curves: 0, failed: 0, scenarios: 0 };
+    },
   }),
 }));
 
 vi.mock('../src/db/indexer', () => ({
-  pendingIds: async () => [],
+  pendingClassification: async () => state.meta.get('pending_scenarios') ?? [],
   indexInto: async (_db: IDBDatabase, picked: RunSource) => {
     state.indexCalls.push(picked);
+    await state.indexGate;
     if (state.failingRoots.has(picked.rootName)) throw new Error('index failed');
     state.meta.set('read_at', Date.now());
+    return { runs: 0, curves: 0, failed: 0, skipped: 0 };
+  },
+  recoverClassification: async () => {
+    state.recoveries++;
+    state.meta.set('pending_scenarios', []);
   },
 }));
 
@@ -48,6 +67,7 @@ vi.mock('../src/db/schema', () => ({
   META_PERSISTED: 'persisted',
   META_HANDLE: 'handle',
   META_ROOT_NAME: 'root_name',
+  META_PENDING_SCENARIOS: 'pending_scenarios',
   openDatabase: async () => fakeDatabase,
   req: async (request: { result: unknown }) => request.result,
   requestPersistence: async () => true,
@@ -61,7 +81,10 @@ vi.mock('../src/db/writer', () => ({
 vi.mock('../src/source/picker', () => ({
   supportsPicker: () => true,
   pickDirectory: async () => state.pickerHandle,
-  pickerSource: async (handle: FileSystemDirectoryHandle) => source('picker', handle.name),
+  pickerSource: async (handle: FileSystemDirectoryHandle) => {
+    if (state.inaccessibleHandles.has(handle.name)) throw new Error('folder unavailable');
+    return source('picker', handle.name);
+  },
 }));
 
 vi.mock('../src/source/upload', () => ({
@@ -69,13 +92,20 @@ vi.mock('../src/source/upload', () => ({
 }));
 
 vi.mock('../src/ui/api-shim.js', () => ({
-  useStore: () => {},
+  useStore: () => { state.storeReady = true; },
 }));
 
-vi.mock('../src/ui/app.js', () => ({
-  start: async () => { state.startSawPersisted = state.persisted; },
+vi.mock('../src/ui/app.js', () => {
+  state.uiLoaded = true;
+  state.uiSawStore = state.storeReady;
+  return {
+  start: async () => {
+    state.starts++;
+    state.startSawRecovery = state.recoveries > 0;
+    state.startSawPersisted = state.persisted;
+  },
   setSnapshotAge: (label: string) => { element('status').textContent = label; },
-}));
+}; });
 
 class ClassList {
   private names = new Set<string>();
@@ -88,6 +118,7 @@ class ClassList {
 
 class FakeElement extends EventTarget {
   hidden = false;
+  disabled = false;
   textContent: string | null = null;
   value = '';
   files: FileList | null = null;
@@ -187,6 +218,16 @@ beforeEach(() => {
   state.clicks = [];
   state.reloads = 0;
   state.writer.elected = true;
+  state.promotions = [];
+  state.uiLoaded = false;
+  state.storeReady = false;
+  state.uiSawStore = false;
+  state.starts = 0;
+  state.recoveries = 0;
+  state.startSawRecovery = false;
+  state.indexGate = null;
+  state.inaccessibleHandles.clear();
+  state.promoteDuringCounts = false;
 
   elements = new Map(ids.map((id) => [id, new FakeElement(id)]));
   body = new FakeElement('body');
@@ -213,6 +254,62 @@ afterEach(() => {
 });
 
 describe('indexing lifecycle', () => {
+  it('loads dashboard dependencies after the Store and before the first folder selection', async () => {
+    const { main } = await import('../src/boot');
+    await main();
+    expect(state.uiLoaded).toBe(true);
+    expect(state.uiSawStore).toBe(true);
+    expect(state.starts).toBe(0);
+  });
+
+  it('recovers classification before displaying cached history', async () => {
+    state.runs = 2;
+    state.meta.set('pending_scenarios', ['Air Pure Medium']);
+    const { main } = await import('../src/boot');
+    await main();
+    expect(state.startSawRecovery).toBe(true);
+    expect(state.meta.get('pending_scenarios')).toEqual([]);
+  });
+
+  it('withholds incomplete derived history in a reader until promotion repairs it', async () => {
+    state.runs = 2;
+    state.writer.elected = false;
+    state.meta.set('pending_scenarios', ['Air Pure Medium']);
+    const { main } = await import('../src/boot');
+    await main();
+    expect(state.starts).toBe(0);
+    state.writer.elected = true;
+    state.promotions.forEach((notify) => notify());
+    await settle();
+    expect(state.startSawRecovery).toBe(true);
+    expect(body.classList.contains('picking')).toBe(false);
+  });
+
+  it('recovers a promotion that happens while boot is awaiting cached counts', async () => {
+    state.runs = 2;
+    state.writer.elected = false;
+    state.promoteDuringCounts = true;
+    state.meta.set('pending_scenarios', ['Air Pure Medium']);
+    const { main } = await import('../src/boot');
+    await main();
+    expect(state.startSawRecovery).toBe(true);
+    expect(body.classList.contains('picking')).toBe(false);
+  });
+
+  it('serializes the complete source acceptance and indexing lifecycle', async () => {
+    let release!: () => void;
+    state.indexGate = new Promise<void>((resolve) => { release = resolve; });
+    const { indexFrom } = await import('../src/boot');
+    const first = indexFrom(fakeDatabase, source('upload', 'First'));
+    await settle();
+    const second = indexFrom(fakeDatabase, source('upload', 'Second'));
+    await settle();
+    expect(state.indexCalls).toHaveLength(1);
+    release();
+    await Promise.all([first, second]);
+    expect(state.confirmMessages).toHaveLength(1);
+    expect(state.meta.get('root_name')).toBe('Second');
+  });
   it('records an empty re-read and announces that nothing is new', async () => {
     const { indexFrom } = await import('../src/boot');
     await indexFrom(fakeDatabase, source('upload', 'FPSAimTrainer'));
@@ -304,6 +401,7 @@ describe('snapshot age', () => {
 
     expect(element('repickAge').textContent).toBe('1 h ago');
     expect(element('repick').dataset.stale).toBe('1');
+    expect(element('status').textContent).toBe('read 1 h ago');
   });
 
   it('refreshes the age and stale state every minute', async () => {
@@ -317,10 +415,60 @@ describe('snapshot age', () => {
 
     expect(element('repickAge').textContent).toBe('1 h ago');
     expect(element('repick').dataset.stale).toBe('1');
+    expect(element('status').textContent).toBe('read 1 h ago');
   });
 });
 
 describe('re-picking', () => {
+  it('coalesces repeated refresh clicks while restoring a saved handle', async () => {
+    const handle = directoryHandle('FPSAimTrainer');
+    state.meta.set('handle', handle);
+    const { main } = await import('../src/boot');
+    await main();
+    element('repick').click();
+    element('repick').click();
+    await settle();
+    expect(state.indexCalls).toHaveLength(1);
+  });
+  it('accepts uploads and reveals controls after reader promotion', async () => {
+    state.writer.elected = false;
+    const { main } = await import('../src/boot');
+    await main();
+    state.writer.elected = true;
+    state.promotions.forEach((notify) => notify());
+    await settle();
+    expect(element('pickDir').hidden && element('pickUploadLabel').hidden).toBe(false);
+    const input = element('pickUpload');
+    input.files = [{}] as unknown as FileList;
+    input.dispatchEvent(new Event('change'));
+    await settle();
+    expect(state.indexCalls).toHaveLength(1);
+    expect(body.classList.contains('picking')).toBe(false);
+  });
+
+  it('returns to existing history when an upload re-pick is cancelled', async () => {
+    state.runs = 1;
+    const { main } = await import('../src/boot');
+    await main();
+    element('repick').click();
+    await settle(); await paint(); await paint();
+    element('pickUpload').dispatchEvent(new Event('cancel'));
+    await settle();
+    expect(body.classList.contains('picking')).toBe(false);
+  });
+
+  it('offers fresh selection after a saved handle becomes inaccessible', async () => {
+    state.runs = 1;
+    state.meta.set('handle', directoryHandle('MovedInstall'));
+    state.inaccessibleHandles.add('MovedInstall');
+    const { main } = await import('../src/boot');
+    await main();
+    element('repick').click();
+    await settle();
+    expect(body.classList.contains('picking')).toBe(true);
+    expect(element('pickDir').hidden && element('pickUploadLabel').hidden).toBe(false);
+    expect(state.meta.get('handle')).toBeNull();
+  });
   it('does not re-pick while this tab is not elected writer', async () => {
     const handle = directoryHandle('FPSAimTrainer');
     state.runs = 1;

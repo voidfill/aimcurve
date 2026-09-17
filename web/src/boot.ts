@@ -7,7 +7,7 @@
  */
 
 import { createStore } from './db/idbstore';
-import { indexInto, pendingIds } from './db/indexer';
+import { indexInto, pendingClassification, recoverClassification } from './db/indexer';
 import {
   done, META_HANDLE, META_PERSISTED, META_READ_AT, META_ROOT_NAME,
   openDatabase, req, requestPersistence,
@@ -36,6 +36,21 @@ const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as
 /** The source this tab last read from. Picker sources can be reused directly;
  *  upload snapshots need a new browser gesture and another file selection. */
 let current: RunSource | null = null;
+let hasDashboard = false;
+let selecting = false;
+let activeRequests = 0;
+let indexing: Promise<void> = Promise.resolve();
+
+function disableSelection(disabled: boolean): void {
+  for (const id of ['repick', 'pickDir', 'pickUpload']) {
+    el<HTMLButtonElement>(id).disabled = disabled;
+  }
+}
+
+function cancelSelection(): void {
+  selecting = false;
+  if (hasDashboard) document.body.classList.remove('picking');
+}
 
 let ageTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -79,6 +94,7 @@ function renderAge(readAt: number | null): void {
   el('repickAge').textContent = describeAge(readAt);
   const stale = readAt !== null && Date.now() - readAt > STALE_MS;
   el('repick').dataset.stale = stale ? '1' : '0';
+  if (!activeRequests) ui?.setSnapshotAge(describeRead(readAt));
 }
 
 async function showDashboard(db: IDBDatabase): Promise<void> {
@@ -90,6 +106,7 @@ async function showDashboard(db: IDBDatabase): Promise<void> {
   // what reveals them.
   document.body.classList.remove('picking');
   await start();
+  hasDashboard = true;
   const readAt = await lastReadAt(db);
   setSnapshotAge(describeRead(readAt));
   renderAge(readAt);
@@ -114,7 +131,7 @@ async function announce(message: string): Promise<void> {
 }
 
 /** Store a picker handle only after its source has been accepted and indexed. */
-async function saveHandle(db: IDBDatabase, handle: FileSystemDirectoryHandle) {
+async function saveHandle(db: IDBDatabase, handle: FileSystemDirectoryHandle | null) {
   const tx = db.transaction('meta', 'readwrite');
   tx.objectStore('meta').put({ key: META_HANDLE, value: handle });
   await done(tx);
@@ -152,32 +169,50 @@ function afterPaint(): Promise<void> {
 }
 
 async function repick(db: IDBDatabase): Promise<void> {
-  const handle = current?.kind === 'picker' ? null : await restoreHandle(db);
-  if (current?.kind === 'picker') {
-    await indexFrom(db, current);
-    return;
+  try {
+    const handle = current?.kind === 'picker' ? null : await restoreHandle(db);
+    if (current?.kind === 'picker') {
+      await indexFrom(db, current);
+      return;
+    }
+    if (handle) {
+      const source = await pickerSource(handle);
+      await indexFrom(db, source);
+      if (current === source) await saveHandle(db, handle);
+      return;
+    }
+  } catch (error) {
+    current = null;
+    await saveHandle(db, null);
+    document.body.classList.add('picking');
+    throw new Error(`${(error as Error).message}. Choose the folder again below.`);
   }
-  if (handle) {
-    const source = await pickerSource(handle);
-    await indexFrom(db, source);
-    if (current === source) await saveHandle(db, handle);
-    return;
-  }
+  selecting = true;
   document.body.classList.add('picking');
   await afterPaint();
   el<HTMLInputElement>('pickUpload').click();
 }
 
-export async function indexFrom(db: IDBDatabase, source: RunSource): Promise<void> {
-  if (!await checkSameFolder(db, source.rootName)) return;
+export function indexFrom(db: IDBDatabase, source: RunSource): Promise<void> {
+  activeRequests++;
+  disableSelection(true);
+  const next = indexing.then(() => indexSource(db, source));
+  indexing = next.catch(() => {});
+  return next.finally(() => {
+    if (--activeRequests === 0) disableSelection(false);
+  });
+}
+
+async function indexSource(db: IDBDatabase, source: RunSource): Promise<void> {
+  if (!await checkSameFolder(db, source.rootName)) { cancelSelection(); return; }
   // Not `el('pickProgress')` directly: on a re-index the dashboard is already
   // up and #pick is hidden, so writing there gives a 22-second pass with no
   // feedback whatsoever. `announce` picks whichever panel is on screen.
   await announce('Looking at the folder…');
 
-  const pending = await pendingIds(db, source);
+  const ids = await source.list();
   let last = 0;
-  await indexInto(db, source, pending, (p) => {
+  const result = await indexInto(db, source, ids, (p) => {
     // At 12k runs this fires 12,000 times; repainting on every one is most of
     // what makes the pass feel slow. Four times a second is plenty.
     if (p.done !== p.total && Date.now() - last < 250) return;
@@ -187,8 +222,8 @@ export async function indexFrom(db: IDBDatabase, source: RunSource): Promise<voi
       : p.phase === 'writing'
         ? `Storing ${p.done} of ${p.total}…`
         : `Classifying ${p.done} of ${p.total} scenarios…`);
-  });
-  if (!pending.length) await announce('Nothing new.');
+  }, { refreshIncomplete: true });
+  if (!result.runs && !result.failed) await announce('Nothing new.');
 
   // After the first successful bootstrap, not before: asking for persistence
   // with an empty database spends the user's one prompt on nothing.
@@ -204,14 +239,21 @@ export async function indexFrom(db: IDBDatabase, source: RunSource): Promise<voi
 }
 
 export async function main(): Promise<void> {
+  disableSelection(true);
   const db = await openDatabase();
-  const writer = await electWriter();
   const store = createStore(db);
+  useStore(store);
+  // Fetch the dashboard chunk during initial startup, before folder selection.
+  await loadUi();
+  const writer = await electWriter();
+  const recoveredAtElection = writer.elected;
+  if (recoveredAtElection) await recoverClassification(db);
   const counts = await store.counts();
+  const journal = await pendingClassification(db);
 
-  // A returning visit renders immediately. The index is a cache with no source
-  // attached, so it is shown with its age rather than withheld.
-  if (counts.runs > 0) {
+  // A coherent cache can render with no source attached. Interrupted derived
+  // data stays hidden until the elected writer has finished recovery.
+  if (counts.runs > 0 && !journal.length) {
     await showDashboard(db);
   }
 
@@ -227,39 +269,56 @@ export async function main(): Promise<void> {
     error.textContent = message;
   };
 
+  const controls = () => {
+    el<HTMLButtonElement>('pickDir').hidden = !writer.elected || !supportsPicker();
+    el<HTMLLabelElement>('pickUploadLabel').hidden = !writer.elected || supportsPicker();
+    disableSelection(!writer.elected || activeRequests > 0);
+  };
+  controls();
+  const promoted = async () => {
+    if (!writer.elected) { controls(); return; }
+    disableSelection(true);
+    await recoverClassification(db);
+    if ((await store.counts()).runs > 0) await showDashboard(db);
+    else el('pickProgress').hidden = true;
+    controls();
+  };
+  writer.subscribe(() => { void promoted().catch((error) => fail((error as Error).message)); });
+  // Promotion can happen while counts/journal/dashboard reads above await.
+  // Register first, then check the live flag so that interval cannot lose it.
+  if (writer.elected && !recoveredAtElection) await promoted();
+
+  let restoring = false;
   el<HTMLButtonElement>('repick').addEventListener('click', () => {
-    if (!writer.elected) return;
-    void repick(db).catch((e) => fail((e as Error).message));
+    if (!writer.elected || activeRequests || selecting || restoring) return;
+    restoring = true;
+    void repick(db).catch((e) => fail((e as Error).message))
+      .finally(() => { restoring = false; });
   });
 
   if (!writer.elected) {
     // Another tab owns the writing. This one reads, and says so wherever the
     // user is actually looking.
-    //
-    // Returning here before the controls below are bound is what made an empty
-    // database in a second tab a terminal dead end: #pick stayed on screen with
-    // a visible folder button that opened the directory dialog and then did
-    // nothing at all, for ever, because no change listener had been attached.
     await announce(counts.runs > 0
       ? 'another tab is indexing'
       : 'Another aimcurve tab is indexing this folder. This tab will show your ' +
         'history once that finishes — reload to check.');
-    el<HTMLButtonElement>('pickDir').hidden = true;
-    el<HTMLLabelElement>('pickUploadLabel').hidden = true;
-    return;
   }
 
   if (supportsPicker()) {
     // Exactly one control, so that "try the folder button below instead" names
     // something distinguishable.
     const button = el<HTMLButtonElement>('pickDir');
-    button.hidden = false;
-    el<HTMLLabelElement>('pickUploadLabel').hidden = true;
     button.addEventListener('click', async () => {
+      if (!writer.elected || activeRequests || selecting) return;
+      selecting = true;
       const handle = await pickDirectory();
+      selecting = false;
+      if (!writer.elected) return;
       if (!handle) {
         button.hidden = true;
         el<HTMLLabelElement>('pickUploadLabel').hidden = false;
+        cancelSelection();
         return;
       }
       try {
@@ -277,10 +336,13 @@ export async function main(): Promise<void> {
     });
   }
 
+  el<HTMLInputElement>('pickUpload').addEventListener('cancel', cancelSelection);
   el<HTMLInputElement>('pickUpload').addEventListener('change', async (event) => {
     const input = event.target as HTMLInputElement;
     const files = input.files;
-    if (!files?.length) return;
+    selecting = false;
+    if (!writer.elected || activeRequests) { input.value = ''; return; }
+    if (!files?.length) { cancelSelection(); return; }
     try {
       await indexFrom(db, uploadSource(files));
     } catch (e) {

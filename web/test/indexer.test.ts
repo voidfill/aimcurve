@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createStore } from '../src/db/idbstore';
+import * as indexer from '../src/db/indexer';
 import { indexInto, pendingIds } from '../src/db/indexer';
 import { META_PENDING_SCENARIOS, openDatabase } from '../src/db/schema';
 import type { RunSource } from '../src/source/types';
@@ -61,6 +62,65 @@ beforeEach(async () => {
 });
 
 describe('indexInto', () => {
+  it('serializes overlapping passes before reading metadata, including classification', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const source = fixtureSource([AIR_A, AIR_B]);
+    const first = indexInto(db, { ...source, async read(id) {
+      entered(); await gate; return source.read(id);
+    } }, [AIR_A]);
+    await started;
+    const second = indexInto(db, source, [AIR_B]);
+    release();
+    await Promise.all([first, second]);
+    expect(await pendingIds(db, source)).toEqual([]);
+    expect(await createStore(db).page(1, { sameCfg: true })).toMatchObject([
+      { id: AIR_B, played_before: 1 },
+    ]);
+    expect((await pendingScenarioRow()).value).toEqual([]);
+  });
+
+  it.each(['', 'Score:,123\nScenario:,Air Pure Medium\n'])('keeps an incomplete CSV retryable: %j', async (stats) => {
+    const broken = { ...fixtureSource([AIR_A]), async read() { return { stats }; } };
+    expect(await indexInto(db, broken, [AIR_A])).toMatchObject({ runs: 0, failed: 1 });
+    expect(await pendingIds(db, broken)).toEqual([AIR_A]);
+    await indexInto(db, fixtureSource([AIR_A]), [AIR_A]);
+    expect((await createStore(db).getRun(AIR_A))!.score).toBe(906.138184);
+  });
+
+  it.each(['read', 'perf'])('stops after five failed %s attempts, with no sixth read', async (kind) => {
+    let reads = 0;
+    const source = { ...fixtureSource([AIR_A]), async read() {
+      reads++;
+      if (kind === 'read') throw new Error('locked');
+      return { stats: readStats(AIR_A), perf: new Uint8Array([0x0a, 0x40, 0x01]) };
+    } };
+    for (let i = 0; i < 7; i++) await indexInto(db, source, [AIR_A]);
+    expect(reads).toBe(5);
+    expect((await failureRow(AIR_A)).tries).toBe(5);
+  });
+
+  it('manual refresh upgrades curveless runs and retries exhausted failures', async () => {
+    const noPerf = { ...fixtureSource([AIR_A]), async read() { return { stats: readStats(AIR_A) }; } };
+    await indexInto(db, noPerf, [AIR_A]);
+    const broken = { ...fixtureSource([AIR_B]), async read() { throw new Error('locked'); } };
+    for (let i = 0; i < 6; i++) await indexInto(db, broken, [AIR_B]);
+    await indexInto(db, fixtureSource([AIR_A, AIR_B]), [AIR_A, AIR_B], undefined,
+      { refreshIncomplete: true });
+    expect(await createStore(db).counts()).toMatchObject({ runs: 2, curves: 2, failed: 0 });
+  });
+
+  it('recovers the classification journal without a source or a new read timestamp', async () => {
+    await expect(indexInto(db, fixtureSource([AIR_A, SPECTRAL_A]), [AIR_A, SPECTRAL_A], (p) => {
+      if (p.phase === 'classifying') throw new Error('interrupted');
+    })).rejects.toThrow('interrupted');
+    expect(indexer.recoverClassification).toBeTypeOf('function');
+    await indexer.recoverClassification(db);
+    expect(await createStore(db).counts()).toMatchObject({ runs: 2, scenarios: 2 });
+    expect((await pendingScenarioRow()).value).toEqual([]);
+  });
   it('indexes a batch and reports what it did', async () => {
     const ids = statsIds();
     const result = await indexInto(db, fixtureSource(ids), ids);

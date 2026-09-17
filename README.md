@@ -6,6 +6,27 @@ Open the dashboard in a browser and point it at your run history. No account or
 upload is involved: nothing leaves the machine, and it never writes to the
 KovaaK's install.
 
+To run the dashboard from this checkout, install Node.js 22.12 or newer, then:
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+Open [http://localhost:4321](http://localhost:4321), then choose the KovaaK's
+installation folder containing `stats/` and, when present, `performances/`.
+“Choose folder (upload)” is a browser file-selection control; it does not send
+the files anywhere. Use “Re-read folder” to refresh your snapshot.
+
+For a static build, run `npm run build` from `web/`. Serve the resulting
+`web/dist/` on any static host over HTTPS, or run `npm run preview` from `web/`
+and open the localhost address it prints. Web Locks, used to keep one tab in
+charge of indexing, require HTTPS or localhost; a plain HTTP LAN address does
+not enable indexing. Opening `index.html` as a local file is not a supported
+entry point. People visiting a hosted build need only their browser; Node and
+the build tools are for running or hosting this checkout.
+
 What it shows that the others don't is *where in the run* the difference
 happened. Put a run's per-second curve against your PB and recent form, then
 see the stretch where you actually lost it instead of one more point on a

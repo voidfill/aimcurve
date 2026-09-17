@@ -48,7 +48,7 @@ export async function pickerSource(
 ): Promise<RunSource> {
   const statsDir = await subdirectory(root, 'stats');
   if (!statsDir) throw new Error('that folder has no stats/ directory');
-  const perfDir = await subdirectory(root, 'performances');
+  let perfDir = await subdirectory(root, 'performances');
   const pickedAt = Date.now();
 
   return {
@@ -56,6 +56,9 @@ export async function pickerSource(
     rootName: root.name,
     pickedAt,
     async list() {
+      // A fresh installation may create performances/ after its first CSV.
+      // Re-resolve it for each snapshot, including a previously absent folder.
+      perfDir = await subdirectory(root, 'performances');
       const ids: string[] = [];
       // .keys(), never .entries(): a names-only enumeration is the cheap one,
       // and at 12k runs even that costs ~2.2 s per directory.
