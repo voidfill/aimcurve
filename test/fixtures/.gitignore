@@ -1,3 +1,4 @@
-# The full KovaaK's dump: ~32MB, 4590 files. Kept out of git until we have
-# picked the handful of files that are actually worth committing.
+# The full KovaaK's dump: ~4600 files. Copy an install's `performances/` and
+# `stats/` in here to enable the sweep tests that guard on `raw.available`.
+# The committed subset lives in `curated/` and is tracked with Git LFS.
 raw/

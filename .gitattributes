@@ -1,0 +1,8 @@
+# Curated KovaaK's fixtures are tracked with Git LFS. They are opaque test
+# inputs — never hand-edited, only re-copied from a real install — so losing
+# readable diffs on them costs nothing, and keeping them out of the pack file
+# means the repo does not grow every time the set is extended.
+#
+# `raw/` is gitignored and never reaches LFS.
+test/fixtures/curated/**/*.perf filter=lfs diff=lfs merge=lfs -text
+test/fixtures/curated/**/*.csv  filter=lfs diff=lfs merge=lfs -text
