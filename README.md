@@ -28,7 +28,8 @@ src/db/      schema, migrations, and the browser PGlite client
 src/gen/     generated protobuf code
 src/pages/   astro pages
 test/helpers shared test helpers (node-only)
-test/fixtures  curated/ is committed, raw/ is the gitignored dump
+test/fixtures  curated/ is committed (Git LFS), raw/ is the gitignored dump
+docs/        reverse-engineered format and ingest notes
 ```
 
 **The core takes bytes, not paths.** Parsers accept `string` / `Uint8Array`, and
@@ -42,11 +43,14 @@ fixtures, plus their own tests.
 
 ## Fixtures
 
-`test/fixtures/raw/` is the full KovaaK's dump — ~32MB, 4590 files, gitignored. Unzip
-an export into it to get `raw/performances/*.perf` and `raw/stats/*.csv`.
+`test/fixtures/raw/` is the full KovaaK's dump — ~4600 files, gitignored. Copy an
+install's `performances/` and `stats/` into it to enable the sweep tests.
 
-`test/fixtures/curated/` is the hand-picked, committed subset. Everything that must
-pass on a fresh clone reads from there. Sweeps over the full dump guard on
+`test/fixtures/curated/` is the hand-picked, committed subset, tracked with **Git
+LFS** — run `git lfs install` once after cloning, or the fixtures arrive as pointer
+files and the suite fails. Everything that must pass on a fresh clone reads from
+there; see [`curated/README.md`](test/fixtures/curated/README.md) for what each file
+pins down and what earns a new one a place. Sweeps over the full dump guard on
 `raw.available`:
 
 ```ts
@@ -58,6 +62,10 @@ describe.skipIf(!raw.available)('every stats file parses', () => { /* ... */ });
 Data formats: `stats/*.csv` has three sections (kill table, weapon/settings table, a
 `Key:,value` block). `performances/*.perf` is binary protobuf with no published
 schema — a header message followed by repeated event records.
+
+Pairing the two is not as simple as it looks: a run can produce a CSV with no `.perf`,
+the two filenames can disagree by a second, and `Challenge Start` is not a unique key.
+[`docs/ingest.md`](docs/ingest.md) covers all of it.
 
 ## Database
 

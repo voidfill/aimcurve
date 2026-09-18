@@ -8,6 +8,11 @@ Schema lives in [`proto/perf.proto`](../proto/perf.proto); generated TypeScript 
 `src/gen/perf_pb.ts` (`pnpm gen:proto`). The validation sweep is
 `src/lib/parse/perf.test.ts`.
 
+For how a `.perf` pairs with its `Stats.csv` — and why neither the filename nor
+`challenge_start_utc` joins them exactly — see [`ingest.md`](ingest.md). It also
+covers runs that produce a CSV but no `.perf` at all, which is a normal outcome
+rather than a missing file.
+
 ## How this was worked out
 
 1. A generic protobuf wire walker (throwaway, not in the repo) dumped every field
