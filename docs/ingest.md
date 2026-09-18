@@ -53,7 +53,7 @@ importer watching the directory and reacting to CSV-create will sometimes find n
 | --- | --- | --- | --- |
 | filename infix | ` - Challenge - ` | ` - Challenge - ` | **absent** |
 | `Scenario:` / `Hash:` | filled | filled | **empty** |
-| `Avg FPS:` | 388–486 | **`0.0`** | normal |
+| `Avg FPS:` | 388–486 | **never plausible** ² | normal |
 | `Avg TTK:` | real | **`0.0`** | `0.0` |
 | `Score:` | real | `0.0` ¹ | real |
 | `Challenge Start:` | correct | **next attempt's** | **stale garbage** |
@@ -63,17 +63,32 @@ importer watching the directory and reacting to CSV-create will sometimes find n
 accumulator it survives — the Voltaic reset fixture has `Score: 142.0` equal to its
 `Damage Done`.
 
+² **`Avg FPS` in a reset is uninitialised garbage, not reliably zero.** It usually
+reads `0.0`, but values around `7.3e9` and `8.9e9` occur — 3 of 22 resets observed.
+Testing `== 0` silently misclassifies those as completed runs.
+
 ### Detecting them
+
+Classify on the **interval**, not on a sentinel value:
 
 ```
 abort  ⟺  Scenario: or Hash: is empty        (equivalently: no " - Challenge - ")
-reset  ⟺  Avg FPS: == 0.0                    (equivalently: duration < 1s, below)
+reset  ⟺  duration < 1s
+           where duration = (filename timestamp, end of second) − Challenge Start
 ```
 
-Two things to get right:
+A reset file is stamped with the next attempt's start but written *now*, so it spans
+almost nothing. This caught 22 of 22 resets. As a cross-check — not a primary rule —
+`Avg FPS` in a reset is never a *plausible* frame rate: it is either `0` or absurdly
+large, never in `0 < fps < 10000`.
 
-- **`Avg FPS == 0` does not catch aborts.** An abort keeps a perfectly normal
-  `Avg FPS`; its tell is the missing scenario identity. You need both checks.
+Three things to get right:
+
+- **Do not detect resets with `Avg FPS == 0`.** See note ² above. This was the
+  original rule here and it was wrong.
+- **Neither reset signal catches an abort.** An abort keeps a perfectly normal
+  `Avg FPS` and a wide interval; its tell is the missing scenario identity. You need
+  the empty-identity check as a separate branch.
 - **A missing `.perf` is not a validity signal.** 310 CSVs in the dump are complete,
   valid runs from game version 3.8.x, before `.perf` existed. Requiring one throws
   away five months of history — exactly the earliest history, where progression is
@@ -245,9 +260,10 @@ They carry real signal that completed runs cannot:
 - **Reroll rate is a confound on every score that is kept.** A personal best set on
   the 16th attempt is not the same result as one set first try, and completed runs
   alone cannot tell those apart. The partial count is what allows correcting for it.
-- **Reset timing separates two different acts.** A reset at 0.2 s is rejecting a seed
-  before the run started; a reset 19 s in, mid-engagement, is abandoning a run in
-  progress. Collapsing both to "aborted" loses that.
+- **Reset timing separates two different acts.** Both shapes are in the fixtures: a
+  reroll with `Hit Count: 0` and `Fight Time: 0`, thrown away before anything
+  happened, and an abandon with 1634 hits, a completed kill and 19 s of `Fight Time`.
+  Collapsing both to "aborted" loses that distinction entirely.
 - **Reset rate is itself a trend** — rerolling a scenario less over months is
   improvement in consistency that never appears in score.
 
@@ -257,9 +273,10 @@ Treat them as attempts, not runs.
 
 - **Two files written in the same second.** If a player resets twice inside one
   second, both want the same filename; whether KovaaK's overwrites, suffixes, or is
-  rate-limited by scenario reload is unknown. Deliberate reset-spamming produced
-  nothing closer than 5 s apart, which suggests the reload rate-limits it, but that
-  is a hypothesis from two data points. This is the one real threat to filename-as-key.
+  rate-limited by scenario reload is unknown. Deliberate reroll chains — the longest
+  captured is nine resets of one scenario inside 41 s — produced nothing closer than
+  **2 s** apart. That is consistent with the scenario reload rate-limiting it, but it
+  is evidence, not proof. This is the one real threat to filename-as-key.
 - **A run straddling midnight.** `Challenge Start` has no date, so the date comes
   from the filename — which is the *write* time. A run starting at 23:59:40 needs a
   rollover branch that no fixture exercises.

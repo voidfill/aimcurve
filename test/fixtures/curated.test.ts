@@ -215,25 +215,39 @@ describe('Happy Easter! — destructible targets', () => {
 
 describe('partial writes', () => {
 	it('finds the resets and the abort', () => {
-		expect(byKind('reset')).toHaveLength(7);
+		expect(byKind('reset')).toHaveLength(18);
 		expect(byKind('abort')).toHaveLength(1);
 	});
 
-	it('detects resets by two independent signals that agree', () => {
+	it('detects every reset by its degenerate interval', () => {
+		// The interval is the reliable signal: a reset file is stamped with the
+		// next attempt's start but written now, so it spans almost nothing.
 		for (const run of byKind('reset')) {
 			expect(run.durationMs, run.stem).toBeLessThan(1_000);
-			expect(run.csv.settings.averageFps, run.stem).toBe(0);
 		}
-		// And neither signal fires on a completed run.
 		for (const run of byKind('complete')) {
 			expect(run.durationMs, run.stem).toBeGreaterThanOrEqual(1_000);
-			expect(run.csv.settings.averageFps, run.stem).toBeGreaterThan(0);
 		}
 	});
 
+	it('cannot lean on `Avg FPS == 0`, which is garbage rather than zero', () => {
+		// Avg FPS in a reset was never computed, so it holds whatever was in the
+		// accumulator. Usually that reads 0.0 — but not always: values around
+		// 7.3e9 and 8.9e9 occur. Testing `=== 0` misses those.
+		const fps = byKind('reset').map((run) => run.csv.settings.averageFps);
+		expect(fps.some((value) => value === 0)).toBe(true);
+		expect(fps.some((value) => value > 1e6)).toBe(true);
+
+		// What holds is the weaker claim: never a *plausible* frame rate. That
+		// is still a usable cross-check on the interval rule, just not on its own.
+		const plausible = (value: number) => value > 0 && value < 10_000;
+		for (const run of byKind('reset')) expect(plausible(run.csv.settings.averageFps), run.stem).toBe(false);
+		for (const run of byKind('complete')) expect(plausible(run.csv.settings.averageFps), run.stem).toBe(true);
+	});
+
 	it('does not detect the abort by the reset signals', () => {
-		// The abort file keeps a normal Avg FPS, so `averageFps === 0` alone
-		// would miss it — it needs the empty-identity check.
+		// The abort file keeps a normal Avg FPS and a wide interval, so neither
+		// reset signal sees it — it needs the empty-identity check.
 		const abort = byKind('abort')[0]!;
 		expect(abort.csv.settings.averageFps).toBeGreaterThan(0);
 		expect(abort.csv.settings.scenario).toBe('');
@@ -254,7 +268,6 @@ describe('partial writes', () => {
 			expect(run.csv.totals.hitCount + run.csv.totals.missCount).toBe(run.csv.weapons.reduce((a, w) => a + w.shots, 0));
 			// ...but anything finalised at run end was never computed.
 			expect(run.csv.totals.averageTimeToKillSeconds).toBe(0);
-			expect(run.csv.settings.averageFps).toBe(0);
 		}
 	});
 
@@ -525,5 +538,38 @@ describe('runs with no .perf at all', () => {
 	it('records a pause duration the .perf cannot express', () => {
 		const run = find('Controlsphere rAim Easy 90%');
 		expect(run.csv.totals.pauseDuration).toBeGreaterThan(0);
+	});
+});
+
+describe('reroll chains', () => {
+	const chain = runs
+		.filter((run) => run.stem.startsWith('VT Aether Intermediate S5') && classify(run) === 'reset')
+		.sort((a, b) => a.writtenAt - b.writtenAt);
+
+	it('captures a player rerolling a seed nine times', () => {
+		expect(chain.length).toBeGreaterThanOrEqual(9);
+	});
+
+	it('never puts two writes in the same second', () => {
+		// The gap floor is what makes filename-as-key survive: a reset reloads
+		// the scenario, which appears to rate-limit how fast files can appear.
+		// Tightest observed here is 2s. Not a proof — see docs/ingest.md.
+		const gaps = chain.slice(1).map((run, i) => run.writtenAt - chain[i]!.writtenAt);
+		expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1_000);
+		expect(new Set(runs.map((run) => run.stem)).size).toBe(runs.length);
+	});
+
+	it('separates seed rejection from abandoning a run in progress', () => {
+		// A reroll: nothing accumulated, no engagement finished.
+		const reject = find('VT Aether Intermediate S5 - Challenge - 2026.09.18-19.09.19');
+		expect(reject.csv.totals.hitCount).toBe(0);
+		expect(reject.csv.totals.fightTimeSeconds).toBe(0);
+
+		// An abandon: 19s of engagement and a completed kill before quitting.
+		const abandon = find('VT Ground Intermediate S5 - Challenge - 2026.09.18-19.26.04');
+		expect(classify(abandon)).toBe('reset');
+		expect(abandon.csv.totals.hitCount).toBeGreaterThan(1_000);
+		expect(abandon.csv.totals.fightTimeSeconds).toBeGreaterThan(18);
+		expect(abandon.csv.totals.kills).toBe(1);
 	});
 });

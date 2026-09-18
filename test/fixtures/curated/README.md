@@ -40,7 +40,7 @@ Concretely, add a file when it is the only example, or a clear representative, o
 When you add one, add a row below saying *why*. A file with no stated reason is noise
 and should be deleted.
 
-Current set: **41 runs — 41 CSVs, 29 perfs, 525 KB.** The perf count is lower because
+Current set: **54 runs — 54 CSVs, 31 perfs.** The perf count is lower because
 partial writes and pre-3.9.0 runs have no `.perf` at all, which is itself the point of
 several entries.
 
@@ -63,7 +63,11 @@ or partial-write window to defend against. What varies is *which* events flush a
 | `Air Pure Medium … 18.42.43` | **Reset.** The only partial anywhere with a kill row — proves kill-table timestamps stay on the real clock (kill at `18:42:39.762`, i.e. 4.1 s *before* the file's own `Challenge Start`). |
 | `Air Pure Medium … 18.42.50` | **Reset**, 7 s later. Its `Challenge Start` collides with the completed `18.44.15` run — the off-by-one below. |
 | `Air Voltaic Invincible 4 Medium … 18.05.10` | **Reset** where `Score` is a raw accumulator, so it survives (`142.0` == `Damage Done`) instead of being zeroed. Contrast the Air Pure resets, where `Score` is derived and lands at `0.0`. |
-| `VT Aether Novice S5 … 18.58.35` / `18.58.40` / `19.03.45` / `19.03.50` | **Reset spam** — four rerolls of one scenario, as close as 5 s apart. One carries 7 hits (~0.2 s of play) and one carries 0, proving even a near-instant reset still produces a file. |
+| `VT Aether Novice S5 … 18.58.35` / `18.58.40` / `19.03.45` / `19.03.50` | **Reset spam** — four rerolls of one scenario. One carries 7 hits (~0.2 s of play) and one carries 0, proving even a near-instant reset still produces a file. |
+| `VT Aether Intermediate S5 … 19.08.42` through `… 19.09.23` (9 files) | A full **reroll chain** — nine resets of one scenario inside 41 s, tightest gap 2 s. The closest two writes anywhere in the corpus, and still not the same second. Closed by the completed `19.10.23`. |
+| `VT Aether Intermediate S5 … 19.09.11`, `… 19.17.16`, `VT Ground Intermediate S5 … 19.26.04` | **`Avg FPS` is garbage, not zero** — these read `8.9e9`, `8.9e9` and `7.3e9`. They break the `Avg FPS == 0` reset rule, which is why the rule is now the interval instead. |
+| `VT Aether Intermediate S5 … 19.09.19` | A reroll with `Hit Count: 0` and `Fight Time: 0` — nothing accumulated at all. |
+| `VT Ground Intermediate S5 … 19.26.04` | The opposite: an **abandon**, not a reroll. 1634 hits, a completed kill, 19 s of `Fight Time`. Same file shape, completely different act. |
 | `RawMouseControl Reload - 2026.09.18-18.45.05` | **Abort** (pause → leave the scenario). A shape of its own: no ` - Challenge - ` in the filename, empty `Scenario:` and `Hash:`, `Challenge Start` garbage (`20:19:26.991`), yet `Avg FPS` is *normal*. The reset detector does not catch this one. |
 
 **The off-by-one.** A reset file carries the **next** attempt's `Challenge Start`, not
