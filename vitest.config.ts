@@ -4,6 +4,7 @@ import { getViteConfig } from 'astro/config';
 export default getViteConfig({
 	test: {
 		environment: 'node',
-		include: ['src/**/*.test.ts'],
+		// Tests sit next to their source; `test/` holds shared helpers and fixtures.
+		include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
 	},
 });

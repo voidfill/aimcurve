@@ -1,18 +1,15 @@
-import { PGlite } from '@electric-sql/pglite';
-import { drizzle } from 'drizzle-orm/pglite';
+import type { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { makeTestDb, type TestDb } from '../../test/helpers/db';
 import { applyMigrations } from './migrate';
 import { migrations } from './migrations';
-import * as schema from './schema';
 import { notes } from './schema';
 
-let db: ReturnType<typeof drizzle<typeof schema>>;
+let db: TestDb['db'];
 let pg: PGlite;
 
 beforeEach(async () => {
-	pg = new PGlite();
-	await applyMigrations(pg, migrations);
-	db = drizzle(pg, { schema });
+	({ db, pg } = await makeTestDb());
 });
 
 describe('migrations', () => {

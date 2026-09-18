@@ -8,6 +8,8 @@ node_modules/
 
 # test output
 coverage/
+# raw fixture archives (see test/fixtures/.gitignore)
+*.zip
 *.tsbuildinfo
 
 # nix (flake.lock is committed on purpose)
