@@ -1,0 +1,275 @@
+syntax = "proto3";
+
+package aimcurve.v1;
+
+// Schema for KovaaK's `.perf` performance files
+// (`FPSAimTrainer/FPSAimTrainer/performances/*.perf`).
+//
+// Derived by reverse-engineering 2139 real `.perf` files and cross-checking
+// every field against the paired `... Stats.csv`, then confirmed against the
+// schema KovaaK's publishes at https://wiki.kovaaks.com/home/KovaaK's/PerformanceFiles
+// (upstream file: https://wiki.kovaaks.com/performance.proto, `package gst`).
+// Field numbers and semantics here are identical to upstream; only the package
+// name differs. See docs/perf-format.md for the full write-up, including which
+// claims are backed by our own data and which are only backed by the vendor doc.
+//
+// Confidence legend used below:
+//   [confirmed]  verified numerically against the paired Stats.csv across the corpus
+//   [vendor]     documented upstream but never observed in our 2139-file corpus
+//   [partial]    observed in the corpus, vendor meaning accepted but only weakly testable
+//
+// Prose marked "Vendor:" is quoted or paraphrased from the wiki page; everything
+// else is our own measurement. The upstream .proto itself carries no comments —
+// all vendor intent comes from the wiki page, not the schema file.
+//
+// Forward compatibility (vendor promise): future schema versions may only ADD
+// fields. Nothing existing will be removed, renamed, or repurposed, and older
+// parsers skip unknown fields silently. Check `header.schema_version` before
+// relying on anything introduced after version 1.
+
+// Resolved scenario configuration captured at the moment the challenge started.
+message ChallengeProfileSnapshot {
+  // Vendor: "Challenge duration in seconds."
+  //
+  // More precisely, these are *scenario* seconds (already multiplied by
+  // `timescale`). Real wall-clock duration is `time_limit / timescale`, which
+  // reproduces the last event timestamp in 1985/1987 finite-limit files.
+  // 1000.0 is used as the "no time limit" sentinel (144 files; those runs end
+  // on a life/damage condition instead). [confirmed]
+  float time_limit = 1;
+
+  // Vendor: "Character profile the player used." Governs the player's movement
+  // and weapon loadout; see the wiki's Character Profiles page.
+  // e.g. "Player", "Clicker", "Quaker Player". 17 distinct values here. [partial]
+  string player_profile = 2;
+
+  // Vendor: "Bot profile names spawned for this challenge."
+  //
+  // e.g. "target.bot", "Bot Rotation air.rot". 1..12 entries per file; `.bot`
+  // and `.rot` both occur. Order is load-bearing: bot_max_lives and bot_teams
+  // are parallel arrays over this list.
+  // [confirmed: lengths line up in 2131/2131 files]
+  repeated string added_bots = 3;
+
+  // Vendor: "Lives cap for the player. 0 = unlimited."
+  // Never observed non-zero here, so always absent on the wire. [vendor]
+  int32 player_max_lives = 4;
+
+  // Vendor: "Lives cap per bot, in the same order as `added_bots`."
+  // Packed varints. Observed values 0,1,4,5,6,8 — non-zero almost exclusively
+  // on `.rot` entries and on "Invincible N" scenarios. [partial]
+  repeated int32 bot_max_lives = 5;
+
+  // Vendor: "Team number assigned to the player."
+  // Observed 1 (2112 files) and 2 (19). [partial]
+  int32 player_team = 6;
+
+  // Vendor: "Team number per bot, in the same order as `added_bots`."
+  // Packed varints. Observed values 0, 1, 2. [partial]
+  repeated int32 bot_teams = 7;
+
+  // Vendor: "Map file used."
+  // e.g. "1w6ts FPS Boost.json", "cube_1wall_dense.map".
+  // Always present; `.json` (1722) or `.map` (409). [partial]
+  string map_name = 8;
+
+  // Vendor: "Scale applied to the map." That is the entire vendor
+  // documentation, and we could not pin the meaning down any further.
+  //
+  // UNRESOLVED. Observed 1.0..10.0, constant per scenario (0 of 284 scenarios
+  // vary). It is NOT target scale: it does not track the CSV's
+  // `Avg Target Scale`, and "30% Larger" scenario variants share the value of
+  // their base scenario. Also not a function of bot count, map file, character
+  // profile, or timescale. Treat the meaning as unverified. [partial]
+  float map_scale = 9;
+
+  // Vendor: "Time multiplier for the challenge."
+  // Observed 0.55..2.0. `time_limit / timescale` == real challenge duration,
+  // so a "70%" scenario variant runs 1/0.7 as long in wall-clock terms.
+  // [confirmed]
+  float timescale = 10;
+
+  // Vendor: "Optional end condition; 0 = disabled."
+  // Observed only twice (value 5.0, in "VT Air Novice" and "VT Plaza Novice").
+  // When set, the run can end before `time_limit` elapses. [partial]
+  float end_challenge_after_kills = 11;
+
+  // Vendor: "Optional end condition; 0 = disabled." Never observed. [vendor]
+  float end_challenge_after_damage = 12;
+}
+
+message Header {
+  // Exactly equals `Scenario:` in the paired CSV. [confirmed: 2131/2131]
+  string scenario_name = 1;
+
+  // Vendor: "identifies the scenario at the exact version that produced this
+  // run" — so a scenario edited between runs yields a different hash, and this
+  // is the correct key for comparing like with like over time. Prefer it over
+  // `scenario_name` when grouping runs.
+  //
+  // 32 hex chars; exactly equals `Hash:` in the paired CSV. [confirmed: 2131/2131]
+  string scenario_hash = 2;
+
+  // Milliseconds since the Unix epoch, UTC. Always a whole second in practice.
+  // This is the challenge *start*: it sits one full run-duration (44s..149s)
+  // before the timestamp in the filename, which is therefore the write/end
+  // time despite what the vendor wiki says. [confirmed]
+  int64 challenge_start_utc = 3;
+
+  // Currently 1; 1 in every file we have. [confirmed]
+  uint32 schema_version = 4;
+
+  ChallengeProfileSnapshot challenge_profile = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Event payloads.
+//
+// Three shapes: `count` (int32 per-tick increment), `delta` (float per-tick
+// increment) and `value` (instantaneous float reading). Counts and deltas are
+// increments, NOT running totals — sum them across the run.
+//
+// Vendor: "Not every event type appears in every file — only metrics relevant
+// to the active scenario are emitted. Tracking scenarios typically won't carry
+// `reloads` and clicking scenarios that use semi-automatic weapons typically
+// won't carry `overshots`." So an absent event type means "not applicable
+// here", not "zero" — and the four types we never observe below are a property
+// of this corpus, not of the format.
+// ---------------------------------------------------------------------------
+
+// Vendor: "Shots fired during the tick."
+// Sums to the CSV weapon table's `Shots` column. [confirmed: 2131/2131 exact]
+message ShotsFired { int32 count = 1; }
+
+// Vendor: "Shots that connected with a target."
+//
+// CAVEAT (vendor): "With projectile weapons, shots fired and shots hit may not
+// be synchronized within the same tick." Per-tick accuracy is therefore
+// unreliable on projectile scenarios; aggregate over the run instead.
+// Sums to `Hit Count:`. [confirmed: 2131/2131 exact]
+message ShotsHit { int32 count = 1; }
+
+// Vendor: "Shots that did not connect."
+// Sums to `Miss Count:` (== shots - hits). [confirmed: 2131/2131 exact]
+message ShotsMissed { int32 count = 1; }
+
+// Vendor: "Damage dealt to targets during the tick."
+// Sums to `Damage Done:`. [confirmed: 2131/2131 within float tolerance]
+message DamageDone { float delta = 1; }
+
+// Vendor: "Maximum damage that could have been dealt during the tick per the
+// shots fired and weapons used." This is the denominator for efficiency —
+// damage_done / damage_possible — as distinct from shot-count accuracy.
+// Sums to the weapon table's `Damage Possible`. [confirmed: 2131/2131]
+message DamagePossible { float delta = 1; }
+
+// Vendor: "Score awarded during the tick. Summed across the run, this should
+// match the final score posted to the leaderboard."
+// Sums to `Score:`. [confirmed: 2131/2131 within float tolerance]
+message ScoreDelta { float delta = 1; }
+
+// Vendor: "Bot kills."
+// Sums to `Kills:`. Emitted only in the 1186 files with a non-zero kill count.
+// [confirmed: 1186/1186 exact]
+message Kills { int32 count = 1; }
+
+// Vendor: "Player deaths."
+// Never observed — `Deaths:` is 0 in every paired CSV. [vendor]
+message Deaths { int32 count = 1; }
+
+// Vendor: "Overshots are defined as the shots from the player's weapon that are
+// fired immediately after killing a target with a fully auto weapon. The
+// default value of 0.25 means that for 1/4th of a second after killing a
+// target, extra shots fired do not count as misses or affect your accuracy
+// statistic. Note that Overshot Protection also ends if the player stops firing
+// or if the player shoots and does damage to something."
+//
+// Present in 272 files. The positive increments sum to `Total Overshots:`
+// (exact in most files; the shortfall never exceeds one tick's worth).
+// QUIRK: every one of those 272 files ends with a single extra Overshots event
+// whose count is exactly the negation of the running total, zeroing the
+// counter at end of run. Sum only the positives. [confirmed]
+message Overshots { int32 count = 1; }
+
+// Vendor: "Damage the player took."
+// Sums to `Damage Taken:`. Present in 53 files. [confirmed: 53/53]
+message PlayerDamageTaken { float delta = 1; }
+
+// Vendor: "Reloads triggered."
+// Sums to `Reloads:`. Present in 19 files. [confirmed: 19/19]
+message Reloads { int32 count = 1; }
+
+// Vendor: "Pauses observed during the tick. The 1 Hz tick only accumulates
+// while the game world is running, so this is a count of pauses that occurred
+// within one second of in-game time."
+//
+// Sums to `Pause Count:`. Present in 3 files, always count = 1.
+// `Pause Duration:` has no representation in the .perf at all — if you need it,
+// read the CSV. [confirmed: 3/3]
+message PauseCount { int32 count = 1; }
+
+// Vendor: "Points awarded for distance the player moved." Note the vendor's
+// wording: points, not a distance — despite the name and the CSV's
+// `Distance Traveled:` label, which it sums to exactly.
+// Present in 65 files. [confirmed: 65/65]
+message DistanceTraveled { float delta = 1; }
+
+// Vendor: "Movement Based Scoring points awarded for player movement."
+// Sums to `MBS Points:`. Present in only 4 files. [confirmed: 4/4]
+message MbsPoints { float delta = 1; }
+
+// Vendor: "Current target size, when adaptive mode or multipliers are used."
+// Instantaneous, not an increment. Never observed. [vendor]
+message TargetSize { float value = 1; }
+
+// Vendor: "Current target speed, when adaptive mode or multipliers are used."
+// Instantaneous, not an increment. Never observed. [vendor]
+message TargetSpeed { float value = 1; }
+
+// Vendor: "Current mouse sensitivity multiplier. Only relevant when the
+// optional Random Sensitivity mode is enabled by the end user."
+// Instantaneous, not an increment. Never observed. [vendor]
+message RandomSensScale { float value = 1; }
+
+// One metric sample. The game emits one Event per metric that changed during
+// the tick, so many Events share a timestamp. Ticks are ~1 Hz and only
+// accumulate while the game world is running.
+//
+// Vendor tip: every event is already timestamped relative to challenge start,
+// so a raw time-series needs no aggregation — skip the summing entirely.
+message Event {
+  // Vendor: "seconds since challenge start". Real (undilated) time.
+  //
+  // Observed 0.94 .. 124.80. Cadence is nominally 1 Hz but not uniform:
+  // 128,491 of 128,999 gaps are ~1.0s, 147 exceed 2s (up to 11s) and 144 fall
+  // under 0.5s. We did not establish what causes the outliers, so do not assume
+  // a fixed tick width when differencing.
+  // [confirmed: the tick carrying the final Kills event lines up with the last
+  // row of the CSV kill table]
+  float timestamp = 1;
+
+  oneof payload {
+    ShotsFired shots_fired = 2;
+    ShotsHit shots_hit = 3;
+    ShotsMissed shots_missed = 4;
+    DamageDone damage_done = 5;
+    DamagePossible damage_possible = 6;
+    ScoreDelta score = 7;
+    Kills kills = 8;
+    Deaths deaths = 9;
+    Overshots overshots = 10;
+    PlayerDamageTaken player_damage_taken = 11;
+    Reloads reloads = 12;
+    PauseCount pause_count = 13;
+    DistanceTraveled distance_traveled = 14;
+    MbsPoints mbs_points = 15;
+    TargetSize target_size = 16;
+    TargetSpeed target_speed = 17;
+    RandomSensScale random_sens_scale = 18;
+  }
+}
+
+message PerformanceFile {
+  Header header = 1;
+  repeated Event events = 2;
+}
