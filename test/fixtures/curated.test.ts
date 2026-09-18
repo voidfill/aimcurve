@@ -397,6 +397,17 @@ describe('interval containment join', () => {
 			&& start >= run.startedAt - 1_000 && start <= run.writtenAt + 999;
 	});
 
+	it('has no perf-only runs: every perf is owned by a CSV', () => {
+		// The containment the data model rests on. `.perf ⊆ .csv`, because the CSV
+		// is written first and on strictly more events. See docs/ingest.md.
+		const orphans = perfs.filter((perf) => !complete.some((run) => {
+			const start = Number(perf.file.header!.challengeStartUtc);
+			return run.csv.settings.hash === perf.file.header!.scenarioHash
+				&& start >= run.startedAt - 1_000 && start <= run.writtenAt + 999;
+		}));
+		expect(orphans.map((perf) => perf.name)).toEqual([]);
+	});
+
 	it('would let a reset reach the following run’s perf if it were not filtered', () => {
 		const reset = find('Air Pure Medium - Challenge - 2026.09.18-18.42.50');
 		const sibling = find('Air Pure Medium - Challenge - 2026.09.18-18.44.15');

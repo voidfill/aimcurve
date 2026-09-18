@@ -217,6 +217,55 @@ the header.
 Its one advantage is not needing the filename, so it is the better choice if you ever
 ingest renamed files.
 
+## The CSV is the spine
+
+**Every `.perf` has a `Stats.csv`. The reverse does not hold.**
+
+```
+perfs                2164
+complete CSVs        2474
+perf-only runs          0     ← measured across the whole corpus
+CSV-only runs         310
+```
+
+This falls out of the write rules rather than being a coincidence: the CSV is written
+first, and on strictly more events. A `.perf` is only produced on completion, and
+completion also produces a CSV. So `.perf ⊆ .csv`.
+
+That containment is what keeps the data model simple, and it is worth stating as a
+rule rather than leaving as an observation:
+
+> **A run is a `Stats.csv`. The `.perf` is an optional time-series attachment to it.**
+
+Practical consequences:
+
+- There is no "reconstruct a run from a perf alone" path to write. Ingest iterates
+  CSVs and looks up perfs, never the other way round.
+- A CSV is never incomplete for lack of a perf. It carries the settings block and the
+  per-kill table, neither of which the perf has at all.
+
+### Policy: drop perf-only runs
+
+**If a `.perf` has no CSV, discard it — but say so loudly.**
+
+Dropping is safe because it should be unreachable. A nonzero count does not mean "a
+run we should salvage", it means something upstream is broken: either the join
+regressed, or a CSV was deleted by a rule that did not account for its perf. Both are
+bugs to fix, not data to recover.
+
+So treat the count as an assertion, not a filter. Silently dropping would hide the
+very condition worth knowing about.
+
+Note this is a defensive rule for a case that has never occurred, not a response to
+one that has. A perf *does* carry enough to synthesise totals — scenario name, hash,
+start time, and summable shot/damage/score events — so salvaging one would be
+possible. It is not worth the code path for a case the format cannot produce, and a
+salvaged run would silently lack settings and kill rows that every sibling row has.
+
+The one way to create perf-only runs artificially is to delete CSVs on a rule that
+does not consider perfs — a date cutoff, or pruning by score. Partial-write cleanup is
+safe here, because partials never have a perf in the first place.
+
 ## Choosing a primary key
 
 **Summed counters cannot be a primary key.** They collide badly: `(Hash, shots,
@@ -275,8 +324,14 @@ Treat them as attempts, not runs.
   second, both want the same filename; whether KovaaK's overwrites, suffixes, or is
   rate-limited by scenario reload is unknown. Deliberate reroll chains — the longest
   captured is nine resets of one scenario inside 41 s — produced nothing closer than
-  **2 s** apart. That is consistent with the scenario reload rate-limiting it, but it
-  is evidence, not proof. This is the one real threat to filename-as-key.
+  **2 s** apart, which is consistent with the reload rate-limiting it.
+
+  **This one cannot be settled by looking at files.** The write time is recoverable
+  only *from* the filename, so a same-scenario collision would have left one file
+  behind, not two — it is invisible in any dump, however large. Only a filesystem
+  watcher catching a write that lands on an existing file can answer it. What the
+  corpus does show is the weaker cross-scenario version: among files whose names
+  differ, no two were ever written in the same second.
 - **A run straddling midnight.** `Challenge Start` has no date, so the date comes
   from the filename — which is the *write* time. A run starting at 23:59:40 needs a
   rollover branch that no fixture exercises.
