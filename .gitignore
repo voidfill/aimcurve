@@ -6,6 +6,15 @@ dist/
 # dependencies
 node_modules/
 
+# test output
+coverage/
+*.tsbuildinfo
+
+# nix (flake.lock is committed on purpose)
+result
+result-*
+.direnv/
+
 # logs
 npm-debug.log*
 yarn-debug.log*
