@@ -1,0 +1,82 @@
+---
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>aimcurve</title>
+	</head>
+	<body>
+		<h1>aimcurve</h1>
+
+		<form id="note-form">
+			<input id="note-body" name="body" placeholder="a note" required autocomplete="off" />
+			<button type="submit">add</button>
+		</form>
+
+		<ul id="notes">
+			<li>loading…</li>
+		</ul>
+
+		<p>protobuf roundtrip: <code id="proto">…</code></p>
+
+		<script>
+			import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+			import { desc } from 'drizzle-orm';
+			import { getDb } from '../db/client';
+			import { notes } from '../db/schema';
+			import { NoteSchema } from '../gen/example_pb';
+
+			const list = document.getElementById('notes')!;
+			const form = document.getElementById('note-form') as HTMLFormElement;
+			const input = document.getElementById('note-body') as HTMLInputElement;
+
+			async function render() {
+				const db = await getDb();
+				const rows = await db.select().from(notes).orderBy(desc(notes.id));
+
+				list.replaceChildren(
+					...rows.map((row) => {
+						const li = document.createElement('li');
+						// Every row makes a round trip through protobuf on its way to the DOM.
+						const encoded = toBinary(
+							NoteSchema,
+							create(NoteSchema, {
+								id: row.id,
+								body: row.body,
+								createdAtMs: BigInt(row.createdAt.getTime()),
+							}),
+						);
+						const note = fromBinary(NoteSchema, encoded);
+						li.textContent = `#${note.id} ${note.body} (${new Date(Number(note.createdAtMs)).toISOString()}, ${encoded.length}b)`;
+						return li;
+					}),
+				);
+
+				if (rows.length === 0) list.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'no notes yet' }));
+			}
+
+			form.addEventListener('submit', async (event) => {
+				event.preventDefault();
+				const body = input.value.trim();
+				if (!body) return;
+				const db = await getDb();
+				await db.insert(notes).values({ body });
+				input.value = '';
+				await render();
+			});
+
+			const sample = create(NoteSchema, { id: 1, body: 'ping' });
+			document.getElementById('proto')!.textContent = fromBinary(
+				NoteSchema,
+				toBinary(NoteSchema, sample),
+			).body;
+
+			await render();
+		</script>
+	</body>
+</html>
