@@ -1216,8 +1216,9 @@ beforeEach(async () => {
 
 		insert into run_bot values (1, 1, 1, 0.44, 3, 2, 100, 150, 0),
 		                           (1, 2, 1, 0.31, 2, 2, 100, 120, 1),
-		                           (3, 1, 1, 0.40, 3, 2, 100, 150, 0),
-		                           (3, 2, 1, 0.29, 2, 2, 100, 120, 0);
+		                           -- r3 is id 2: r2 was inserted after it, in its own statement.
+		                           (2, 1, 1, 0.40, 3, 2, 100, 150, 0),
+		                           (2, 2, 1, 0.29, 2, 2, 100, 120, 0);
 
 		insert into run_perf (run_id, perf_file_stem, schema_version, challenge_start_utc, added_bots)
 		values (1, 'r1-perf', 1, '2026-01-01 10:20:00Z', '{air.bot}');
