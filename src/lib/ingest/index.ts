@@ -87,7 +87,7 @@ export async function ingest(
 		const slice = work.slice(at, at + chunkSize);
 		const orphans = await runChunk(slice, pg, build, report);
 		for (const stem of orphans) {
-			const entry = slice.find((e) => fileStem(e.name) === stem);
+			const entry = slice.find((e) => isPerf(e.name) && fileStem(e.name) === stem);
 			if (entry) unmatched.set(stem, entry);
 		}
 		done += slice.length;
@@ -118,12 +118,12 @@ async function runChunk(
 	build: ChunkBuilder,
 	report: IngestReport,
 ): Promise<string[]> {
-	const files = await readAll(entries);
-	const chunk = await build(files);
 	const failuresBefore = report.failures.length;
-	report.failures.push(...chunk.failures);
 
 	try {
+		const files = await readAll(entries);
+		const chunk = await build(files);
+		report.failures.push(...chunk.failures);
 		const result = await applyChunk(pg, chunk);
 		report.runs += result.runs;
 		report.aborts += result.aborts;

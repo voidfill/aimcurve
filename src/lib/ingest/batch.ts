@@ -22,8 +22,9 @@ export interface BatchResult {
 }
 
 /**
- * The join, evaluated as a left join so one query answers both assertions:
- * `n = 0` is an orphan and `n > 1` is ambiguous.
+ * The join, evaluated as a left join so one query answers the ambiguity
+ * assertion: `n > 1` is ambiguous. Orphans are derived from the outcome
+ * instead — see ORPHAN_SQL below.
  */
 const PROBE_SQL = `
 	select p.perf_file_stem as stem, count(r.id)::int as n
@@ -33,6 +34,20 @@ const PROBE_SQL = `
 	                                       p.challenge_start_utc + interval '1 second')
 	group by p.perf_file_stem
 	having count(r.id) <> 1
+`;
+
+/**
+ * A perf that was staged but did not land in run_perf: either its probe
+ * matched no run, or it matched a run that already had a perf and lost the
+ * `on conflict do nothing` race. Stronger than `PROBE_SQL`'s `n = 0` arm,
+ * which only catches the first case and silently drops the second forever,
+ * since a stem that never reaches run_perf is never learned by knownStems().
+ */
+const ORPHAN_SQL = `
+	select p.perf_file_stem as stem
+	from stage_perf p
+	left join run_perf rp on rp.perf_file_stem = p.perf_file_stem
+	where rp.perf_file_stem is null
 `;
 
 /**
@@ -79,13 +94,14 @@ export async function applyChunk(pg: PGliteInterface, chunk: ChunkResult): Promi
 		// stage_* tables are still populated, which is what both queries need.
 		// Do not move these back above batchSql.
 		const probe = await pg.query<{ stem: string; n: number }>(PROBE_SQL);
+		const orphans = await pg.query<{ stem: string }>(ORPHAN_SQL);
 		const hashes = await pg.query<{ stem: string }>(HASH_SQL);
 
 		const result: BatchResult = {
 			runs: (await count(pg, 'select count(*)::int as n from run')) - before.runs,
 			aborts: (await count(pg, 'select count(*)::int as n from unattributed_file')) - before.aborts,
 			perfsMatched: (await count(pg, 'select count(*)::int as n from run_perf')) - before.perfs,
-			orphanPerfs: probe.rows.filter((row) => row.n === 0).map((row) => row.stem),
+			orphanPerfs: orphans.rows.map((row) => row.stem),
 			ambiguousPerfs: probe.rows.filter((row) => row.n > 1).map((row) => row.stem),
 			hashMismatches: hashes.rows.map((row) => row.stem),
 		};
@@ -94,7 +110,11 @@ export async function applyChunk(pg: PGliteInterface, chunk: ChunkResult): Promi
 		await pg.exec('commit');
 		return result;
 	} catch (err) {
-		await pg.exec('rollback');
+		try {
+			await pg.exec('rollback');
+		} catch {
+			// The rollback failing must not mask the original error.
+		}
 		throw err;
 	}
 }

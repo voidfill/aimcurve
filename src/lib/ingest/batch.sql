@@ -134,11 +134,11 @@ select r.id, p.perf_file_stem, p.challenge_start_utc, p.schema_version,
        p.time_limit, p.timescale, p.map_name, p.map_scale, p.player_profile,
        p.player_team, p.player_max_lives, p.end_challenge_after_kills,
        p.end_challenge_after_damage,
-       array(select jsonb_array_elements_text(p.added_bots)),
+       array(select v from jsonb_array_elements_text(p.added_bots) with ordinality as e(v, ord) order by ord),
        case when p.bot_max_lives is null then null
-            else array(select jsonb_array_elements_text(p.bot_max_lives))::smallint[] end,
+            else array(select v from jsonb_array_elements_text(p.bot_max_lives) with ordinality as e(v, ord) order by ord)::smallint[] end,
        case when p.bot_teams is null then null
-            else array(select jsonb_array_elements_text(p.bot_teams))::smallint[] end
+            else array(select v from jsonb_array_elements_text(p.bot_teams) with ordinality as e(v, ord) order by ord)::smallint[] end
 from stage_perf p
 join run r on r.kind = 'complete'
           and r.span && tstzrange(p.challenge_start_utc,
