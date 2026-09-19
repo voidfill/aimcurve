@@ -210,3 +210,91 @@ describe('run', () => {
 		expect(r.rows).toEqual([{ shots: 1306 }]);
 	});
 });
+
+describe('detail tables', () => {
+	beforeEach(async () => {
+		await seedDimensions();
+		await pg.exec(completeRun('r1', '2026-01-01 10:20:00.503Z', '2026-01-01 10:21:00.999Z', 900));
+	});
+
+	it('accepts aligned kill arrays', async () => {
+		await pg.exec(`
+			insert into kill_series values
+			(1, '{37200600,37201200}', '{1,2}', '{1,1}', '{0.44,0.31}', '{3,2}', '{2,2}',
+			    '{100,100}', '{150,120}', '{0,1}', '{0,1}')
+		`);
+		const r = await pg.query<{ n: number }>(
+			'select cardinality(at_ms) as n from kill_series where run_id = 1',
+		);
+		expect(r.rows).toEqual([{ n: 2 }]);
+	});
+
+	it('rejects misaligned kill arrays', async () => {
+		await expect(
+			pg.exec(`
+				insert into kill_series values
+				(1, '{1,2}', '{1}', '{1,1}', '{1,1}', '{1,1}', '{1,1}',
+				    '{1,1}', '{1,1}', '{1,1}', '{0,0}')
+			`),
+		).rejects.toThrow(/kill_series_aligned/);
+	});
+
+	it('rejects misaligned tick arrays but accepts a wholly absent metric', async () => {
+		await expect(
+			pg.exec(`insert into run_series (run_id, t, score) values (1, '{1,2,3}', '{1,2}')`),
+		).rejects.toThrow(/run_series_aligned/);
+		// A tracking scenario emits no reloads at all, so that array stays null.
+		await expect(
+			pg.exec(`insert into run_series (run_id, t, score) values (1, '{1,2,3}', '{1,2,3}')`),
+		).resolves.toBeDefined();
+	});
+
+	it('rejects a .perf attached to a reset', async () => {
+		await pg.exec(`
+			insert into run (file_stem, scenario_id, config_id, game_version_id, kind,
+				written_at, hit_count, miss_count, shots)
+			values ('r2', 1, 1, 1, 'reset', '2026-01-01 10:25:00Z', 1, 1, 2)
+		`);
+		await expect(
+			pg.exec(`
+				insert into run_perf (run_id, perf_file_stem, schema_version,
+					challenge_start_utc, added_bots)
+				values (2, 'r2-perf', 1, '2026-01-01 10:25:00Z', '{air.bot}')
+			`),
+		).rejects.toThrow();
+	});
+
+	it('rejects perf bot arrays that do not align with added_bots', async () => {
+		await expect(
+			pg.exec(`
+				insert into run_perf (run_id, perf_file_stem, schema_version,
+					challenge_start_utc, added_bots, bot_teams)
+				values (1, 'r1-perf', 1, '2026-01-01 10:20:00Z', '{air.bot}', '{0,1}')
+			`),
+		).rejects.toThrow(/bots_aligned/);
+	});
+
+	it('derives run_bot accuracy and cascades every detail row on delete', async () => {
+		await pg.exec(`
+			insert into kill_series values
+			(1, '{37200600}', '{1}', '{1}', '{0.44}', '{3}', '{2}', '{100}', '{150}', '{0}', '{0}');
+			insert into run_weapon values (1, 1, 100, 70, 700, 1000);
+			insert into run_bot values (1, 1, 3, 0.44, 100, 70, 300, 450, 0);
+			insert into run_perf (run_id, perf_file_stem, schema_version, challenge_start_utc, added_bots)
+			values (1, 'r1-perf', 1, '2026-01-01 10:20:00Z', '{air.bot}');
+			insert into run_series (run_id, t, score) values (1, '{1,2,3}', '{100,110,90}');
+		`);
+		const before = await pg.query<{ accuracy: number }>('select accuracy from run_bot');
+		expect(before.rows[0]!.accuracy).toBeCloseTo(0.7);
+
+		await pg.exec(`delete from run where file_stem = 'r1'`);
+		const after = await pg.query<Record<string, number>>(`
+			select (select count(*) from kill_series)::int as kills,
+			       (select count(*) from run_weapon)::int  as weapons,
+			       (select count(*) from run_bot)::int     as bots,
+			       (select count(*) from run_perf)::int    as perfs,
+			       (select count(*) from run_series)::int  as series
+		`);
+		expect(after.rows[0]).toEqual({ kills: 0, weapons: 0, bots: 0, perfs: 0, series: 0 });
+	});
+});
