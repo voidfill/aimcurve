@@ -17,7 +17,6 @@ pnpm install
 | `pnpm build`       | static build to `dist/`                                 |
 | `pnpm check`       | `astro check` (needs TypeScript 6.x, see below)         |
 | `pnpm test`        | vitest, node environment                                |
-| `pnpm db:generate` | drizzle-kit → SQL in `drizzle/`                         |
 | `pnpm gen:proto`   | buf + protoc-gen-es → `src/gen/`                        |
 
 ## Layout
@@ -70,15 +69,39 @@ the two filenames can disagree by a second, and `Challenge Start` is not a uniqu
 ## Database
 
 No server. `src/db/client.ts` opens PGlite against IndexedDB (`idb://aimcurve`) in the
-browser; tests open an in-memory instance. Both share `src/db/schema.ts` and apply the
-same generated SQL.
+browser; tests open an in-memory instance. Both apply the same hand-written SQL.
 
-`drizzle-kit`'s node migrator is filesystem-bound, so migrations are loaded through
-`import.meta.glob('../../drizzle/*.sql', { query: '?raw' })` in `src/db/migrations.ts` and
-applied by `src/db/migrate.ts`, which tracks what has run in a `_migrations` table — the
-browser database persists, so migration runs must be idempotent.
+Migrations are hand-written, numbered SQL files in `src/db/sql/`, named
+`NNNN_<topic>.sql` — the filename is the migration's identity. They are loaded through
+`import.meta.glob('./sql/*.sql', { query: '?raw' })` in `src/db/migrations.ts` and applied,
+in ascending filename order, by `src/db/migrate.ts`, which tracks what has run in a
+`_migrations` table — the browser database persists, so migration runs must be
+idempotent. There is no `drizzle-kit`: the schema leans on views, generated columns,
+exclusion constraints, partial and covering indexes, triggers, and arrays with
+alignment checks, almost none of which drizzle-kit models. Drizzle stays on as a typed
+client only (`src/db/schema.ts` is deliberately empty — `export {}` — until a query
+layer needs typed access to a specific table).
 
-Adding a table: edit `src/db/schema.ts` → `pnpm db:generate` → commit the new SQL file.
+Adding a table: add a new `src/db/sql/NNNN_topic.sql`. Never edit an already-applied
+one — see the reset rules below.
+
+**Reset rules.** `applyMigrations` can decide the existing database can't be trusted,
+and answers by dropping `public` and replaying every migration from scratch — which
+means discarding all imported run history. Five conditions trigger this:
+
+1. A pending migration declares itself destructive with `-- reset: <reason>` on its
+   first line.
+2. An already-applied migration's text changed since it ran. **Editing a migration file
+   after it has shipped will wipe every user's local data on their next page load** —
+   add a new file instead.
+3. An applied migration's file has disappeared.
+4. Applied migrations are out of step with the file list's order (e.g. a branch merge
+   inserts a lower-numbered file after a higher one already ran).
+5. The `_migrations` bookkeeping table predates hash tracking, so there is no hash to
+   compare against.
+
+Hashing normalizes line endings and trims trailing whitespace first, so a CRLF
+checkout does not itself trip rule 2.
 
 ## Protobuf
 

@@ -73,6 +73,116 @@ describe('kill', () => {
 	});
 });
 
+describe('tick and kill column alignment', () => {
+	// tick and kill build every non-key column from a single `unnest(...)`
+	// argument list zipped against an `as x(...)` alias list, purely by
+	// position. Swapping two arguments of compatible type — damage_done and
+	// damage_possible, say — still runs, still returns the same number of
+	// rows, and every other test in this file still passes; only the values
+	// under the swapped names change. The tests above only ever check three
+	// of tick's sixteen columns and three of kill's fifteen, so a positional
+	// swap anywhere else would go undetected. This asserts every column of
+	// both views for run 1, derived by hand from the fixture above, so such a
+	// swap fails here even when it fails nowhere else.
+	it('reports every tick and kill column at its fixture-derived value', async () => {
+		const ticks = await pg.query('select * from tick where run_id = 1 order by tick_no');
+		expect(ticks.rows).toEqual([
+			{
+				run_id: 1,
+				tick_no: 0,
+				t: 1,
+				shots_fired: null,
+				shots_hit: null,
+				shots_missed: null,
+				damage_done: null,
+				damage_possible: null,
+				score: 100,
+				kills: null,
+				overshots: null,
+				player_damage_taken: null,
+				reloads: null,
+				pause_count: null,
+				distance_traveled: null,
+				mbs_points: null,
+			},
+			{
+				run_id: 1,
+				tick_no: 1,
+				t: 2,
+				shots_fired: null,
+				shots_hit: null,
+				shots_missed: null,
+				damage_done: null,
+				damage_possible: null,
+				score: 110,
+				kills: null,
+				overshots: null,
+				player_damage_taken: null,
+				reloads: null,
+				pause_count: null,
+				distance_traveled: null,
+				mbs_points: null,
+			},
+			{
+				run_id: 1,
+				tick_no: 2,
+				t: 3,
+				shots_fired: null,
+				shots_hit: null,
+				shots_missed: null,
+				damage_done: null,
+				damage_possible: null,
+				score: 90,
+				kills: null,
+				overshots: null,
+				player_damage_taken: null,
+				reloads: null,
+				pause_count: null,
+				distance_traveled: null,
+				mbs_points: null,
+			},
+		]);
+
+		const kills = await pg.query('select * from kill where run_id = 1 order by ordinal');
+		expect(kills.rows).toEqual([
+			{
+				run_id: 1,
+				ordinal: 0,
+				at_ms: 37200600,
+				bot_id: 1,
+				weapon_id: 1,
+				ttk: expect.closeTo(0.44, 3),
+				shots: 3,
+				hits: 2,
+				damage_done: 100,
+				damage_possible: 150,
+				overshots: 0,
+				cheated: false,
+				accuracy: expect.closeTo(2 / 3, 3),
+				efficiency: expect.closeTo(100 / 150, 3),
+				t_offset: expect.closeTo(0.097, 3),
+			},
+			{
+				run_id: 1,
+				ordinal: 1,
+				at_ms: 37201200,
+				bot_id: 2,
+				weapon_id: 1,
+				ttk: expect.closeTo(0.31, 3),
+				shots: 2,
+				hits: 2,
+				damage_done: 100,
+				damage_possible: 120,
+				overshots: 1,
+				cheated: true,
+				accuracy: expect.closeTo(1, 3),
+				efficiency: expect.closeTo(100 / 120, 3),
+				t_offset: expect.closeTo(0.697, 3),
+			},
+		]);
+	});
+});
+
 describe('run_complete', () => {
 	it('excludes resets, resolves dimensions, and derives has_perf', async () => {
 		const r = await pg.query<{ file_stem: string; scenario_name: string; has_perf: boolean }>(
