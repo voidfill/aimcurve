@@ -28,7 +28,7 @@ export interface InputFile {
 }
 
 export interface ChunkResult {
-	payloads: Record<StageTable, Uint8Array>;
+	payloads: Record<StageTable, Uint8Array<ArrayBuffer>>;
 	failures: { name: string; error: string }[];
 	csvStems: string[];
 	perfStems: string[];
@@ -84,7 +84,7 @@ export function buildChunk(files: InputFile[]): ChunkResult {
 
 	const payloads = Object.fromEntries(
 		STAGE_TABLES.map((t) => [t, writers[t].bytes()]),
-	) as Record<StageTable, Uint8Array>;
+	) as Record<StageTable, Uint8Array<ArrayBuffer>>;
 	return { payloads, failures, csvStems, perfStems };
 }
 

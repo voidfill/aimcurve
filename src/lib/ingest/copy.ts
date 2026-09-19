@@ -29,7 +29,7 @@ export class CopyWriter {
 		this.#parts.push(cells.map(cell).join('\t'), '\n');
 	}
 
-	bytes(): Uint8Array {
+	bytes(): Uint8Array<ArrayBuffer> {
 		return new TextEncoder().encode(this.#parts.join(''));
 	}
 }
