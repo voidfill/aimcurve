@@ -1,10 +1,7 @@
-import { pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
-
-export const notes = pgTable('notes', {
-	id: serial('id').primaryKey(),
-	body: text('body').notNull(),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type Note = typeof notes.$inferSelect;
-export type NewNote = typeof notes.$inferInsert;
+/**
+ * Drizzle models. Empty for now: `notes` is gone, and the run schema lives in
+ * `src/db/sql/`, where views, generated columns, exclusion constraints and
+ * array alignment checks can be expressed. Models get added here as the ingest
+ * and query layers need typed access to specific tables.
+ */
+export {};

@@ -1,4 +1,4 @@
-const modules = import.meta.glob('../../drizzle/*.sql', {
+const modules = import.meta.glob('./sql/*.sql', {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -9,7 +9,7 @@ export interface Migration {
 	sql: string;
 }
 
-/** Generated migrations, ordered by their numeric filename prefix. */
+/** Migrations, ordered by their numeric filename prefix. */
 export const migrations: Migration[] = Object.entries(modules)
 	.sort(([a], [b]) => a.localeCompare(b))
 	.map(([path, sql]) => ({ name: path.split('/').pop()!, sql }));

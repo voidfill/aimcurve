@@ -12,51 +12,5 @@
 	</head>
 	<body>
 		<h1>aimcurve</h1>
-
-		<form id="note-form">
-			<input id="note-body" name="body" placeholder="a note" required autocomplete="off" />
-			<button type="submit">add</button>
-		</form>
-
-		<ul id="notes">
-			<li>loading…</li>
-		</ul>
-
-		<script>
-			import { desc } from 'drizzle-orm';
-			import { getDb } from '../db/client';
-			import { notes } from '../db/schema';
-
-			const list = document.getElementById('notes')!;
-			const form = document.getElementById('note-form') as HTMLFormElement;
-			const input = document.getElementById('note-body') as HTMLInputElement;
-
-			async function render() {
-				const db = await getDb();
-				const rows = await db.select().from(notes).orderBy(desc(notes.id));
-
-				list.replaceChildren(
-					...rows.map((row) => {
-						const li = document.createElement('li');
-						li.textContent = `#${row.id} ${row.body} (${row.createdAt.toISOString()})`;
-						return li;
-					}),
-				);
-
-				if (rows.length === 0) list.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'no notes yet' }));
-			}
-
-			form.addEventListener('submit', async (event) => {
-				event.preventDefault();
-				const body = input.value.trim();
-				if (!body) return;
-				const db = await getDb();
-				await db.insert(notes).values({ body });
-				input.value = '';
-				await render();
-			});
-
-			await render();
-		</script>
 	</body>
 </html>
