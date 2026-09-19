@@ -39,6 +39,14 @@ describe('classify', () => {
 		expect(timing).toMatchObject({ kind: 'reset', startedAt: null, startMs: null, durationS: null });
 	});
 
+	it('keeps a Challenge Start up to one minute after the file write as a reset', () => {
+		const name = curated.list('stats').find((n) => n.includes('Air Pure Medium') && n.includes('18.44.15'))!;
+		const csv = parseStatsCsv(curated.text('stats', name));
+		csv.settings.challengeStart = '18:44:45.000';
+
+		expect(classify(name, csv)).toMatchObject({ kind: 'reset', startedAt: null, startMs: null, durationS: null });
+	});
+
 	it('strips the suffix to a stem shared by a CSV and its perf', () => {
 		expect(fileStem('Air Pure Medium - Challenge - 2026.09.18-18.44.15 Stats.csv'))
 			.toBe('Air Pure Medium - Challenge - 2026.09.18-18.44.15');

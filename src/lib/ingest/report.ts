@@ -8,7 +8,7 @@
 export interface IngestReport {
 	/** Files the source listed. */
 	scanned: number;
-	/** Files whose stem was already in the database, so never opened. */
+	/** Files excluded from ingest because their stem was known or their suffix was unsupported. */
 	skipped: number;
 	runs: number;
 	aborts: number;

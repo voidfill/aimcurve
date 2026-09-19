@@ -3,6 +3,9 @@ dist/
 # generated types
 .astro/
 
+# local Superpowers execution artifacts
+.superpowers/
+
 # dependencies
 node_modules/
 

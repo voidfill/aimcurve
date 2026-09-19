@@ -33,17 +33,23 @@ if (typeof window === 'undefined' && typeof self !== 'undefined' && 'onmessage' 
 /** Wraps a live `Worker` as the `build` option `ingest()` takes. */
 export function workerBuilder(worker: Worker): ChunkBuilder {
 	let next = 0;
-	const pending = new Map<number, (result: ChunkResult) => void>();
+	const pending = new Map<number, { resolve: (result: ChunkResult) => void; reject: (error: Error) => void }>();
 
 	worker.addEventListener('message', (event: MessageEvent<Response>) => {
-		pending.get(event.data.id)?.(event.data.result);
+		pending.get(event.data.id)?.resolve(event.data.result);
 		pending.delete(event.data.id);
 	});
 
+	worker.addEventListener('error', (event) => {
+		const error = new Error(event.message || 'ingest worker failed');
+		for (const request of pending.values()) request.reject(error);
+		pending.clear();
+	});
+
 	return (files) =>
-		new Promise<ChunkResult>((resolve) => {
+		new Promise<ChunkResult>((resolve, reject) => {
 			const id = next++;
-			pending.set(id, resolve);
+			pending.set(id, { resolve, reject });
 			worker.postMessage({ id, files } satisfies Request, files.map((file) => file.bytes.buffer));
 		});
 }

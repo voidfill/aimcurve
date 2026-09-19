@@ -80,7 +80,7 @@ export function classify(name: string, csv: StatsCsv): Timing {
 	// `Challenge Start` has no date, so the date comes from the filename — which
 	// is the *write* time. A run starting at 23:59:40 is written the next day.
 	// No fixture exercises this; docs/ingest.md lists it as an open gap.
-	if (startedAt.getTime() > writtenAt.getTime()) startedAt = new Date(startedAt.getTime() - 86_400_000);
+	if (startedAt.getTime() - writtenAt.getTime() > 60_000) startedAt = new Date(startedAt.getTime() - 86_400_000);
 
 	const durationMs = writtenAt.getTime() - startedAt.getTime();
 	// A reset file is stamped with the *next* attempt's start but written now,

@@ -4,9 +4,9 @@
 -- file exactly once, which is the opposite of what a per-chunk script needs.
 -- This file is loaded with `?raw` and executed on every batch.
 --
--- Every insert is `on conflict do nothing` without a target, so it absorbs a
--- re-ingest, a two-tab race, and a run that already has its perf, whichever
--- unique constraint catches it first.
+-- Most inserts are `on conflict do nothing` without a target. The file-stem
+-- inserts target only their dedupe keys, so other constraint violations still
+-- reach the ingest failure-isolation path.
 
 -- 1. Dimensions ------------------------------------------------------------
 
@@ -62,11 +62,11 @@ join config       cf on (cf.sens_scale, cf.sens_increment, cf.horiz_sens, cf.ver
                          s.dpi, s.fov, s.fov_scale, s.hide_gun, s.crosshair,
                          s.crosshair_scale, s.crosshair_color, s.resolution,
                          s.resolution_scale, s.max_fps_config, s.input_lag)
-on conflict do nothing;
+on conflict (file_stem) do nothing;
 
 insert into unattributed_file (file_stem, written_at, payload)
 select file_stem, written_at, payload from stage_unattributed
-on conflict do nothing;
+on conflict (file_stem) do nothing;
 
 -- 3. Per-run detail --------------------------------------------------------
 
@@ -143,7 +143,7 @@ from stage_perf p
 join run r on r.kind = 'complete'
           and r.span && tstzrange(p.challenge_start_utc,
                                   p.challenge_start_utc + interval '1 second')
-on conflict do nothing;
+on conflict (perf_file_stem) do nothing;
 
 -- 5. The tick series -------------------------------------------------------
 --
