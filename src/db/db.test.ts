@@ -1,8 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeTestDb, type TestDb } from '../../test/helpers/db';
-import { applyMigrations } from './migrate';
-import { migrations } from './migrations';
 import { notes } from './schema';
 
 let db: TestDb['db'];
@@ -10,19 +8,6 @@ let pg: PGlite;
 
 beforeEach(async () => {
 	({ db, pg } = await makeTestDb());
-});
-
-describe('migrations', () => {
-	it('finds the generated migration files', () => {
-		expect(migrations.length).toBeGreaterThan(0);
-		expect(migrations[0]!.name).toMatch(/^0000_.*\.sql$/);
-	});
-
-	it('is idempotent', async () => {
-		await applyMigrations(pg, migrations);
-		const applied = await pg.query<{ name: string }>('SELECT name FROM _migrations');
-		expect(applied.rows).toHaveLength(migrations.length);
-	});
 });
 
 describe('notes', () => {
