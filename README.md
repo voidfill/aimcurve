@@ -1,6 +1,6 @@
 # aimcurve
 
-Static Astro site with a client-side Postgres (PGlite + Drizzle) and protobuf codegen.
+Static Vue 3 single-page application with a client-side Postgres (PGlite + Drizzle) and protobuf codegen.
 
 ## Setup
 
@@ -13,9 +13,9 @@ pnpm install
 
 | script             | what                                                   |
 | ------------------ | ------------------------------------------------------ |
-| `pnpm dev`         | astro dev server                                        |
+| `pnpm dev`         | vite dev server (port 4321, strict)                      |
 | `pnpm build`       | static build to `dist/`                                 |
-| `pnpm check`       | `astro check` (needs TypeScript 6.x, see below)         |
+| `pnpm check`       | `vue-tsc --noEmit` (needs TypeScript 6.x, see below)     |
 | `pnpm test`        | vitest, node environment                                |
 | `pnpm gen:proto`   | buf + protoc-gen-es → `src/gen/`                        |
 
@@ -25,7 +25,9 @@ pnpm install
 src/lib/     core calculation logic — pure, runs in the browser and in vitest
 src/db/      schema, migrations, and the browser PGlite client
 src/gen/     generated protobuf code
-src/pages/   astro pages
+src/views/       top-level routed views
+src/components/  shared UI components
+src/composables/ shared reactive logic (Vue composables)
 test/helpers shared test helpers (node-only)
 test/fixtures  curated/ is committed (Git LFS), raw/ is the gitignored dump
 docs/        reverse-engineered format and ingest notes
@@ -110,7 +112,10 @@ no codegen). Uses `@bufbuild/protobuf`'s schema API: `create`, `toBinary`, `from
 
 ## Notes
 
-- `typescript` is pinned to 6.x: `@astrojs/check` relies on a programmatic API that
-  TypeScript 7 does not ship yet.
-- PGlite is excluded from Vite's dep pre-bundling (`astro.config.mjs`) because it ships
+- `typescript` is pinned to 6.x: `vue-tsc`'s own `peerDependencies` accept
+  `typescript >=5.0.0` with no upper bound, so nothing in `vue-tsc` itself forces this
+  cap. The pin stays because TypeScript 7 is not published as a stable release yet
+  (only `7.x-dev` prereleases exist), so the project tracks the latest released 6.x
+  line rather than an unstable prerelease.
+- PGlite is excluded from Vite's dep pre-bundling (`vite.config.ts`) because it ships
   wasm and a worker. The `eval` warnings during build come from its wasm loader.
