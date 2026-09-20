@@ -9,6 +9,7 @@
  * as route-exact-active: while following, the selected row's link is not the
  * current URL.
  */
+import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
 import type { Attempt } from '../lib/run/queries';
 
@@ -24,14 +25,15 @@ const timeFormat = new Intl.DateTimeFormat(undefined, {
 });
 const scoreFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 
-function startedAt(): string {
-	return timeFormat.format(new Date(props.attempt.startedAt));
-}
+// Computed, not called from the template: a settled pass replaces the whole
+// rail array, so every row re-renders, and a method would re-run both `Intl`
+// formats on each of them even when the row's own attempt is unchanged.
+const startedAt = computed(() => timeFormat.format(new Date(props.attempt.startedAt)));
 
-function score(): string {
-	// Null is absent, not zero.
-	return props.attempt.score === null ? 'No score recorded' : scoreFormat.format(props.attempt.score);
-}
+// Null is absent, not zero.
+const score = computed(() =>
+	props.attempt.score === null ? 'No score recorded' : scoreFormat.format(props.attempt.score),
+);
 </script>
 
 <template>
@@ -43,9 +45,9 @@ function score(): string {
 			:aria-current="selected ? 'true' : undefined"
 			@click="navigate"
 		>
-			<span class="time">{{ startedAt() }}</span>
+			<span class="time">{{ startedAt }}</span>
 			<span class="scenario">{{ attempt.scenarioName }}</span>
-			<span class="score" :class="{ absent: attempt.score === null }">{{ score() }}</span>
+			<span class="score" :class="{ absent: attempt.score === null }">{{ score }}</span>
 			<span v-if="!attempt.hasPerf" class="detail">No performance detail</span>
 		</a>
 	</RouterLink>

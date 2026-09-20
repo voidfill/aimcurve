@@ -33,6 +33,14 @@ const { state } = useImport();
  */
 const announcement = ref('');
 
+/**
+ * The timestamp of the pass this region last spoke about. `lastImportAt` only
+ * advances on a pass that actually did work, so an unchanged one means the pass
+ * that just settled imported nothing — and announcing the previous pass's counts
+ * again would be a claim about an import that did not happen.
+ */
+let announcedAt: string | null = null;
+
 watch(
 	() => state.busy,
 	(busy, was) => {
@@ -42,6 +50,9 @@ watch(
 			announcement.value = state.message ?? 'Import finished.';
 			return;
 		}
+		const at = state.lastImportAt;
+		if (at === null || at === announcedAt) return;
+		announcedAt = at;
 		const added = `Import finished. ${report.runs} ${report.runs === 1 ? 'attempt' : 'attempts'} added.`;
 		announcement.value =
 			report.failures.length > 0

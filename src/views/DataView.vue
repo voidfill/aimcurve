@@ -6,14 +6,13 @@
  * page is open updates it in place. Nothing here navigates on a commit: the
  * route is the user's, not the importer's.
  */
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import ConnectionStatus from '../components/ConnectionStatus.vue';
 import ImportControls from '../components/ImportControls.vue';
 import ImportReport from '../components/ImportReport.vue';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
-import type { IngestReport } from '../lib/ingest/report';
 
 const { ready, error: dbError, migration, retry: retryDb } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
@@ -21,35 +20,10 @@ const { rememberedRunRoute } = useSelection();
 
 const importDisabled = computed(() => !ready.value || dbError.value !== null);
 
-/**
- * A folder pass that finds nothing still produces a report, all zeros. Letting
- * that overwrite the last report would quietly erase the failures the user still
- * has to act on, so a pass only replaces what is shown when it did work or found
- * something actionable — or when nothing has been shown yet.
- */
-const shown = shallowRef<IngestReport | null>(null);
-
-function actionable(report: IngestReport): boolean {
-	return (
-		report.runs > 0 ||
-		report.aborts > 0 ||
-		report.perfsMatched > 0 ||
-		report.failures.length > 0 ||
-		report.orphanPerfs.length > 0 ||
-		report.ambiguousPerfs.length > 0 ||
-		report.hashMismatches.length > 0
-	);
-}
-
-watch(
-	() => state.report,
-	(report) => {
-		if (report === null) return;
-		if (shown.value === null || actionable(report)) shown.value = report;
-	},
-	{ immediate: true },
-);
-
+// `state.report` and `state.lastImportAt` already describe the last pass that
+// did work — a no-op background poll leaves both alone — so this page renders
+// them directly. Guarding here instead would only hold while the page stayed
+// mounted, and a trip to Run and back would lose the guard with it.
 const lastImport = ref<string | null>(null);
 const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 watch(
@@ -101,7 +75,7 @@ function onImportFiles(files: File[]): void {
 		<p v-if="lastImport !== null" class="muted">Last import: {{ lastImport }}</p>
 		<p v-else class="muted">No import has finished in this browser yet.</p>
 
-		<ImportReport v-if="shown !== null" :report="shown" />
+		<ImportReport v-if="state.report !== null" :report="state.report" />
 	</div>
 </template>
 

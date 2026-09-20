@@ -135,6 +135,20 @@ export function useAttempts(): AttemptsApi {
 	const hasNewer = ref(false);
 
 	/**
+	 * The only writer of the rail's committed page. List, cursor and page count
+	 * are one fact about one result set, so they are written together and the
+	 * count is derived from what was actually committed — a refresh and a
+	 * `Load older` that interleave cannot leave it describing a different list
+	 * than `items` holds.
+	 */
+	function commitRail(rows: Attempt[], next: AttemptCursor | null, pages: number): void {
+		items.value = rows;
+		cursor.value = next;
+		pagesLoaded = pages;
+		railError.value = null;
+	}
+
+	/**
 	 * The head of a freshly loaded first page is the newest eligible attempt.
 	 * Following keeps the baseline pinned to it, so nothing can look newer;
 	 * inspecting compares against the baseline taken when inspection started.
@@ -181,6 +195,18 @@ export function useAttempts(): AttemptsApi {
 		return { items: collected, next: before, pages: loaded };
 	}
 
+	/** The refresh currently in flight, so a discarded `Load older` can wait it out. */
+	let railPass: Promise<void> | null = null;
+
+	/** Every refresh goes through here, so `railPass` always names the live one. */
+	function refreshRail(keepPages: boolean): Promise<void> {
+		const pass = loadRail(keepPages).finally(() => {
+			if (railPass === pass) railPass = null;
+		});
+		railPass = pass;
+		return pass;
+	}
+
 	/**
 	 * `keepPages` re-fetches every page the rail already shows and replaces the
 	 * list with the result, so a commit refreshes loaded older rows in place
@@ -200,22 +226,16 @@ export function useAttempts(): AttemptsApi {
 		}
 		if (filter === 'unknown') {
 			// Show nothing rather than silently widening to every scenario.
-			items.value = [];
-			cursor.value = null;
-			pagesLoaded = 1;
+			commitRail([], null, 1);
 			railState.value = 'ready';
 			return;
 		}
 		const pages = keepPages ? pagesLoaded : 1;
-		if (!keepPages) pagesLoaded = 1;
 		railState.value = 'loading';
 		try {
 			const result = await fetchPages(handle, scenarioId.value, pages, gen);
 			if (result === null) return;
-			items.value = result.items;
-			cursor.value = result.next;
-			pagesLoaded = result.pages;
-			railError.value = null;
+			commitRail(result.items, result.next, result.pages);
 			railState.value = 'ready';
 			observeHead(result.items[0] ?? null);
 		} catch (err) {
@@ -225,22 +245,45 @@ export function useAttempts(): AttemptsApi {
 		}
 	}
 
-	async function loadOlder(): Promise<void> {
+	/**
+	 * `retry` is spent on the one thing that can legitimately discard a resolved
+	 * page: a refresh that committed while it was in flight. Discarding it is
+	 * correct — it was paged against a list that no longer exists — but simply
+	 * dropping it leaves the button looking dead, so the click is re-dispatched
+	 * once, after that refresh has committed, from the cursor it left behind.
+	 * Waiting is what makes the retry contiguous: paging from the old cursor
+	 * against a list whose head has moved would leave a hole in the rail.
+	 */
+	async function fetchOlder(retry: boolean): Promise<void> {
 		const handle = pg.value;
 		const before = cursor.value;
-		if (handle === null || before === null || loadingOlder.value) return;
+		if (handle === null || before === null) return;
 		const gen = railGen;
-		loadingOlder.value = true;
 		try {
 			const page = await listAttempts(handle, scenarioId.value, before);
-			if (gen !== railGen) return;
+			if (gen !== railGen) {
+				if (!retry) return;
+				if (railPass !== null) await railPass;
+				await fetchOlder(false);
+				return;
+			}
 			const known = new Set(items.value.map((attempt) => attempt.fileStem));
-			items.value = [...items.value, ...page.items.filter((row) => !known.has(row.fileStem))];
-			cursor.value = page.next;
-			pagesLoaded += 1;
+			commitRail(
+				[...items.value, ...page.items.filter((row) => !known.has(row.fileStem))],
+				page.next,
+				pagesLoaded + 1,
+			);
 		} catch (err) {
 			if (gen !== railGen) return;
 			railError.value = errorText(err);
+		}
+	}
+
+	async function loadOlder(): Promise<void> {
+		if (loadingOlder.value) return;
+		loadingOlder.value = true;
+		try {
+			await fetchOlder(true);
 		} finally {
 			loadingOlder.value = false;
 		}
@@ -254,6 +297,22 @@ export function useAttempts(): AttemptsApi {
 	const selectionState = ref<SelectionState>('idle');
 	const selectionError = ref<string | null>(null);
 	let selectionGen = 0;
+	/** The stem `selected` was last resolved for; `null` while following. */
+	let resolvedStem: string | null = null;
+
+	/**
+	 * A settled import pass re-reads the selection, and under the ten-second
+	 * polling fallback that is every ten seconds. Flipping to `loading` each time
+	 * would blank the result the user is reading, so a refresh of the *same*
+	 * selection keeps the resolved summary on screen while it is in flight. A
+	 * different stem still shows the loading line: continuing to render the
+	 * previous attempt under a link that names another one would be showing the
+	 * wrong run.
+	 */
+	function beginSelectionLoad(stem: string | null): void {
+		if (selected.value !== null && resolvedStem === stem) return;
+		selectionState.value = 'loading';
+	}
 
 	/**
 	 * An inspected attempt is fetched by its own identity, never taken from the
@@ -272,23 +331,26 @@ export function useAttempts(): AttemptsApi {
 		const stem = fileStem.value;
 		if (filter === 'pending' && stem === null) {
 			// Following: which attempt is latest depends on the unresolved hash.
-			selectionState.value = 'loading';
+			beginSelectionLoad(stem);
 			return;
 		}
-		selectionState.value = 'loading';
+		beginSelectionLoad(stem);
 		try {
 			if (stem !== null) {
 				const attempt = await getAttempt(handle, stem);
 				if (gen !== selectionGen) return;
 				selected.value = attempt;
+				resolvedStem = stem;
 				selectionState.value = attempt === null ? 'missing' : 'ready';
 			} else if (filter === 'unknown') {
 				selected.value = null;
+				resolvedStem = null;
 				selectionState.value = 'empty';
 			} else {
 				const attempt = await getLatestAttempt(handle, scenarioId.value);
 				if (gen !== selectionGen) return;
 				selected.value = attempt;
+				resolvedStem = null;
 				selectionState.value = attempt === null ? 'empty' : 'ready';
 			}
 			selectionError.value = null;
@@ -329,7 +391,7 @@ export function useAttempts(): AttemptsApi {
 	watch(
 		[pg, filterState, scenarioId],
 		() => {
-			void loadRail(false);
+			void refreshRail(false);
 		},
 		{ immediate: true },
 	);
@@ -349,7 +411,7 @@ export function useAttempts(): AttemptsApi {
 	// following mode it re-reads the filter's latest, which is the only way the
 	// selection advances.
 	watch(revision, () => {
-		void loadRail(true);
+		void refreshRail(true);
 		void loadSelection();
 	});
 
@@ -379,7 +441,7 @@ export function useAttempts(): AttemptsApi {
 		hasNewer,
 		retry: () => {
 			void loadScenarios();
-			void loadRail(true);
+			void refreshRail(true);
 			void loadSelection();
 		},
 	};

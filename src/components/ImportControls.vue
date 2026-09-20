@@ -11,13 +11,22 @@
  * activation of the click to open a directory picker, so nothing may be
  * awaited before it.
  */
+import { computed } from 'vue';
 import { canPickDirectory, type Connection } from '../lib/run/import-controller';
 
-defineProps<{
+const props = defineProps<{
 	connection: Connection;
 	busy: boolean;
 	disabled: boolean;
 }>();
+
+/**
+ * `connected`, `reconnect` and `error` all leave something to drop: a live
+ * watcher, a stored folder permission, or both. `none` has nothing and
+ * `snapshot` has nothing either — its handle is already cleared and nothing is
+ * watched — so offering it there would name a connection that does not exist.
+ */
+const canDisconnect = computed(() => props.connection !== 'none' && props.connection !== 'snapshot');
 
 const emit = defineEmits<{
 	(event: 'connect'): void;
@@ -59,7 +68,14 @@ function onFiles(event: Event): void {
 			<button v-if="connection === 'reconnect'" type="button" :disabled="disabled" @click="emit('reconnect')">
 				Reconnect
 			</button>
-			<button v-if="connection === 'connected'" type="button" :disabled="disabled" @click="emit('disconnect')">
+			<!--
+				Offered in every state where a folder is still connected, still
+				stored, or still being polled — not just the healthy one. In
+				`reconnect` a handle sits in this browser with nothing else to
+				forget it, and in `error` the folder is still being checked. Not
+				offered for `snapshot`: nothing is connected there to disconnect.
+			-->
+			<button v-if="canDisconnect" type="button" :disabled="disabled" @click="emit('disconnect')">
 				Disconnect folder
 			</button>
 			<button v-if="connection === 'error'" type="button" :disabled="disabled || busy" @click="emit('retry-scan')">
@@ -67,7 +83,7 @@ function onFiles(event: Event): void {
 			</button>
 		</div>
 
-		<p v-if="connection === 'connected'" class="muted">
+		<p v-if="canDisconnect" class="muted">
 			Disconnecting forgets this browser's permission for the folder and stops checking it. Attempts
 			already imported stay exactly as they are.
 		</p>

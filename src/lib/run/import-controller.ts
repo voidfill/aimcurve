@@ -52,12 +52,20 @@ export interface ImportState {
 	busy: boolean;
 	progress: { done: number; total: number } | null;
 	/**
-	 * The report of this session's latest settled pass, held in memory only.
+	 * The report of this session's latest settled pass *that did work or found
+	 * something to act on*, held in memory only. A background poll that finds
+	 * nothing leaves it alone, so an actionable report is never erased by the
+	 * ten-second fallback cadence.
+	 *
 	 * Its counts are not what they look like: `runs` includes resets, `aborts`
 	 * are unattributed files, and `skipped` combines already-known stems with
 	 * unsupported suffixes.
 	 */
 	report: IngestReport | null;
+	/**
+	 * When a pass last did work. It does not advance on a pass that imported
+	 * nothing: "Last import" must name an import that happened.
+	 */
 	lastImportAt: string | null;
 	message: string | null;
 }
@@ -92,10 +100,22 @@ const SCHEMA_VERSION = 1;
 
 type SourceMode = 'folder' | 'snapshot';
 
+/**
+ * What the persisted record remembers about the last explicit choice.
+ * `disconnected` is not a source: it records that the user dropped the
+ * connection, so a stored handle that outlives a failed `clearDirectoryHandle`
+ * is never resumed on the next load.
+ */
+type PersistedMode = SourceMode | 'disconnected';
+
 interface PersistedMeta {
 	version: typeof SCHEMA_VERSION;
 	lastImportAt: string | null;
-	mode: SourceMode | null;
+	mode: PersistedMode | null;
+}
+
+function isPersistedMode(value: unknown): value is PersistedMode {
+	return value === 'folder' || value === 'snapshot' || value === 'disconnected';
 }
 
 /**
@@ -116,7 +136,7 @@ function loadMeta(): PersistedMeta | null {
 		return {
 			version: SCHEMA_VERSION,
 			lastImportAt: typeof record.lastImportAt === 'string' ? record.lastImportAt : null,
-			mode: record.mode === 'folder' || record.mode === 'snapshot' ? record.mode : null,
+			mode: isPersistedMode(record.mode) ? record.mode : null,
 		};
 	} catch {
 		// Blocked site data, a quota error, or corrupt JSON. Starting from
@@ -184,6 +204,24 @@ const NO_PICKER =
 const HANDLE_WARNING =
 	'Imported. The browser would not remember this folder, so you will have to pick it again after a reload.';
 const META_WARNING = 'Imported. The browser would not remember when this import happened.';
+
+/**
+ * Whether a settled pass changed anything or found anything the user may have
+ * to act on. Files merely scanned and skipped are neither: re-reading the same
+ * already-imported folder is not an import. `skipped` is deliberately not
+ * consulted for that reason.
+ */
+function didWork(report: IngestReport): boolean {
+	return (
+		report.runs > 0 ||
+		report.aborts > 0 ||
+		report.perfsMatched > 0 ||
+		report.failures.length > 0 ||
+		report.orphanPerfs.length > 0 ||
+		report.ambiguousPerfs.length > 0 ||
+		report.hashMismatches.length > 0
+	);
+}
 
 /** A truthful one-liner about what the pass could not do. Null when it did it all. */
 function warningFor(report: IngestReport): string | null {
@@ -259,7 +297,7 @@ export function createImportController(
 		return build;
 	}
 
-	function persist(mode: SourceMode | null, lastImportAt: string | null): boolean {
+	function persist(mode: PersistedMode | null, lastImportAt: string | null): boolean {
 		return saveMeta({ version: SCHEMA_VERSION, lastImportAt, mode });
 	}
 
@@ -353,12 +391,18 @@ export function createImportController(
 			return;
 		}
 
-		const at = new Date().toISOString();
+		// A folder pass that finds nothing still produces a report — all zeros —
+		// and the polling fallback produces one every ten seconds. Letting that
+		// overwrite `report` would erase the failures the user still has to act
+		// on, and advancing `lastImportAt` would claim an import that never
+		// happened. The mode is still persisted either way: it records which kind
+		// of source is connected, not that a pass did work.
+		const worked = didWork(report);
+		const at = worked ? new Date().toISOString() : state.lastImportAt;
 		const savedOk = persist(current.mode, at);
 		patch({
-			report,
-			lastImportAt: at,
-			message: warningFor(report) ?? (savedOk ? idleMessage() : META_WARNING),
+			...(worked ? { report, lastImportAt: at } : {}),
+			message: warningFor(report) ?? (savedOk || !worked ? idleMessage() : META_WARNING),
 		});
 	}
 
@@ -421,8 +465,22 @@ export function createImportController(
 	/* --------------------------------------------------------------- actions */
 
 	async function restore(): Promise<void> {
-		if (restored || disposed) return;
+		if (restored || disposed || switching) return;
 		restored = true;
+
+		/**
+		 * Restore is the only activator that no user asked for, so it must lose
+		 * every race it is in. It deliberately does not hold `switching` across
+		 * its metadata reads — that would silently refuse a click made in the
+		 * window it owns — and instead re-checks after each await: a picker that
+		 * opened, a snapshot that was imported, or a disconnect that happened
+		 * since all leave a mark here, and any of them ends the restore. The
+		 * interlock is taken for the activation itself, exactly as every other
+		 * activator takes it.
+		 */
+		const startedAt = generation;
+		const superseded = (): boolean =>
+			disposed || switching || generation !== startedAt || active !== null;
 
 		const meta = loadMeta();
 		patch({ lastImportAt: meta?.lastImportAt ?? null });
@@ -433,18 +491,30 @@ export function createImportController(
 		} catch {
 			handle = null;
 		}
+		if (superseded()) return;
 		if (handle === null) {
 			// A snapshot's timestamp survives, but its `FileList` does not: the
 			// UI offers Reimport, which is a fresh pick.
 			patch({ connection: 'none', message: meta?.mode === 'snapshot' ? SNAPSHOT_RESTORED : null });
 			return;
 		}
-		savedHandle = handle;
-
-		// The last explicit choice was a snapshot, so this leftover handle is
-		// not a connection the user asked to keep. Offer it; never resume it.
-		if (meta?.mode === 'snapshot') {
-			patch({ connection: 'reconnect', message: 'Reconnect to resume checking the folder you had connected.' });
+		// The last explicit choice was a snapshot or a disconnect, so this
+		// leftover handle is not a connection the user asked to keep — it may
+		// even be one a failed `clearDirectoryHandle` should have removed. Offer
+		// it; never resume it.
+		//
+		// `savedHandle` is adopted only past the checks above, never before: a
+		// snapshot import that cleared it deliberately must not have it handed
+		// back by a restore that read the metadata a moment too early.
+		if (meta?.mode === 'snapshot' || meta?.mode === 'disconnected') {
+			savedHandle = handle;
+			patch({
+				connection: 'reconnect',
+				message:
+					meta.mode === 'disconnected'
+						? 'You disconnected this folder. Reconnect to resume checking it.'
+						: 'Reconnect to resume checking the folder you had connected.',
+			});
 			return;
 		}
 
@@ -457,12 +527,19 @@ export function createImportController(
 		} catch {
 			granted = false;
 		}
+		if (superseded()) return;
+		savedHandle = handle;
 		if (!granted) {
 			patch({ connection: 'reconnect', message: 'Reconnect to resume checking this folder for new attempts.' });
 			return;
 		}
 
-		await replaceSource({ mode: 'folder', handle, source: handleSource(handle) });
+		switching = true;
+		try {
+			await replaceSource({ mode: 'folder', handle, source: handleSource(handle) });
+		} finally {
+			switching = false;
+		}
 	}
 
 	async function connect(): Promise<void> {
@@ -574,9 +651,11 @@ export function createImportController(
 			await clearDirectoryHandle();
 		} catch {
 			// Nothing is watched either way; the handle simply outlives the
-			// session. Restore re-offers it as Reconnect, never as a resume.
+			// session. `mode: 'disconnected'` below is what keeps the next load
+			// from resuming it: an explicit disconnect has to survive a storage
+			// failure, or the app silently reconnects a folder the user revoked.
 		}
-		persist(null, state.lastImportAt);
+		persist('disconnected', state.lastImportAt);
 		patch({
 			connection: 'none',
 			busy: false,
@@ -587,7 +666,9 @@ export function createImportController(
 	}
 
 	async function retryScan(): Promise<void> {
-		if (disposed) return;
+		// A pending source switch refuses every other action; a retry against the
+		// source on its way out is no exception.
+		if (disposed || switching) return;
 		if (active === null) {
 			patch({ message: 'There is nothing to scan. Connect a folder or import files.' });
 			return;
