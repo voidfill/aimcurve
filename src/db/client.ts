@@ -1,4 +1,4 @@
-import type { PGlite } from '@electric-sql/pglite';
+import type { PGlite, PGliteInterface } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
 import { PGliteWorker } from '@electric-sql/pglite/worker';
 import { drizzle } from 'drizzle-orm/pglite';
@@ -8,34 +8,57 @@ import * as schema from './schema';
 
 export type Db = ReturnType<typeof drizzle<typeof schema>>;
 
-let db: Promise<Db> | undefined;
-// The result of the migration run that produced `db`. Populated alongside it,
-// so callers can learn whether a reset happened without re-running migrations.
+interface Handles {
+	pg: PGliteInterface;
+	db: Db;
+}
+
+let handles: Promise<Handles> | undefined;
+// The result of the migration run that produced `handles`. Populated
+// alongside it, so callers can learn whether a reset happened without
+// re-running migrations.
 let lastMigration: MigrateResult | undefined;
 
-/** Browser-only: PGlite in a worker, backed by IndexedDB, migrated on first use. */
-export function getDb(): Promise<Db> {
-	db ??= (async () => {
+/**
+ * Browser-only: one PGlite worker, backed by IndexedDB, migrated on first
+ * use. `getDb()` and `getPg()` both await this single initialization so the
+ * app never opens a second connection to the same idb:// database.
+ */
+function init(): Promise<Handles> {
+	handles ??= (async () => {
+		let pg: PGliteInterface | undefined;
 		try {
-			const pg = await PGliteWorker.create(
+			pg = await PGliteWorker.create(
 				new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
 				{ extensions: { live } },
 			);
 			lastMigration = await applyMigrations(pg, migrations);
 			// PGliteWorker implements PGliteInterface but does not extend PGlite,
 			// which is the concrete class drizzle's pglite driver is typed against.
-			return drizzle(pg as unknown as PGlite, { schema });
+			const db = drizzle(pg as unknown as PGlite, { schema });
+			return { pg, db };
 		} catch (err) {
 			// Worker construction, wasm loading, and IndexedDB access can all
 			// fail transiently (private browsing, blocked site data, a full
 			// storage quota). Without clearing the cache, that first failure
 			// would be replayed forever with no way to recover short of a
 			// page reload.
-			db = undefined;
+			handles = undefined;
+			if (pg && typeof pg.close === 'function') await pg.close().catch(() => {});
 			throw err;
 		}
 	})();
-	return db;
+	return handles;
+}
+
+/** The Drizzle wrapper over the shared PGlite connection. */
+export function getDb(): Promise<Db> {
+	return init().then((h) => h.db);
+}
+
+/** The raw PGlite interface behind `getDb()`, for hand-written SQL. */
+export function getPg(): Promise<PGliteInterface> {
+	return init().then((h) => h.pg);
 }
 
 /**

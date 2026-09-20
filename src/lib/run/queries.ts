@@ -1,0 +1,213 @@
+import type { PGliteInterface } from '@electric-sql/pglite';
+
+/**
+ * A completed attempt, assembled from `run_complete` joined to `config`.
+ * `id` is the internal, migration-reset-able primary key; `fileStem` is the
+ * persistent identity to use in links.
+ */
+export interface Attempt {
+	id: number;
+	fileStem: string;
+	scenarioId: number;
+	scenarioName: string;
+	scenarioHash: string;
+	writtenAt: string; // ISO timestamp, normalize at query boundary
+	startedAt: string;
+	score: number | null;
+	durationS: number;
+	accuracy: number | null;
+	hits: number;
+	shots: number;
+	hasPerf: boolean;
+	sensScale: string;
+	horizSens: number;
+	vertSens: number;
+}
+
+export interface AttemptCursor {
+	writtenAt: string;
+	id: number;
+}
+
+export interface ScenarioOption {
+	id: number;
+	name: string;
+	hash: string;
+}
+
+export interface AttemptPage {
+	items: Attempt[];
+	next: AttemptCursor | null;
+}
+
+/**
+ * The columns pulled off `run_complete r join config c on c.id = r.config_id`
+ * for every query below, aliased to the DTO's field names.
+ */
+const ATTEMPT_COLUMNS = `
+	r.id                as id,
+	r.file_stem         as file_stem,
+	r.scenario_id        as scenario_id,
+	r.scenario_name      as scenario_name,
+	r.scenario_hash      as scenario_hash,
+	r.written_at         as written_at,
+	r.started_at         as started_at,
+	r.score              as score,
+	r.duration_s         as duration_s,
+	r.accuracy           as accuracy,
+	r.hit_count          as hits,
+	r.shots              as shots,
+	r.has_perf           as has_perf,
+	c.sens_scale         as sens_scale,
+	c.horiz_sens         as horiz_sens,
+	c.vert_sens          as vert_sens
+`;
+
+interface AttemptRow {
+	id: number;
+	file_stem: string;
+	scenario_id: number;
+	scenario_name: string;
+	scenario_hash: string;
+	written_at: string;
+	started_at: string;
+	score: number | null;
+	duration_s: number;
+	accuracy: number | null;
+	hits: number;
+	shots: number;
+	has_perf: boolean;
+	sens_scale: string;
+	horiz_sens: number;
+	vert_sens: number;
+}
+
+function toAttempt(row: AttemptRow): Attempt {
+	return {
+		id: row.id,
+		fileStem: row.file_stem,
+		scenarioId: row.scenario_id,
+		scenarioName: row.scenario_name,
+		scenarioHash: row.scenario_hash,
+		writtenAt: new Date(row.written_at).toISOString(),
+		startedAt: new Date(row.started_at).toISOString(),
+		score: row.score,
+		durationS: row.duration_s,
+		accuracy: row.accuracy,
+		hits: row.hits,
+		shots: row.shots,
+		hasPerf: row.has_perf,
+		sensScale: row.sens_scale,
+		horizSens: row.horiz_sens,
+		vertSens: row.vert_sens,
+	};
+}
+
+const PAGE_SIZE = 50;
+
+/**
+ * The most recent completed attempts, newest first, optionally scoped to one
+ * scenario and paginated by a `(writtenAt, id)` cursor. Fetches one row past
+ * the page so `next` is only populated when there really is more to load.
+ */
+export async function listAttempts(
+	pg: PGliteInterface,
+	scenarioId: number | null,
+	before: AttemptCursor | null,
+): Promise<AttemptPage> {
+	const conditions: string[] = [];
+	const params: unknown[] = [];
+
+	if (scenarioId !== null) {
+		params.push(scenarioId);
+		conditions.push(`r.scenario_id = $${params.length}::integer`);
+	}
+	if (before !== null) {
+		params.push(before.writtenAt, before.id);
+		conditions.push(
+			`(r.written_at, r.id) < ($${params.length - 1}::timestamptz, $${params.length}::integer)`,
+		);
+	}
+
+	const where = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
+	params.push(PAGE_SIZE + 1);
+
+	const result = await pg.query<AttemptRow>(
+		`
+		select ${ATTEMPT_COLUMNS}
+		from run_complete r
+		join config c on c.id = r.config_id
+		${where}
+		order by r.written_at desc, r.id desc
+		limit $${params.length}
+		`,
+		params,
+	);
+
+	const hasMore = result.rows.length > PAGE_SIZE;
+	const rendered = result.rows.slice(0, PAGE_SIZE);
+	const items = rendered.map(toAttempt);
+	const last = rendered[rendered.length - 1];
+	const next = hasMore && last ? { writtenAt: items[items.length - 1]!.writtenAt, id: last.id } : null;
+
+	return { items, next };
+}
+
+/** Exact lookup by the persistent file-stem identity, independent of filters or pagination. */
+export async function getAttempt(pg: PGliteInterface, fileStem: string): Promise<Attempt | null> {
+	const result = await pg.query<AttemptRow>(
+		`
+		select ${ATTEMPT_COLUMNS}
+		from run_complete r
+		join config c on c.id = r.config_id
+		where r.file_stem = $1::text
+		`,
+		[fileStem],
+	);
+	const row = result.rows[0];
+	return row ? toAttempt(row) : null;
+}
+
+/** The single most recent completed attempt, optionally scoped to one scenario. */
+export async function getLatestAttempt(
+	pg: PGliteInterface,
+	scenarioId: number | null,
+): Promise<Attempt | null> {
+	const where = scenarioId !== null ? 'where r.scenario_id = $1::integer' : '';
+	const params = scenarioId !== null ? [scenarioId] : [];
+
+	const result = await pg.query<AttemptRow>(
+		`
+		select ${ATTEMPT_COLUMNS}
+		from run_complete r
+		join config c on c.id = r.config_id
+		${where}
+		order by r.written_at desc, r.id desc
+		limit 1
+		`,
+		params,
+	);
+	const row = result.rows[0];
+	return row ? toAttempt(row) : null;
+}
+
+/**
+ * Scenarios that have at least one completed run, for a filter dropdown.
+ * The full hash is returned alongside the name so a caller can build a
+ * label (e.g. a short hash suffix) that keeps scenarios which share a
+ * display name (an edited scenario re-ingested under a new hash)
+ * distinguishable; their ids are never merged.
+ */
+export async function listScenarios(pg: PGliteInterface): Promise<ScenarioOption[]> {
+	const result = await pg.query<{ id: number; name: string; hash: string }>(`
+		select distinct s.id as id, s.name as name, s.hash as hash
+		from scenario s
+		join run_complete r on r.scenario_id = s.id
+		order by s.name, s.hash
+	`);
+	return result.rows.map((row) => ({
+		id: row.id,
+		name: row.name,
+		hash: row.hash,
+	}));
+}
