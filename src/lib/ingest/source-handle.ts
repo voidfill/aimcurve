@@ -46,28 +46,68 @@ export function handleSource(root: FileSystemDirectoryHandle): FileSource {
 		 * atomically, and that a file which exists is finished.
 		 */
 		watch(onChange: () => void): () => void {
+			// `observe()` is asynchronous and can reject long after this call
+			// returns — after an unsubscribe, even. `disposed` is what keeps a
+			// late rejection from resurrecting a watcher that is already gone.
+			let disposed = false;
 			let timer: ReturnType<typeof setTimeout> | undefined;
+			let interval: ReturnType<typeof setInterval> | undefined;
+			let observer: { disconnect(): void } | undefined;
+
 			const fire = () => {
+				if (disposed) return;
 				clearTimeout(timer);
-				timer = setTimeout(onChange, DEBOUNCE_MS);
+				timer = setTimeout(() => {
+					if (!disposed) onChange();
+				}, DEBOUNCE_MS);
+			};
+
+			/** The same code path the unsupported case uses; never doubled up. */
+			const poll = () => {
+				if (disposed || interval !== undefined) return;
+				interval = setInterval(fire, POLL_MS);
 			};
 
 			if (canWatch()) {
-				const Observer = (globalThis as unknown as {
-					FileSystemObserver: new (cb: () => void) => { observe(h: FileSystemDirectoryHandle, o?: { recursive?: boolean }): Promise<void>; disconnect(): void };
-				}).FileSystemObserver;
-				const observer = new Observer(fire);
-				void observer.observe(root, { recursive: true });
-				return () => {
-					clearTimeout(timer);
-					observer.disconnect();
-				};
+				try {
+					const Observer = (globalThis as unknown as {
+						FileSystemObserver: new (cb: () => void) => { observe(h: FileSystemDirectoryHandle, o?: { recursive?: boolean }): Promise<void>; disconnect(): void };
+					}).FileSystemObserver;
+					const instance = new Observer(fire);
+					observer = instance;
+					// A rejection here — an unsupported filesystem, a revoked
+					// permission, a handle the implementation will not observe
+					// — means no change will ever fire. Falling back to the
+					// interval is the difference between a stale view and a
+					// working one, and catching it is also what keeps it from
+					// surfacing as an unhandled rejection.
+					instance.observe(root, { recursive: true }).catch(() => {
+						try {
+							instance.disconnect();
+						} catch {
+							// Already gone; nothing to release.
+						}
+						if (observer === instance) observer = undefined;
+						poll();
+					});
+				} catch {
+					// Synchronous construction failure: the constructor exists
+					// but refuses this environment.
+					observer = undefined;
+					poll();
+				}
 			}
+			// No observer at all, or construction failed above.
+			if (observer === undefined) poll();
 
-			const interval = setInterval(fire, POLL_MS);
 			return () => {
+				disposed = true;
 				clearTimeout(timer);
-				clearInterval(interval);
+				timer = undefined;
+				if (interval !== undefined) clearInterval(interval);
+				interval = undefined;
+				observer?.disconnect();
+				observer = undefined;
 			};
 		},
 	};
