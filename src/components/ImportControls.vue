@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * Every way into the import lifecycle: connect a folder, reconnect it, drop
- * the connection, import a snapshot, retry a failed scan.
+ * The two ways in: connect the stats folder, or hand over a set of files once.
  *
  * Disconnect removes the stored folder permission and stops the watching. It
  * removes no imported rows, and this slice deliberately offers no control that
@@ -16,9 +15,17 @@ import { canPickDirectory, type Connection } from '../lib/run/import-controller'
 
 const props = defineProps<{
 	connection: Connection;
-	busy: boolean;
 	disabled: boolean;
 }>();
+
+const emit = defineEmits<{
+	(event: 'connect'): void;
+	(event: 'reconnect'): void;
+	(event: 'disconnect'): void;
+	(event: 'import-files', files: File[]): void;
+}>();
+
+const canConnect = canPickDirectory();
 
 /**
  * `connected`, `reconnect` and `error` all leave something to drop: a live
@@ -28,15 +35,8 @@ const props = defineProps<{
  */
 const canDisconnect = computed(() => props.connection !== 'none' && props.connection !== 'snapshot');
 
-const emit = defineEmits<{
-	(event: 'connect'): void;
-	(event: 'reconnect'): void;
-	(event: 'disconnect'): void;
-	(event: 'retry-scan'): void;
-	(event: 'import-files', files: File[]): void;
-}>();
-
-const canConnect = canPickDirectory();
+const needsReconnect = computed(() => props.connection === 'reconnect');
+const showConnect = computed(() => canConnect && props.connection !== 'connected' && !needsReconnect.value);
 
 /**
  * The controller copies the `FileList` before its first await, so clearing the
@@ -53,67 +53,71 @@ function onFiles(event: Event): void {
 
 <template>
 	<section class="controls" aria-labelledby="controls-heading">
-		<h2 id="controls-heading">Import</h2>
-
-		<p class="lead">
-			Select your Kovaak's <code>FPSAimTrainer/stats</code> folder, or a set of files from it. Everything
-			is read and stored in this browser: nothing is uploaded, nothing is installed, nothing is shared,
-			and nothing syncs to your other devices.
-		</p>
-
-		<div class="buttons">
-			<button v-if="canConnect && connection !== 'connected'" type="button" :disabled="disabled" @click="emit('connect')">
-				Connect folder
-			</button>
-			<button v-if="connection === 'reconnect'" type="button" :disabled="disabled" @click="emit('reconnect')">
-				Reconnect
-			</button>
-			<!--
-				Offered in every state where a folder is still connected, still
-				stored, or still being polled — not just the healthy one. In
-				`reconnect` a handle sits in this browser with nothing else to
-				forget it, and in `error` the folder is still being checked. Not
-				offered for `snapshot`: nothing is connected there to disconnect.
-			-->
-			<button v-if="canDisconnect" type="button" :disabled="disabled" @click="emit('disconnect')">
-				Disconnect folder
-			</button>
-			<button v-if="connection === 'error'" type="button" :disabled="disabled || busy" @click="emit('retry-scan')">
-				Retry scan
-			</button>
+		<div class="intro">
+			<h2 id="controls-heading">Import your stats</h2>
+			<p>
+				Point aimcurve at your Kovaak's <code>FPSAimTrainer/stats</code> folder. Everything stays in
+				this browser — nothing is uploaded.
+			</p>
 		</div>
 
-		<p v-if="canDisconnect" class="muted">
-			Disconnecting forgets this browser's permission for the folder and stops checking it. Attempts
-			already imported stay exactly as they are.
-		</p>
+		<div class="options">
+			<article class="option" :class="{ active: connection === 'connected' }">
+				<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+					<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+				</svg>
+				<h3>Connect the folder</h3>
+				<p>New attempts show up on their own while this page is open.</p>
 
-		<p v-if="!canConnect" class="muted">
-			This browser cannot connect to a folder. Import a snapshot of your stats files instead — it works
-			everywhere, but it is a one-time import.
-		</p>
+				<div class="actions">
+					<button v-if="needsReconnect" type="button" :disabled="disabled" @click="emit('reconnect')">
+						Reconnect
+					</button>
+					<button v-if="showConnect" type="button" :disabled="disabled" @click="emit('connect')">
+						Connect folder
+					</button>
+					<button
+						v-if="needsReconnect && canConnect"
+						type="button"
+						class="ghost"
+						:disabled="disabled"
+						@click="emit('connect')"
+					>
+						Use another folder
+					</button>
+					<button
+						v-if="canDisconnect"
+						type="button"
+						class="ghost"
+						:disabled="disabled"
+						@click="emit('disconnect')"
+					>
+						Disconnect
+					</button>
+				</div>
 
-		<div class="pickers">
-			<label>
-				<span>Import a folder snapshot</span>
-				<input type="file" webkitdirectory multiple :disabled="disabled" @change="onFiles" />
-			</label>
-			<label>
-				<span>Import individual files</span>
-				<input
-					type="file"
-					multiple
-					accept=".csv,.perf"
-					:disabled="disabled"
-					@change="onFiles"
-				/>
-			</label>
+				<p v-if="!canConnect" class="note">Not supported in this browser — import files instead.</p>
+			</article>
+
+			<article class="option" :class="{ active: connection === 'snapshot' }">
+				<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+					<path d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+				</svg>
+				<h3>Import files once</h3>
+				<p>A one-time copy. Works everywhere, but does not update on its own.</p>
+
+				<div class="actions">
+					<label class="picker" :class="{ disabled }">
+						<span>Choose folder</span>
+						<input type="file" webkitdirectory multiple :disabled="disabled" @change="onFiles" />
+					</label>
+					<label class="picker ghost" :class="{ disabled }">
+						<span>Choose files</span>
+						<input type="file" multiple accept=".csv,.perf" :disabled="disabled" @change="onFiles" />
+					</label>
+				</div>
+			</article>
 		</div>
-
-		<p v-if="connection === 'snapshot'" class="muted">
-			A snapshot does not update on its own. Select the same files again whenever you want the attempts
-			you have completed since.
-		</p>
 	</section>
 </template>
 
@@ -121,58 +125,130 @@ function onFiles(event: Event): void {
 .controls {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-3);
+	gap: var(--space-4);
+}
+
+.intro {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
 }
 
 h2 {
 	font-size: 1.125rem;
 }
 
-.lead {
+.intro p {
+	color: var(--color-text-muted);
 	font-size: 0.9375rem;
 	max-width: 60ch;
 }
 
-.buttons {
+.options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+	gap: var(--space-4);
+}
+
+.option {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-4);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+}
+
+.option.active {
+	border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+	background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface));
+}
+
+.icon {
+	width: 1.5rem;
+	height: 1.5rem;
+	fill: none;
+	stroke: var(--color-accent);
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+h3 {
+	font-size: 1rem;
+}
+
+.option p {
+	color: var(--color-text-muted);
+	font-size: 0.875rem;
+}
+
+.actions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--space-2);
+	margin-top: auto;
+	padding-top: var(--space-2);
 }
 
-button {
+button,
+.picker {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
 	background: var(--color-accent);
 	color: var(--color-accent-contrast);
 	border: 1px solid var(--color-accent);
-	border-radius: 6px;
+	border-radius: 8px;
 	padding: var(--space-2) var(--space-4);
-	cursor: pointer;
+	font-size: 0.875rem;
 	font-weight: 600;
+	cursor: pointer;
 }
 
-button:disabled {
+button:hover:not(:disabled),
+.picker:not(.disabled):hover {
+	filter: brightness(1.08);
+}
+
+.ghost {
+	background: transparent;
+	color: var(--color-text);
+	border-color: var(--color-border);
+}
+
+.ghost:hover:not(:disabled),
+.picker.ghost:not(.disabled):hover {
+	border-color: var(--color-accent);
+	color: var(--color-accent);
+	filter: none;
+}
+
+button:disabled,
+.picker.disabled {
 	background: transparent;
 	color: var(--color-text-muted);
 	border-color: var(--color-border);
 	cursor: default;
+	filter: none;
 }
 
-.pickers {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-4);
+/* The input is hidden, so the label has to carry its focus ring. */
+.picker:has(input:focus-visible) {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
 }
 
-label {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-1);
-	font-size: 0.875rem;
-	color: var(--color-text-muted);
+.picker input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
 }
 
-.muted {
-	color: var(--color-text-muted);
-	font-size: 0.875rem;
-	max-width: 60ch;
+.note {
+	font-size: 0.8125rem;
 }
 </style>

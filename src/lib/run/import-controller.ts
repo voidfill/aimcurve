@@ -193,17 +193,12 @@ function errorText(err: unknown): string {
 /* Messages                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const WATCHING =
-	'Checking for newly completed attempts while this page is open.';
-const SNAPSHOT =
-	'Imported the files you selected. This is a one-time snapshot — new attempts will not appear until you import again.';
-const SNAPSHOT_RESTORED =
-	'The last import was a one-time snapshot. Import those files again to pick up attempts completed since.';
-const NO_PICKER =
-	'This browser cannot connect to a folder. Import a snapshot of your stats files instead.';
-const HANDLE_WARNING =
-	'Imported. The browser would not remember this folder, so you will have to pick it again after a reload.';
-const META_WARNING = 'Imported. The browser would not remember when this import happened.';
+const WATCHING = 'Watching for new attempts while this page is open.';
+const SNAPSHOT = 'Choose your files again whenever you want the attempts you have played since.';
+const SNAPSHOT_RESTORED = 'Choose your files again to pick up the attempts you have played since.';
+const NO_PICKER = 'This browser cannot connect to a folder. Import files instead.';
+const HANDLE_WARNING = 'Imported, but this browser will not remember the folder after a reload.';
+const META_WARNING = 'Imported, but this browser will not remember when.';
 
 /**
  * Whether a settled pass changed anything or found anything the user may have
@@ -375,8 +370,7 @@ export function createImportController(
 				patch({
 					connection: 'reconnect',
 					report,
-					message:
-						'Read access to this folder was lost. Everything already imported is still here — reconnect to resume checking.',
+					message: 'Read access to this folder was lost. Reconnect to resume watching it.',
 				});
 				return;
 			}
@@ -386,7 +380,7 @@ export function createImportController(
 		if (failure !== null || report === null) {
 			patch({
 				connection: 'error',
-				message: `The last scan failed: ${errorText(failure)}. Everything already imported is still here.`,
+				message: errorText(failure),
 			});
 			return;
 		}
@@ -512,8 +506,8 @@ export function createImportController(
 				connection: 'reconnect',
 				message:
 					meta.mode === 'disconnected'
-						? 'You disconnected this folder. Reconnect to resume checking it.'
-						: 'Reconnect to resume checking the folder you had connected.',
+						? 'You disconnected this folder. Reconnect to resume watching it.'
+						: 'Reconnect to resume watching the folder you had connected.',
 			});
 			return;
 		}
@@ -530,7 +524,7 @@ export function createImportController(
 		if (superseded()) return;
 		savedHandle = handle;
 		if (!granted) {
-			patch({ connection: 'reconnect', message: 'Reconnect to resume checking this folder for new attempts.' });
+			patch({ connection: 'reconnect', message: 'Reconnect to resume watching this folder.' });
 			return;
 		}
 
@@ -598,7 +592,7 @@ export function createImportController(
 			switching = false;
 			patch({
 				connection: 'reconnect',
-				message: 'Access to the folder was not granted. Everything already imported is still here.',
+				message: 'Access to the folder was not granted.',
 			});
 			return;
 		}
@@ -660,7 +654,7 @@ export function createImportController(
 			connection: 'none',
 			busy: false,
 			progress: null,
-			message: 'Disconnected. Everything already imported is still here.',
+			message: 'Disconnected. Your imported attempts are unaffected.',
 		});
 		switching = false;
 	}

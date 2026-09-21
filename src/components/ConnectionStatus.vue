@@ -1,141 +1,147 @@
 <script setup lang="ts">
 /**
- * What the database and the import connection are actually doing.
+ * One card that says what is happening right now: the connection, the pass in
+ * flight, and the single action that fixes a stuck state.
  *
  * A failed database must never look like an empty successful one, so a startup
- * failure is its own block with its own Retry, and while it is showing, import
- * stays disabled — there is nothing to import into.
+ * failure replaces the card entirely and import stays disabled while it shows —
+ * there is nothing to import into.
  */
 import { computed } from 'vue';
+import ProgressBar from './ProgressBar.vue';
 import type { Connection } from '../lib/run/import-controller';
-import type { MigrateResult } from '../db/migrate';
 
 const props = defineProps<{
 	connection: Connection;
 	busy: boolean;
+	progress: { done: number; total: number } | null;
 	message: string | null;
 	dbReady: boolean;
 	dbError: Error | null;
-	migration: MigrateResult | null;
 }>();
 
-const emit = defineEmits<{ (event: 'retry-db'): void }>();
+const emit = defineEmits<{ (event: 'retry-db'): void; (event: 'retry-scan'): void }>();
 
 const LABELS: Record<Connection, string> = {
 	none: 'No folder connected',
 	connected: 'Folder connected',
 	reconnect: 'Reconnect needed',
-	snapshot: 'One-time snapshot imported',
-	error: 'Last import attempt failed',
+	snapshot: 'Files imported',
+	error: 'Last scan failed',
 };
 
-const label = computed(() => LABELS[props.connection]);
+const label = computed(() => (props.busy ? 'Importing' : LABELS[props.connection]));
+
+/** `error` is the only state a plain retry can clear; the rest need a pick. */
+const canRetryScan = computed(() => props.connection === 'error' && !props.busy);
 </script>
 
 <template>
 	<section class="status" aria-labelledby="status-heading">
-		<h2 id="status-heading">Status</h2>
+		<h2 id="status-heading" class="sr-only">Status</h2>
 
-		<div v-if="dbError !== null" class="block danger" role="alert">
-			<p><strong>The local database could not be opened.</strong></p>
-			<p>{{ dbError.message }}</p>
-			<p>
-				Nothing was lost and nothing was deleted; this browser simply could not start the database, so
-				importing is unavailable until it does. Private windows and blocked site data are the usual
-				causes.
-			</p>
-			<button type="button" @click="emit('retry-db')">Retry</button>
+		<div v-if="dbError !== null" class="card danger" role="alert">
+			<p><strong>This browser could not start the local database.</strong></p>
+			<p class="muted">{{ dbError.message }}</p>
+			<button type="button" @click="emit('retry-db')">Try again</button>
 		</div>
 
-		<p v-else-if="!dbReady" class="muted">Starting the local database…</p>
+		<div v-else class="card" :class="{ busy }">
+			<div class="line">
+				<span class="dot" :class="busy ? 'working' : connection" aria-hidden="true"></span>
+				<span class="label">{{ dbReady ? label : 'Starting up' }}</span>
+				<button v-if="canRetryScan" type="button" class="ghost" @click="emit('retry-scan')">
+					Retry
+				</button>
+			</div>
 
-		<div v-if="migration !== null && migration.reset" class="block warn">
-			<p><strong>Imported data was reset by a database update.</strong></p>
-			<p>{{ migration.reason }}</p>
-			<p>
-				Your stats files were not touched. Import them again below — a connected folder needs a
-				reconnect first, and a snapshot needs the same files selected again.
-			</p>
+			<ProgressBar
+				v-if="busy"
+				:done="progress?.done ?? 0"
+				:total="progress?.total ?? 0"
+				label="Import progress"
+			/>
+
+			<p v-if="message !== null" class="muted">{{ message }}</p>
 		</div>
-
-		<p class="connection">
-			<span class="dot" :class="connection" aria-hidden="true"></span>
-			<span>{{ label }}</span>
-			<span v-if="busy" class="muted">Working…</span>
-		</p>
-
-		<p v-if="message !== null" class="message">{{ message }}</p>
 	</section>
 </template>
 
 <style scoped>
-.status {
+.card {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-3);
-}
-
-h2 {
-	font-size: 1.125rem;
-}
-
-.block {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
-	padding: var(--space-3);
+	padding: var(--space-4);
 	border: 1px solid var(--color-border);
-	border-radius: 8px;
+	border-radius: 12px;
 	background: var(--color-surface);
-	font-size: 0.9375rem;
 }
 
-.block.danger {
+.card.busy {
+	border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+
+.card.danger {
 	border-color: var(--color-danger);
+	background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
 }
 
-.block.warn {
-	border-color: var(--color-accent);
-}
-
-.connection {
+.line {
 	display: flex;
 	align-items: center;
-	gap: var(--space-2);
+	gap: var(--space-3);
+}
+
+.label {
+	font-weight: 600;
 }
 
 .dot {
-	width: 0.6rem;
-	height: 0.6rem;
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
 	border-radius: 50%;
 	background: var(--color-text-muted);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text-muted) 18%, transparent);
 }
 
-.dot.connected {
+.dot.connected,
+.dot.snapshot,
+.dot.working {
 	background: var(--color-accent);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
 .dot.error,
 .dot.reconnect {
 	background: var(--color-danger);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-danger) 22%, transparent);
 }
 
-.message,
 .muted {
 	color: var(--color-text-muted);
-	font-size: 0.9375rem;
+	font-size: 0.875rem;
+	max-width: 68ch;
 }
 
 button {
-	align-self: flex-start;
+	margin-left: auto;
 	background: transparent;
 	border: 1px solid var(--color-border);
-	border-radius: 6px;
+	border-radius: 999px;
 	padding: var(--space-1) var(--space-3);
+	font-size: 0.875rem;
 	cursor: pointer;
 }
 
 button:hover {
 	border-color: var(--color-accent);
+	color: var(--color-accent);
+}
+
+.card.danger button {
+	margin-left: 0;
+	align-self: flex-start;
 }
 </style>

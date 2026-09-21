@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * The Data page: connection state, import controls, and what the last pass did.
+ * The Data page: what the import is doing, how to start one, and what the last
+ * one did.
  *
  * Import state is shared and document-scoped, so a pass that commits while this
  * page is open updates it in place. Nothing here navigates on a commit: the
@@ -14,7 +15,7 @@ import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
 
-const { ready, error: dbError, migration, retry: retryDb } = useDb();
+const { ready, error: dbError, retry: retryDb } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
 const { rememberedRunRoute } = useSelection();
 
@@ -49,33 +50,25 @@ function onImportFiles(files: File[]): void {
 		<ConnectionStatus
 			:connection="state.connection"
 			:busy="state.busy"
+			:progress="state.progress"
 			:message="state.message"
 			:db-ready="ready"
 			:db-error="dbError"
-			:migration="migration"
 			@retry-db="retryDb()"
+			@retry-scan="retryScan()"
 		/>
 
 		<ImportControls
 			:connection="state.connection"
-			:busy="state.busy"
 			:disabled="importDisabled"
 			@connect="connect()"
 			@reconnect="reconnect()"
 			@disconnect="disconnect()"
-			@retry-scan="retryScan()"
 			@import-files="onImportFiles"
 		/>
 
-		<p v-if="state.progress !== null" class="progress">
-			Reading file {{ state.progress.done }} of {{ state.progress.total }}.
-		</p>
-		<p v-else-if="state.busy" class="progress">Reading files…</p>
-
-		<p v-if="lastImport !== null" class="muted">Last import: {{ lastImport }}</p>
-		<p v-else class="muted">No import has finished in this browser yet.</p>
-
-		<ImportReport v-if="state.report !== null" :report="state.report" />
+		<ImportReport v-if="state.report !== null" :report="state.report" :at="lastImport" />
+		<p v-else class="muted">Nothing has been imported in this browser yet.</p>
 	</div>
 </template>
 
@@ -98,10 +91,6 @@ function onImportFiles(files: File[]): void {
 
 h1 {
 	font-size: 1.5rem;
-}
-
-.progress {
-	font-size: 0.9375rem;
 }
 
 .muted {
