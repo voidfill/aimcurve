@@ -20,9 +20,9 @@ let handles: Promise<Handles> | undefined;
 let lastMigration: MigrateResult | undefined;
 
 /**
- * Browser-only: one PGlite worker, backed by IndexedDB, migrated on first
- * use. `getDb()` and `getPg()` both await this single initialization so the
- * app never opens a second connection to the same idb:// database.
+ * Browser-only: one PGlite worker, backed by OPFS, migrated on first use.
+ * `getDb()` and `getPg()` both await this single initialization so the app
+ * never opens a second connection to the same opfs-ahp:// database.
  */
 function init(): Promise<Handles> {
 	handles ??= (async () => {

@@ -2,9 +2,9 @@
  * Persisting the picked directory across reloads.
  *
  * A `FileSystemDirectoryHandle` is structured-cloneable, so IndexedDB stores it
- * directly. Its own tiny database, separate from PGlite's `idb://aimcurve`,
- * because the two have nothing to do with each other and a migrator reset must
- * not cost the user their folder.
+ * directly. Its own tiny database, and the only thing this app still keeps in
+ * IndexedDB now that PGlite lives in OPFS — the two have nothing to do with
+ * each other, and a migrator reset must not cost the user their folder.
  *
  * The permission split matters: `queryPermission` is free and can be called on
  * load, but `requestPermission` **requires a user gesture**. Watch mode

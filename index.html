@@ -9,6 +9,9 @@
 	</head>
 	<body>
 		<div id="app"></div>
+		<!-- Before the app, so the database worker starts fetching its wasm
+		     while the app bundle is still downloading. -->
+		<script type="module" src="/src/db/preload.ts"></script>
 		<script type="module" src="/src/main.ts"></script>
 	</body>
 </html>
