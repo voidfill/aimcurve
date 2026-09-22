@@ -7,13 +7,21 @@
  * page is open updates it in place. Nothing here navigates on a commit: the
  * route is the user's, not the importer's.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import ConnectionStatus from '../components/ConnectionStatus.vue';
 import ImportControls from '../components/ImportControls.vue';
 import ImportReport from '../components/ImportReport.vue';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
+
+/**
+ * Statically false in a production build, so Rollup drops the import and the
+ * wipe never ships. A `v-if` alone would still bundle the component.
+ */
+const DevReset = import.meta.env.DEV
+	? defineAsyncComponent(() => import('../components/DevReset.vue'))
+	: null;
 
 const { ready, error: dbError, retry: retryDb } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
@@ -57,6 +65,7 @@ function onImportFiles(files: File[]): void {
 			@retry-db="retryDb()"
 			@retry-scan="retryScan()"
 		/>
+		<ImportReport v-if="state.report !== null" :report="state.report" :at="lastImport" />
 
 		<ImportControls
 			:connection="state.connection"
@@ -67,8 +76,7 @@ function onImportFiles(files: File[]): void {
 			@import-files="onImportFiles"
 		/>
 
-		<ImportReport v-if="state.report !== null" :report="state.report" :at="lastImport" />
-		<p v-else class="muted">Nothing has been imported in this browser yet.</p>
+		<component :is="DevReset" v-if="DevReset !== null" />
 	</div>
 </template>
 

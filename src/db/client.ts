@@ -69,3 +69,24 @@ export function getPg(): Promise<PGliteInterface> {
 export function getLastMigration(): MigrateResult | undefined {
 	return lastMigration;
 }
+
+/**
+ * Closes the connection and drops the cache, so the next `getDb()` starts a
+ * fresh worker.
+ *
+ * Only the dev reset calls this. The pool holds sync access handles on roughly
+ * a thousand OPFS files, and removing that directory underneath a live pool
+ * leaves a half-deleted data directory that the next start cannot resume from.
+ * The cache is cleared before the close is awaited: a close that hangs must
+ * not leave a handle behind that callers can still reach.
+ */
+export async function closePg(): Promise<void> {
+	const pending = handles;
+	handles = undefined;
+	lastMigration = undefined;
+	if (pending === undefined) return;
+	// A cached initialization that already failed has nothing to close, and its
+	// rejection is not this caller's to report.
+	const settled = await pending.catch(() => undefined);
+	if (settled !== undefined) await settled.pg.close().catch(() => {});
+}

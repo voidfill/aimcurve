@@ -24,7 +24,9 @@ declare global {
 	}
 }
 
-const DB_NAME = 'aimcurve-handles';
+/** Exported so the dev reset can delete it without retyping the name. */
+export const HANDLE_DB_NAME = 'aimcurve-handles';
+const DB_NAME = HANDLE_DB_NAME;
 const STORE = 'handles';
 const KEY = 'stats-root';
 

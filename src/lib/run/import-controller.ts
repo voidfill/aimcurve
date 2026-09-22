@@ -95,7 +95,8 @@ export function initialImportState(): ImportState {
 /* Persisted metadata                                                          */
 /* -------------------------------------------------------------------------- */
 
-const STORAGE_KEY = 'aimcurve.import';
+/** Exported so the dev reset can clear it without retyping the key. */
+export const STORAGE_KEY = 'aimcurve.import';
 const SCHEMA_VERSION = 1;
 
 type SourceMode = 'folder' | 'snapshot';

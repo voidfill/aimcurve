@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
 import { OpfsAhpFS } from '@electric-sql/pglite/opfs-ahp';
 import { worker } from '@electric-sql/pglite/worker';
+import { OPFS_DIR } from './opfs';
 
 // PGlite is single-threaded WebAssembly: a bulk ingest is ~4 s of solid CPU,
 // which would freeze the UI thread outright.
@@ -52,7 +53,7 @@ const INGEST_HEADROOM = 1000;
 void worker({
 	async init() {
 		return await PGlite.create({
-			fs: new OpfsAhpFS('aimcurve', {
+			fs: new OpfsAhpFS(OPFS_DIR, {
 				initialPoolSize: FIRST_START,
 				maintainedPoolSize: INGEST_HEADROOM,
 			}),
