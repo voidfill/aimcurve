@@ -11,6 +11,7 @@
  * awaited before it.
  */
 import { computed } from 'vue';
+import LinkSetup from './LinkSetup.vue';
 import { canPickDirectory, type Connection } from '../lib/run/import-controller';
 
 const props = defineProps<{
@@ -56,8 +57,8 @@ function onFiles(event: Event): void {
 		<div class="intro">
 			<h2 id="controls-heading">Import your stats</h2>
 			<p>
-				Point aimcurve at your Kovaak's <code>FPSAimTrainer/stats</code> folder. Everything stays in
-				this browser — nothing is uploaded.
+				Point aimcurve at the Kovaak's folder holding <code>stats</code> and
+				<code>performances</code>. Everything stays in this browser — nothing is uploaded.
 			</p>
 		</div>
 
@@ -97,6 +98,8 @@ function onFiles(event: Event): void {
 				</div>
 
 				<p v-if="!canConnect" class="note">Not supported in this browser — import files instead.</p>
+
+				<LinkSetup v-if="canConnect" />
 			</article>
 
 			<article class="option" :class="{ active: connection === 'snapshot' }">
@@ -148,6 +151,9 @@ h2 {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
 	gap: var(--space-4);
+	/* Each card keeps its own height, so expanding the link setup does not
+	   stretch its neighbour and push that card's buttons out of reach. */
+	align-items: start;
 }
 
 .option {
