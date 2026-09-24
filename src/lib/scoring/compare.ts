@@ -2,8 +2,8 @@
  * D4/D5: which runs compare, the exact readout, and the recent range.
  */
 import type { ScoringParams } from './classify';
-import { atX, type RunCurve, uAtX } from './curve';
-import { accumulatedAt, DEFAULT_WINDOW_S } from './pace';
+import { type RunCurve, uAtX } from './curve';
+import { accumulatedAt } from './pace';
 
 /** Same kind and same parameters; runs are then aligned at equal `x`. */
 export function comparable(a: ScoringParams, b: ScoringParams): boolean {
@@ -59,7 +59,7 @@ export interface RecentRange {
  * it are excluded even if passed in; choosing *prior* runs is the caller's job,
  * since it needs run dates this model does not carry.
  */
-export function recentRange(current: RunCurve, others: readonly RunCurve[], windowS = DEFAULT_WINDOW_S): RecentRange {
+export function recentRange(current: RunCurve, others: readonly RunCurve[]): RecentRange {
 	const pool = others.filter(
 		(other) => other.fileStem !== current.fileStem && comparable(current.params, other.params),
 	);
@@ -73,8 +73,7 @@ export function recentRange(current: RunCurve, others: readonly RunCurve[], wind
 		let sumSq = 0;
 		let k = 0;
 		for (const other of pool) {
-			const { t, u } = atX(other, x);
-			const value = accumulatedAt(other, t, x, u, windowS);
+			const value = accumulatedAt(other, x, uAtX(other, x));
 			if (Number.isNaN(value)) continue;
 			sum += value;
 			sumSq += value * value;

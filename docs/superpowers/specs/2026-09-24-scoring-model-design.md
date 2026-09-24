@@ -193,9 +193,12 @@ full run:
 - **Local pace** at point `i`: `project((u(t_i) − u(t_i − w)) / (x(t_i) − x(t_i − w)))`
   over a rolling window of `w` seconds of the run's own clock. The default is `w = 5 s`,
   and the page spec's smoothing setting changes it.
-- **Gaps, not zeroes.** Both lines are undefined (`NaN`, drawn as a gap) while
-  `t_i < w`, and local pace is undefined when `Δx = 0`, for example a race window spent
-  entirely in a respawn gap. Nothing divides by zero.
+- **Gaps, not zeroes.** Accumulated pace is undefined (`NaN`, drawn as a gap)
+  only at `x = 0`, where it would be `0 / 0`, so both lines start at the first
+  tick. Until a full window has been played, local pace uses the window played
+  so far, `[0, t_i]`, and so equals accumulated pace. Local pace is also undefined
+  when `Δx = 0`, for example a race window spent entirely in a respawn gap. Nothing
+  divides by zero.
 - **Endpoint.** At `x = 1`, accumulated pace is `S(T)` for clock and `B − elapsed` for race,
   which is the real score in both cases. The displayed final value and the at-rest
   readout use the CSV `score` directly, so a short last tick never changes the
@@ -333,8 +336,9 @@ interface PaceLines {
   sentinel, the countdown). A change degrades to `unsupported`, not to a wrong axis.
 - **1 Hz resolution.** Clock pace cannot resolve detail finer than a tick. Races get
   exact kill knots, but between knots progress is still tick-sampled.
-- **Early noise.** Projection from a few seconds of data swings widely. The `t ≥ w`
-  gap is the only guard. A larger minimum for accumulated pace can be added if the
-  line is misleading in practice.
+- **Early noise.** Projection from a few seconds of data swings widely, and the
+  lines are drawn from the first tick with no guard. This was chosen over leaving
+  the first window blank (2026-09-24); a minimum can be reintroduced if the start
+  of the line proves misleading in practice.
 - **Single-player corpus.** Scoring families absent here are expected to be `clock`
   and to just work (D1), but that is untested.

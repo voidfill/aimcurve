@@ -251,12 +251,18 @@ describe('D5 pace', () => {
 		}
 	});
 
-	it('leaves a gap, not a value, before one window of play', () => {
+	it('draws from the first tick, with a gap only at x = 0', () => {
 		const lines = paceLines(curve(clockInput([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])), 5);
-		expect(Number.isNaN(lines.accumulated[1]!)).toBe(true); // t = 1
-		expect(Number.isNaN(lines.local[4]!)).toBe(true); // t = 4
-		expect(lines.accumulated[5]).toBeCloseTo(10, 9); // t = 5, 1 point/s over 10 s
+		expect(Number.isNaN(lines.accumulated[0]!)).toBe(true); // t = 0: 0 / 0
+		expect(Number.isNaN(lines.local[0]!)).toBe(true);
+		expect(lines.accumulated[1]).toBeCloseTo(10, 9); // t = 1, 1 point/s over 10 s
 		expect(lines.local[5]).toBeCloseTo(10, 9);
+	});
+
+	it('uses the window played so far before a full window, so local equals accumulated', () => {
+		const lines = paceLines(curve(clockInput([3, 1, 1, 1, 1, 1, 1, 1, 1, 1])), 5);
+		for (const i of [1, 2, 3, 4]) expect(lines.local[i]).toBeCloseTo(lines.accumulated[i]!, 9);
+		expect(lines.local[1]).toBeCloseTo(30, 9);
 	});
 
 	it('makes clock local pace the marginal score over the window', () => {
@@ -327,14 +333,14 @@ describe('D4/D5 comparison', () => {
 		const current = curve(clockInput([1, 1, 1, 1, 1, 1], { fileStem: 'current' }));
 		const longer = curve(clockInput([2, 2, 2, 2, 2, 2, 2, 2], { fileStem: 'longer' }));
 		const race = curve(fast());
-		const range = recentRange(current, [longer, race], 1);
+		const range = recentRange(current, [longer, race]);
 		expect([...range.count].every((n) => n === 0)).toBe(true);
 	});
 
 	it('builds the recent range from other runs only, at the inspected x', () => {
 		const current = curve(clockInput([1, 1, 1, 1, 1, 1], { runId: 10, fileStem: 'current' }));
 		const other = curve(clockInput([2, 2, 2, 2, 2, 2], { runId: 11, fileStem: 'other' }));
-		const range = recentRange(current, [current, other], 1);
+		const range = recentRange(current, [current, other]);
 		expect(range.x).toBe(current.x);
 		expect(range.count[6]).toBe(1);
 		expect(range.mean[6]).toBeCloseTo(12, 9);

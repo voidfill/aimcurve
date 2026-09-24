@@ -47,7 +47,7 @@ const chart = computed(() => {
 			: b.kind === 'flat'
 				? { kind: 'flat', score: b.score }
 				: { kind: 'none' };
-	const recent = a.recent.length > 0 ? recentRange(cur, a.recent, w) : null;
+	const recent = a.recent.length > 0 ? recentRange(cur, a.recent) : null;
 	return chartData(cur, paceFor(cur, w), base, recent);
 });
 

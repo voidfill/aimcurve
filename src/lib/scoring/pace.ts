@@ -21,15 +21,18 @@ export function project(curve: RunCurve, rate: number): number {
 	return curve.params.kind === 'race' ? curve.params.budget - rate : rate;
 }
 
-/** Accumulated pace at one point, or NaN before a window of play or at x = 0. */
-export function accumulatedAt(curve: RunCurve, t: number, x: number, u: number, windowS: number): number {
-	return t < windowS || x <= 0 ? Number.NaN : project(curve, u / x);
+/** Accumulated pace at one point: the run so far, projected. NaN only at x = 0. */
+export function accumulatedAt(curve: RunCurve, x: number, u: number): number {
+	return x <= 0 ? Number.NaN : project(curve, u / x);
 }
 
 /**
  * Local pace is marginal: the window's change in `u` over its change in `x`,
  * so for multiplier scoring it includes what a miss cost earlier kills. It is
  * undefined where the window made no progress, such as a race respawn gap.
+ *
+ * Before a full window has been played the window is `[0, t]`, so local pace
+ * equals accumulated pace until then: the only value the data supports.
  */
 export function paceLines(curve: RunCurve, windowS = DEFAULT_WINDOW_S): PaceLines {
 	const n = curve.x.length;
@@ -39,12 +42,8 @@ export function paceLines(curve: RunCurve, windowS = DEFAULT_WINDOW_S): PaceLine
 		const t = curve.t[i]!;
 		const x = curve.x[i]!;
 		const u = curve.u[i]!;
-		accumulated[i] = accumulatedAt(curve, t, x, u, windowS);
-		if (t < windowS) {
-			local[i] = Number.NaN;
-			continue;
-		}
-		const start = atTime(curve, t - windowS);
+		accumulated[i] = accumulatedAt(curve, x, u);
+		const start = atTime(curve, Math.max(0, t - windowS));
 		const dx = x - start.x;
 		local[i] = dx > 0 ? project(curve, (u - start.u) / dx) : Number.NaN;
 	}
