@@ -28,8 +28,13 @@ export interface Readout {
  * The exact cumulative comparison, current against baseline. At rest (no `x`)
  * it is the CSV score difference; at `x` it is the difference in `u` — never
  * inferred from the shaded gap between pace lines.
+ *
+ * @throws {Error} when the runs do not compare; their `u` share no scale.
  */
 export function readout(current: RunCurve, baseline: RunCurve, x?: number): Readout {
+	if (!comparable(current.params, baseline.params)) {
+		throw new Error(`${current.fileStem} does not compare with ${baseline.fileStem}`);
+	}
 	const race = current.params.kind === 'race';
 	const unit = race ? 'seconds' : 'points';
 	if (x === undefined) return { value: current.score - baseline.score, unit };
@@ -50,10 +55,14 @@ export interface RecentRange {
 
 /**
  * Mean ± one standard deviation of accumulated pace over `others`, evaluated
- * at `current`'s points. The inspected run is excluded even if passed in.
+ * at `current`'s points. The inspected run and runs that do not compare with
+ * it are excluded even if passed in; choosing *prior* runs is the caller's job,
+ * since it needs run dates this model does not carry.
  */
 export function recentRange(current: RunCurve, others: readonly RunCurve[], windowS = DEFAULT_WINDOW_S): RecentRange {
-	const pool = others.filter((other) => other.fileStem !== current.fileStem);
+	const pool = others.filter(
+		(other) => other.fileStem !== current.fileStem && comparable(current.params, other.params),
+	);
 	const n = current.x.length;
 	const mean = new Float64Array(n);
 	const sd = new Float64Array(n);

@@ -70,7 +70,7 @@ scenarios, are handled like every other fixed-clock scenario.
 | --- | --- | ---: |
 | `clock` | fixed duration `T`; higher score is better | 2,011 (2 kill-capped) |
 | `race` | fixed work (a damage pool); `score = B − elapsed` | 153 (10 scenarios) |
-| `unsupported` | the race signals disagree, or the score series, time limit or race pool is missing | 0 |
+| `unsupported` | the race signals disagree, or an input is missing or out of range | 0 |
 
 **Race facts.** `score + elapsed = time_limit = 1000` in 153 / 153 runs, and every kill
 carries exactly `pool / N` damage in 153 / 153. The budget `B` is read from
@@ -107,12 +107,24 @@ shown" rather than a wrong axis.
 
 ```
 race        ⟺ time_limit = 1000  AND  countdown(score)
-clock       ⟺ time_limit < 1000  AND  NOT countdown(score)
+clock       ⟺ 0 < time_limit < 1000  AND  timescale > 0  AND  NOT countdown(score)
 unsupported ⟺ everything else, including the two signals disagreeing
 
-clock T     =  last tick                  if end_challenge_after_kills is set
+clock T     =  last tick                  if end_challenge_after_kills or
+                                          end_challenge_after_damage is set
                time_limit / timescale     otherwise
 ```
+
+`end_challenge_after_damage` never occurs in the corpus. It is the same kind of early
+end as the kill cap, so it is treated the same way.
+
+A race also needs a per-tick damage series, a positive CSV damage total and at least
+one kill. Its kill times must be usable: offsets are differences of
+ms-since-local-midnight, so a kill after midnight comes out a day short and is
+unwrapped by adding 24 h. After that they must be in order and inside the run, with
+one tick of slack past the last tick. The `unsupported` reasons are
+`signals-disagree`, `no-score-series`, `bad-time-limit`, `no-race-pool` and
+`bad-kill-times`. None occurs in the corpus.
 
 `countdown(score)`: `score[0] > 0`, and at least 90 % of the ticks after the first satisfy
 `|score[i] + (t[i] − t[i−1])| < 0.02`. The slack absorbs 1 Hz cadence jitter.
@@ -144,10 +156,14 @@ whole pool.
 **Race kill knots.** Kill `k` of `N` is inserted as the exact point
 `(x = k / N, u = t_offset_k)`, using the millisecond kill table rather than the 1 Hz
 ticks. Tick samples and knots are samples of the same monotone `D(t)`, so the merged
-sequence must be non-decreasing in both `x` and `u`. This is an asserted invariant
-(Testing), not something to repair silently. The last knot is `x = 1`. Where a tick
-and a knot share a time, the knot wins. Ticks after the last kill are dropped, since
-the race ends there.
+sequence should be non-decreasing in both `x` and `u`, but the two clocks disagree
+slightly. Per-tick damage often reaches `k / N` before kill `k` is logged, by up to
+0.22 s in the corpus, and float sums can overshoot the pool. The kill table is
+authoritative, so each tick's `x` is held between the previous point and the next knot.
+A tick that has already reached the next knot adds nothing and is dropped, and so is
+a tick that shares a time with a knot. This makes `uAtX(k / N)` exactly kill `k`'s time,
+which the corpus sweep asserts for every race kill. The last knot is `x = 1`. Ticks
+after the last kill are dropped, since the race ends there.
 
 **Clock close.** When the last tick is earlier than `T`, a closing point
 `(T, 1, S_last)` is appended (D2).
@@ -195,12 +211,14 @@ Accumulated totals come from `u`, never from integrating the smoothed local line
 - `race`: `t_base(x) − t_cur(x)` seconds. Positive means ahead.
 
 At rest it is the CSV score difference, and on inspection the interpolated value at the
-inspected `x`. The shaded gap between accumulated lines is a pace difference, and the
+inspected `x`. A readout between runs that do not compare (D4) throws: their `u` share
+no scale. The shaded gap between accumulated lines is a pace difference, and the
 readout is never derived from it.
 
 **Recent range.** Mean ± one standard deviation of accumulated pace over comparable
-prior runs (inspected run excluded), evaluated at the inspected run's own `x`
-values. No grid is invented. The sample count is carried alongside, so the page can
+prior runs, evaluated at the inspected run's own `x` values. The function drops the
+inspected run and any run that does not compare, whatever it is given. Choosing
+*prior* runs is the caller's job, because it needs run dates the model does not carry. No grid is invented. The sample count is carried alongside, so the page can
 apply its rules for fewer than ten runs and for a single run.
 
 ### D6. Local pace is marginal, not isolated
@@ -239,8 +257,9 @@ is a normal case, not an error.
 
 - **One query** per Run view selection fetches, for the inspected run plus its
   comparison candidates, `run_series.t`, `score` and `damage_done`;
-  `run_perf.time_limit`, `timescale` and `end_challenge_after_kills`; kill
-  `t_offset`s; and `run.score` and `damage_done`. That is arrays only, with no per-tick rows.
+  `run_perf.time_limit`, `timescale`, `end_challenge_after_kills` and
+  `end_challenge_after_damage`; kill
+  `t_offset`s from the `kill` view; and `run.score` and `damage_done`. That is arrays only, with no per-tick rows.
 - **Cost.** A run is 45–125 ticks (median 60). Building `(x, u)`, both pace lines
   and an interpolation is `O(n)` per run. The inspected run, a PB and ~10 recent runs
   come to roughly 1.5k points in total. This runs on the main thread with no worker and
@@ -267,11 +286,11 @@ Public shape (indicative):
 type ScoringKind = 'clock' | 'race' | 'unsupported';
 
 type ScoringParams =
-	| { kind: 'clock'; durationS: number; durationFrom: 'time-limit' | 'kill-cap' }
+	| { kind: 'clock'; durationS: number; durationFrom: 'time-limit' | 'kill-cap' | 'damage-cap' }
 	| { kind: 'race'; budget: number; pool: number; bots: number }
 	| {
 			kind: 'unsupported';
-			reason: 'signals-disagree' | 'no-score-series' | 'no-time-limit' | 'no-race-pool';
+			reason: 'signals-disagree' | 'no-score-series' | 'bad-time-limit' | 'no-race-pool' | 'bad-kill-times';
 	  };
 
 interface RunCurve {
@@ -291,9 +310,11 @@ interface PaceLines {
 
 ## Testing
 
-- **Unit tests over curated fixtures** (one race pair, one clock tracking pair, one
-  multiplier pair, one penalty pair): classification, the endpoint identity, and the
-  sign of the race readout.
+- **Unit tests over curated fixtures and hand-built runs:** classification and its
+  guards (limit range, damage cap, missing race pool, midnight and bad kill times),
+  the endpoint identity over every curated run (race, tracking, √-multiplier and penalty
+  runs included), knot precedence, the sign of the race readout, and the refusal of
+  comparisons between runs that do not compare.
 - **Corpus invariants** in a new `test/fixtures/scoring-corpus.test.ts`, guarded by
   `raw.available` like the existing ingest sweep. These are the checks whose absence
   would let a real defect through silently:
@@ -301,7 +322,8 @@ interface PaceLines {
     hash in two kinds;
   - the accumulated endpoint equals the CSV score: clock within float tolerance, race
     within 0.05 s;
-  - race `(x, u)` with kill knots is non-decreasing in both coordinates;
+  - race `(x, u)` with kill knots is non-decreasing in both coordinates, and
+    `uAtX(k / N)` equals kill `k`'s time for every race kill;
   - the recent range never includes the inspected run.
 - Not tested: chart rendering, and the choice of `w`.
 

@@ -9,12 +9,21 @@ import { describe, expect, it } from 'vitest';
 import { ingest } from '../../src/lib/ingest';
 import { nodeSource } from '../../src/lib/ingest/source-node';
 import { getScoringInputs } from '../../src/lib/run/queries';
-import { buildCurve, classify, paceLines, type ScoringInput } from '../../src/lib/scoring';
+import {
+	buildCurve,
+	classify,
+	paceLines,
+	recentRange,
+	type RunCurve,
+	type ScoringInput,
+	uAtX,
+} from '../../src/lib/scoring';
+import { killTimes } from '../../src/lib/scoring/classify';
 import { makeTestDb } from '../helpers/db';
 import { raw } from '../helpers/fixtures';
 
 describe.skipIf(!raw.available)('scoring model over the full dump', () => {
-	it('classifies, ends on the real score and keeps races monotone', async () => {
+	it('classifies, ends on the real score, keeps races monotone and on their kill times', async () => {
 		const { pg } = await makeTestDb();
 		await ingest(nodeSource(join(raw.dir, 'stats'), join(raw.dir, 'performances')), pg);
 		const rows = await pg.query<{ id: number; hash: string }>(`
@@ -30,6 +39,8 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 		const kindsByHash = new Map<string, Set<string>>();
 		const endpointMisses: string[] = [];
 		const nonMonotone: string[] = [];
+		const knotMisses: string[] = [];
+		const curvesByHash = new Map<string, RunCurve[]>();
 
 		for (const input of inputs) {
 			const params = classify(input);
@@ -40,6 +51,7 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 			if (params.kind === 'unsupported') continue;
 
 			const curve = buildCurve(input)!;
+			curvesByHash.set(hash, [...(curvesByHash.get(hash) ?? []), curve]);
 			const lines = paceLines(curve);
 			const last = lines.accumulated[lines.accumulated.length - 1]!;
 			const tolerance = params.kind === 'race' ? 0.05 : 1e-3 * Math.max(1, Math.abs(input.score));
@@ -53,6 +65,11 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 						break;
 					}
 				}
+				// Kill k is the first moment the run reaches k / N.
+				killTimes(input)!.forEach((time, k) => {
+					const at = uAtX(curve, (k + 1) / params.bots);
+					if (Math.abs(at - time) > 1e-6) knotMisses.push(`${input.fileStem} kill ${k + 1}: ${at} vs ${time}`);
+				});
 			}
 		}
 
@@ -60,5 +77,17 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 		expect([...kindsByHash].filter(([, kinds]) => kinds.size > 1)).toEqual([]);
 		expect(endpointMisses).toEqual([]);
 		expect(nonMonotone).toEqual([]);
+		expect(knotMisses).toEqual([]);
+
+		// The recent range never counts the inspected run, even when handed
+		// every run of its scenario.
+		const overCounted: string[] = [];
+		for (const curves of curvesByHash.values()) {
+			for (const current of curves) {
+				const range = recentRange(current, curves);
+				if (Math.max(...range.count) > curves.length - 1) overCounted.push(current.fileStem);
+			}
+		}
+		expect(overCounted).toEqual([]);
 	}, 600_000);
 });

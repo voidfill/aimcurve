@@ -57,6 +57,7 @@ function clockInput(scores: number[], overrides: Partial<ScoringInput> = {}): Sc
 		timeLimit: scores.length,
 		timescale: 1,
 		endChallengeAfterKills: null,
+		endChallengeAfterDamage: null,
 		t: scores.map((_, i) => i + 1),
 		scoreTicks: scores,
 		damageTicks: null,
@@ -79,6 +80,7 @@ function raceInput(damage: number[], kills: number[], overrides: Partial<Scoring
 		timeLimit: 1000,
 		timescale: 1,
 		endChallengeAfterKills: null,
+		endChallengeAfterDamage: null,
 		t: damage.map((_, i) => Math.min(i + 1, end)),
 		scoreTicks: damage.map((_, i) => (i === 0 ? 999 : -1)),
 		damageTicks: damage,
@@ -129,7 +131,59 @@ describe('D3 classification', () => {
 	});
 });
 
+describe('D3 classification guards', () => {
+	it('takes a damage-capped clock duration from the run itself', () => {
+		const params = classify(clockInput([1, 1, 1], { timeLimit: 60, endChallengeAfterDamage: 500 }));
+		expect(params).toEqual({ kind: 'clock', durationS: 3, durationFrom: 'damage-cap' });
+	});
+
+	it('rejects a time limit or timescale outside the valid range', () => {
+		const bad = { kind: 'unsupported', reason: 'bad-time-limit' };
+		expect(classify(clockInput([1, 1], { timeLimit: 1200 }))).toEqual(bad);
+		expect(classify(clockInput([1, 1], { timeLimit: 0 }))).toEqual(bad);
+		expect(classify(clockInput([1, 1], { timescale: 0 }))).toEqual(bad);
+		expect(classify(clockInput([1, 1], { timeLimit: null }))).toEqual(bad);
+	});
+
+	it('rejects a race without a damage series', () => {
+		expect(classify(raceInput([100, 100], [1, 2], { damageTicks: null }))).toEqual({
+			kind: 'unsupported',
+			reason: 'no-race-pool',
+		});
+	});
+
+	it('unwraps kill times that crossed local midnight', () => {
+		// Offsets are ms since local midnight minus the start: after midnight
+		// they come out a day short.
+		const input = raceInput([100, 100, 100, 100], [2, 4], { killOffsets: [2 - 86_400, 4 - 86_400] });
+		expect(classify(input).kind).toBe('race');
+		const lines = paceLines(curve(input), 1);
+		expect(lines.accumulated[lines.accumulated.length - 1]).toBeCloseTo(996, 6);
+	});
+
+	it('rejects kill times out of order or past the end of the run', () => {
+		const bad = { kind: 'unsupported', reason: 'bad-kill-times' };
+		expect(classify(raceInput([100, 100, 100, 100], [2, 4], { killOffsets: [3, 2] }))).toEqual(bad);
+		expect(classify(raceInput([100, 100], [1, 2], { killOffsets: [1, 9] }))).toEqual(bad);
+	});
+});
+
 describe('D4 curve', () => {
+	it('lets the kill knot win over a tick that already reached its progress', () => {
+		// Damage reaches half the pool at t = 2, but the kill is logged at 2.5.
+		const c = curve(raceInput([100, 100, 100, 100, 0], [2.5, 5]));
+		expect(uAtX(c, 0.5)).toBeCloseTo(2.5, 9);
+	});
+
+	it('keeps race progress non-decreasing through tick noise on both sides of a knot', () => {
+		// Tick 2 lags below kill 1's 0.5; tick 4 overshoots the pool before the last kill.
+		const input = raceInput([100, 90, 110, 100.001], [1.5, 4.5], { damageDone: 400 });
+		const c = curve(input);
+		for (let i = 1; i < c.x.length; i++) expect(c.x[i]!).toBeGreaterThanOrEqual(c.x[i - 1]!);
+		expect(Math.max(...c.x)).toBe(1);
+		expect(uAtX(c, 1)).toBeCloseTo(4.5, 9);
+	});
+
 	it('uses the running score as u on a clock', () => {
 		const c = curve(clockInput([5, -2, 7]));
 		expect([...c.x]).toEqual([0, 1 / 3, 2 / 3, 1]);
@@ -262,6 +316,19 @@ describe('D4/D5 comparison', () => {
 		expect(comparable(classify(a), classify(b))).toBe(true);
 		expect(readout(curve(a), curve(b))).toEqual({ value: a.score - b.score, unit: 'points' });
 		expect(readout(curve(a), curve(b), 1).value).toBeCloseTo(a.score - b.score, 3);
+	});
+
+	it('refuses a readout between runs that do not compare', () => {
+		expect(() => readout(curve(fast()), curve(clockInput([1, 2])))).toThrow();
+		expect(() => readout(curve(clockInput([1, 2])), curve(clockInput([1, 2, 3])), 0.5)).toThrow();
+	});
+
+	it('leaves runs that do not compare out of the recent range', () => {
+		const current = curve(clockInput([1, 1, 1, 1, 1, 1], { fileStem: 'current' }));
+		const longer = curve(clockInput([2, 2, 2, 2, 2, 2, 2, 2], { fileStem: 'longer' }));
+		const race = curve(fast());
+		const range = recentRange(current, [longer, race], 1);
+		expect([...range.count].every((n) => n === 0)).toBe(true);
 	});
 
 	it('builds the recent range from other runs only, at the inspected x', () => {

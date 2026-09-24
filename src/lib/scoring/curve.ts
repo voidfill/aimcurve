@@ -1,10 +1,10 @@
 /**
  * D4: every run reduces to a progress/spend pair `(x, u)`.
  *
- *   clock  x = t / T          u = running score
+ *   clock  x = min(1, t / T)  u = running score
  *   race   x = damage / pool  u = seconds spent
  */
-import { classify, type ScoringInput, type ScoringParams } from './classify';
+import { classify, killTimes, type ScoringInput, type ScoringParams } from './classify';
 
 export interface RunCurve {
 	params: Exclude<ScoringParams, { kind: 'unsupported' }>;
@@ -46,24 +46,30 @@ function clockCurve(input: ScoringInput, durationS: number) {
 
 /**
  * Tick samples of cumulative damage, merged with the exact kill knots
- * `(t_offset_k, k / N)` from the millisecond kill table. Both sample the same
- * monotone D(t); where a tick and a knot share a time, the knot wins. The run
- * ends at the last kill, so later ticks are dropped.
+ * `(t_k, k / N)` from the millisecond kill table. The kill table is
+ * authoritative: per-tick damage often reaches `k / N` a little before kill k
+ * is logged (up to ~0.23 s), and float sums can overshoot the pool. So a tick
+ * is held between the previous point and the next knot, and a tick that has
+ * already reached the next knot adds nothing and is dropped. The run ends at
+ * the last kill, so later ticks are dropped too.
  */
 function raceCurve(input: ScoringInput, pool: number) {
-	const kills = input.killOffsets;
-	const end = kills[kills.length - 1]!;
+	const kills = killTimes(input)!;
+	const n = kills.length;
+	const end = kills[n - 1]!;
 	const points: { t: number; x: number }[] = [{ t: 0, x: 0 }];
 	let damage = 0;
 	let k = 0;
 	for (let i = 0; i < input.t.length; i++) {
 		const time = input.t[i]!;
-		damage += input.damageTicks?.[i] ?? 0;
-		for (; k < kills.length && kills[k]! <= time; k++) points.push({ t: kills[k]!, x: (k + 1) / kills.length });
+		damage += input.damageTicks![i] ?? 0;
+		for (; k < n && kills[k]! <= time; k++) points.push({ t: kills[k]!, x: (k + 1) / n });
 		if (time >= end) break;
-		if (points[points.length - 1]!.t !== time) points.push({ t: time, x: damage / pool });
+		const previous = points[points.length - 1]!;
+		const x = Math.max(previous.x, damage / pool);
+		if (previous.t !== time && x < (k + 1) / n) points.push({ t: time, x });
 	}
-	for (; k < kills.length; k++) points.push({ t: kills[k]!, x: (k + 1) / kills.length });
+	for (; k < n; k++) points.push({ t: kills[k]!, x: (k + 1) / n });
 
 	const t = Float64Array.from(points, (p) => p.t);
 	return { t, x: Float64Array.from(points, (p) => p.x), u: t.slice() };

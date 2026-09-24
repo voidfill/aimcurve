@@ -221,6 +221,7 @@ interface ScoringRow {
 	time_limit: number | null;
 	timescale: number | null;
 	end_challenge_after_kills: number | null;
+	end_challenge_after_damage: number | null;
 	t: number[];
 	score_ticks: (number | null)[] | null;
 	damage_ticks: (number | null)[] | null;
@@ -235,12 +236,10 @@ export async function getScoringInputs(pg: PGliteInterface, runIds: number[]): P
 	const result = await pg.query<ScoringRow>(
 		`
 		select r.id, r.file_stem, r.score, r.damage_done,
-		       p.time_limit, p.timescale, p.end_challenge_after_kills,
+		       p.time_limit, p.timescale, p.end_challenge_after_kills, p.end_challenge_after_damage,
 		       s.t, s.score as score_ticks, s.damage_done as damage_ticks,
 		       coalesce(
-		         (select array_agg((x.at_ms - r.start_ms) / 1000.0 order by x.ord)
-		          from kill_series k, unnest(k.at_ms) with ordinality as x(at_ms, ord)
-		          where k.run_id = r.id),
+		         (select array_agg(k.t_offset order by k.ordinal) from kill k where k.run_id = r.id),
 		         '{}'
 		       ) as kill_offsets
 		from run r
@@ -261,11 +260,11 @@ export async function getScoringInputs(pg: PGliteInterface, runIds: number[]): P
 				timeLimit: row.time_limit,
 				timescale: row.timescale,
 				endChallengeAfterKills: row.end_challenge_after_kills,
+				endChallengeAfterDamage: row.end_challenge_after_damage,
 				t: row.t,
 				scoreTicks: row.score_ticks,
 				damageTicks: row.damage_ticks,
-				// numeric[] arrives as strings.
-				killOffsets: row.kill_offsets.map(Number),
+				killOffsets: row.kill_offsets,
 			},
 		]),
 	);
