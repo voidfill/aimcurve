@@ -57,8 +57,9 @@ The main column beside the existing 320–340 px rail contains, top to bottom:
 
 The application bar gains Run A's selection pill on the right, replacing the
 inline note in `RunView`: *following live* (green, pulsing dot) while following,
-or *inspecting <time> · paused* (amber) with a **N new · return to live** button
-while inspecting. The pill describes selection state only; the data connection
+or *inspecting <time> · paused* (amber) with a **return to live** button
+while inspecting, prefixed "new run ·" once a newer attempt has been imported.
+The rail only knows *whether* one is newer, not how many, so no count is shown. The pill describes selection state only; the data connection
 status stays where it is. The rail keeps its behaviour and is restyled only.
 
 Run A's palette (`#0b0d0f` background, `#101316` panels, `#22272c` rules,
@@ -212,9 +213,10 @@ same data. Runs without kills have no bot marks.
 ### R6. The bot table is per kill slot for races and per bot for clock runs
 
 Run B's table: a swatch per bot, mono figures, the largest loss's Δ in bold. Colors
-come from Run B's six-tint palette, assigned in `run_perf.added_bots` order so a
-bot keeps its color across runs of a scenario, and the same swatch appears
-before the bot's chart label.
+come from Run B's six-tint palette, assigned in sorted bot-name order so a bot
+keeps its color across runs of a scenario, and the same swatch appears before
+the bot's chart label. (`run_perf.added_bots` holds `.bot` file names, which do
+not match the kill table's bot names, so it cannot order them.)
 
 **Race** — one row per kill slot `k`, in order. The bot is the one killed at `k`.
 
@@ -279,8 +281,8 @@ The shaded gap is a pace difference, and no number is read off it.
 
 ```
 src/lib/run/queries.ts      + listScenarioRuns(hash): id, stem, score, started_at, has_perf
-                            + bot fields in getScoringInputs: kill bot_id, hits, shots,
-                              bot names, added_bots
+                            + getKillDetail(ids): per-kill bot name, hits, shots, in the
+                              same order as getScoringInputs' kill offsets
                             + stats columns on Attempt
 src/lib/run/baseline.ts     R2: choose(option, inspected, runs, curves)
                               → { charted run } | { flat score } | { none, reason }
@@ -290,8 +292,9 @@ src/lib/run/chart-data.ts   R3: shared grid, interpolation, gaps → uPlot Align
 src/composables/useRunAnalysis.ts
                             selected attempt → curves, baseline, recent range, rows;
                             re-runs on baseline option or smoothing change
-src/components/RunHeader.vue, StatsStrip.vue, UnifiedChart.vue,
-                ChartTooltip.vue, BotTable.vue, SelectionPill.vue
+src/components/RunDetail.vue   one run: header, stats, chart, table, one baseline
+src/components/RunHeader.vue, StatsStrip.vue, ChartControls.vue, UnifiedChart.vue
+                (tooltip included), BotTable.vue, SelectionPill.vue
 ```
 
 Loading for one selection: `listScenarioRuns` (metadata only), which already

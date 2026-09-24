@@ -31,14 +31,24 @@ select {
 
 /* Tokens */
 :root {
-	--color-bg: #0f1115;
-	--color-surface: #171a21;
-	--color-border: #2a2f3a;
-	--color-text: #e6e8eb;
-	--color-text-muted: #9aa1ac;
-	--color-accent: #5b8cff;
-	--color-accent-contrast: #0f1115;
-	--color-danger: #ff6b6b;
+	color-scheme: dark;
+	--color-bg: #0b0d0f;
+	--color-surface: #101316;
+	--color-surface-raised: #161a1e;
+	--color-plot: #0e1114;
+	--color-border: #22272c;
+	--color-border-strong: #2f363d;
+	--color-rule-faint: #171b1f;
+	--color-text: #e8ebee;
+	--color-text-strong: #ffffff;
+	--color-text-muted: #8b9299;
+	--color-text-faint: #737a81;
+	--color-accent: #5f9bd6;
+	--color-accent-contrast: #0b0d0f;
+	--color-danger: #ff6f61;
+	--color-ahead: #43d492;
+	--color-behind: #ff6f61;
+	--color-baseline: #f0b23f;
 
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;

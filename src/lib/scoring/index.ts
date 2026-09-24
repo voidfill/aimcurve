@@ -6,7 +6,7 @@ import type { ScoringInput } from './classify';
 import { buildCurve, type RunCurve } from './curve';
 import { DEFAULT_WINDOW_S, type PaceLines, paceLines } from './pace';
 
-export { classify, type ScoringInput, type ScoringKind, type ScoringParams } from './classify';
+export { classify, killTimes, type ScoringInput, type ScoringKind, type ScoringParams } from './classify';
 export { comparable, type Readout, readout, type RecentRange, recentRange } from './compare';
 export { atTime, atX, buildCurve, type RunCurve, uAtX } from './curve';
 export { DEFAULT_WINDOW_S, type PaceLines, paceLines, project } from './pace';

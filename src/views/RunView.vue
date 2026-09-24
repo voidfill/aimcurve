@@ -10,12 +10,14 @@
 import { computed } from 'vue';
 import { useMediaQuery } from '@vueuse/core';
 import AttemptRail from '../components/AttemptRail.vue';
-import RunSummary from '../components/RunSummary.vue';
+import RunDetail from '../components/RunDetail.vue';
+import SelectionPill from '../components/SelectionPill.vue';
 import ScenarioFilter from '../components/ScenarioFilter.vue';
 import { useAttempts } from '../composables/useAttempts';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
+import { timeFormat } from '../lib/run/format';
 
 const { ready, error: dbError } = useDb();
 const { state } = useImport();
@@ -39,6 +41,11 @@ const {
 	retry,
 } = useAttempts();
 
+/** The inspected run's start, for the application bar's pill. */
+const inspectedAt = computed(() =>
+	mode.value === 'inspect' && selected.value ? timeFormat.format(new Date(selected.value.startedAt)) : null,
+);
+
 /** Below this the rail stops being a column and becomes an ordinary section. */
 const narrow = useMediaQuery('(max-width: 799px)');
 
@@ -58,6 +65,15 @@ const onboarding = computed(
 </script>
 
 <template>
+	<Teleport defer to="#app-bar-status">
+		<SelectionPill
+			v-if="dbError === null && ready && !onboarding"
+			:mode="mode"
+			:inspected-at="inspectedAt"
+			:has-newer="hasNewer"
+			@resume-latest="resumeLatest()"
+		/>
+	</Teleport>
 	<div class="run" :class="{ narrow }">
 		<div class="result">
 			<ScenarioFilter
@@ -128,7 +144,7 @@ const onboarding = computed(
 				</section>
 
 				<template v-else-if="selected !== null">
-					<RunSummary :attempt="selected" />
+					<RunDetail :attempt="selected" />
 
 					<p v-if="selectionOutsideFilter" class="note">
 						This attempt is not in the scenario the filter selects, so it is not in the rail. The
@@ -138,10 +154,6 @@ const onboarding = computed(
 					<p v-else-if="selectionOffPage" class="note">
 						This attempt is older than the part of the list loaded so far, so it has no row in the
 						rail yet.
-					</p>
-					<p v-if="mode === 'inspect'" class="note">
-						Inspecting an attempt. New imports keep arriving, but the selection stays where it is.
-						<button type="button" @click="resumeLatest()">Resume latest</button>
 					</p>
 				</template>
 			</template>
@@ -170,10 +182,10 @@ const onboarding = computed(
 <style scoped>
 .run {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 320px;
-	gap: var(--space-6);
+	grid-template-columns: minmax(0, 1fr) 340px;
+	gap: 18px;
 	align-items: start;
-	padding: var(--space-4);
+	padding: 12px 18px;
 }
 
 /*
@@ -187,7 +199,7 @@ const onboarding = computed(
 .result {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-4);
+	gap: 8px;
 	min-width: 0;
 }
 
