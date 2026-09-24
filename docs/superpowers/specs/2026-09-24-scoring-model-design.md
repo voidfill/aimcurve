@@ -14,7 +14,8 @@ here), chart rendering, and comparison compatibility by settings such as
 sensitivity.
 
 Numbers below were measured on 2026-09-24 over the full fixture dump: 2,487
-completed CSVs, 2,156 of them with a `.perf`. Measurement was done from scratch
+completed CSVs, 2,164 of them with a `.perf` after the ingest join (a filename-stem pairing,
+used for the formula fits, finds 2,156). Measurement was done from scratch
 with the current parsers; the earlier Python implementation was read for prior
 findings only, and its structure is not carried over.
 
@@ -30,7 +31,7 @@ findings only, and its structure is not carried over.
 | D6 | Local pace is marginal, not isolated |
 | D7 | Rank thresholds are horizontal lines with no reverse conversion |
 | D8 | Bots touch the model only through x placement and Δu |
-| D9 | Pure TypeScript over one query, memoised per run |
+| D9 | Pure TypeScript over one query, memoised per file stem |
 
 ---
 
@@ -67,9 +68,9 @@ scenarios, are handled like every other fixed-clock scenario.
 
 | kind | meaning | runs |
 | --- | --- | ---: |
-| `clock` | fixed duration `T`; higher score is better | 2,003 |
+| `clock` | fixed duration `T`; higher score is better | 2,011 (2 kill-capped) |
 | `race` | fixed work (a damage pool); `score = B − elapsed` | 153 (10 scenarios) |
-| `unsupported` | the race signals disagree, or there is no score series | 0 |
+| `unsupported` | the race signals disagree, or the score series, time limit or race pool is missing | 0 |
 
 **Race facts.** `score + elapsed = time_limit = 1000` in 153 / 153 runs, and every kill
 carries exactly `pool / N` damage in 153 / 153. The budget `B` is read from
@@ -92,8 +93,11 @@ performance, the comparability rule (D4, equal `T`) refuses its comparisons, and
 its own pace lines stay valid.
 
 The two 1.0 s shortfalls, `Leapcorn Pure Easy` and `Star Clicking Novice`, are
-ordinary clock runs whose last tick fell short. They keep `T = time_limit / timescale`,
-and their endpoint is the CSV score (D5).
+ordinary clock runs whose last tick fell short, and so is `VT ww5t Adept S5 Clusters`
+by 0.06 s. They keep `T = time_limit / timescale`. A completed clock run ran to its
+limit, so every clock curve closes at `(T, x = 1, final running score)` when its last
+tick is early (D4). Without that point, dividing by `x < 1` over-projects the
+endpoint: Leapcorn by 1.7 %.
 
 **`unsupported`** has no occurrences in the corpus. It exists so that a format change
 (D3) or a `.perf` without a score column degrades to "no pace lines, with the reason
@@ -110,7 +114,7 @@ clock T     =  last tick                  if end_challenge_after_kills is set
                time_limit / timescale     otherwise
 ```
 
-`countdown(score)`: `score[0] > 0`, and at least 90 % of interior ticks satisfy
+`countdown(score)`: `score[0] > 0`, and at least 90 % of the ticks after the first satisfy
 `|score[i] + (t[i] − t[i−1])| < 0.02`. The slack absorbs 1 Hz cadence jitter.
 
 The two race signals are independent, the header sentinel and the tick pattern,
@@ -131,7 +135,7 @@ For each tick `i`, prepended with `(0, 0)`:
 
 | kind | `x` (progress, 0 → 1) | `u` (accumulated) | inputs |
 | --- | --- | --- | --- |
-| `clock` | `t_i / T` | `S_i = cumsum(score)` | `t`, `score`, `T` |
+| `clock` | `min(1, t_i / T)` | `S_i = cumsum(score)` | `t`, `score`, `T` |
 | `race` | `D_i / P`, `D = cumsum(damage_done)` | `t_i` (seconds spent) | `t`, `damage_done`, `P`, `B` |
 
 The race pool `P` is the run's total `damage_done`, since a completed race consumes the
@@ -141,7 +145,12 @@ whole pool.
 `(x = k / N, u = t_offset_k)`, using the millisecond kill table rather than the 1 Hz
 ticks. Tick samples and knots are samples of the same monotone `D(t)`, so the merged
 sequence must be non-decreasing in both `x` and `u`. This is an asserted invariant
-(Testing), not something to repair silently. The last knot is `x = 1`.
+(Testing), not something to repair silently. The last knot is `x = 1`. Where a tick
+and a knot share a time, the knot wins. Ticks after the last kill are dropped, since
+the race ends there.
+
+**Clock close.** When the last tick is earlier than `T`, a closing point
+`(T, 1, S_last)` is appended (D2).
 
 **Clock kills** add no knots. Their score is already inside the tick that contains
 them. Their chart position is `t_offset / T` (D8).
@@ -226,7 +235,7 @@ things:
 Runs with no kills (invincible tracking, 1,152 / 2,487 runs) have no encounters. That
 is a normal case, not an error.
 
-### D9. Pure TypeScript over one query, memoised per run
+### D9. Pure TypeScript over one query, memoised per file stem
 
 - **One query** per Run view selection fetches, for the inspected run plus its
   comparison candidates, `run_series.t`, `score` and `damage_done`;
@@ -236,8 +245,9 @@ is a normal case, not an error.
   and an interpolation is `O(n)` per run. The inspected run, a PB and ~10 recent runs
   come to roughly 1.5k points in total. This runs on the main thread with no worker and
   no SQL-side math.
-- **Memoisation.** Runs are immutable after ingest, so `(x, u)` is cached by run id.
-  Pace lines are cached by `(run id, w)`.
+- **Memoisation.** Runs are immutable after ingest, so `(x, u)` is cached by file stem.
+  Pace lines are cached by `(file stem, w)`. The stem, not the run id, because a
+  destructive migration or the development wipe reassigns ids.
 
 ## Module map
 
@@ -259,7 +269,10 @@ type ScoringKind = 'clock' | 'race' | 'unsupported';
 type ScoringParams =
 	| { kind: 'clock'; durationS: number; durationFrom: 'time-limit' | 'kill-cap' }
 	| { kind: 'race'; budget: number; pool: number; bots: number }
-	| { kind: 'unsupported'; reason: 'signals-disagree' | 'no-score-series' };
+	| {
+			kind: 'unsupported';
+			reason: 'signals-disagree' | 'no-score-series' | 'no-time-limit' | 'no-race-pool';
+	  };
 
 interface RunCurve {
 	params: ScoringParams;

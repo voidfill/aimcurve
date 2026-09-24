@@ -1,4 +1,5 @@
 import type { PGliteInterface } from '@electric-sql/pglite';
+import type { ScoringInput } from '../scoring';
 
 /**
  * A completed attempt, assembled from `run_complete` joined to `config`.
@@ -210,4 +211,62 @@ export async function listScenarios(pg: PGliteInterface): Promise<ScenarioOption
 		name: row.name,
 		hash: row.hash,
 	}));
+}
+
+interface ScoringRow {
+	id: number;
+	file_stem: string;
+	score: number;
+	damage_done: number | null;
+	time_limit: number | null;
+	timescale: number | null;
+	end_challenge_after_kills: number | null;
+	t: number[];
+	score_ticks: (number | null)[] | null;
+	damage_ticks: (number | null)[] | null;
+	kill_offsets: number[];
+}
+
+/**
+ * The scoring model's inputs for the given runs, keyed by run id: arrays only,
+ * no per-tick rows. Runs without a `.perf` have no curve and are left out.
+ */
+export async function getScoringInputs(pg: PGliteInterface, runIds: number[]): Promise<Map<number, ScoringInput>> {
+	const result = await pg.query<ScoringRow>(
+		`
+		select r.id, r.file_stem, r.score, r.damage_done,
+		       p.time_limit, p.timescale, p.end_challenge_after_kills,
+		       s.t, s.score as score_ticks, s.damage_done as damage_ticks,
+		       coalesce(
+		         (select array_agg((x.at_ms - r.start_ms) / 1000.0 order by x.ord)
+		          from kill_series k, unnest(k.at_ms) with ordinality as x(at_ms, ord)
+		          where k.run_id = r.id),
+		         '{}'
+		       ) as kill_offsets
+		from run r
+		join run_perf p on p.run_id = r.id
+		join run_series s on s.run_id = r.id
+		where r.id = any($1::integer[]) and r.kind = 'complete'
+		`,
+		[runIds],
+	);
+	return new Map(
+		result.rows.map((row) => [
+			row.id,
+			{
+				runId: row.id,
+				fileStem: row.file_stem,
+				score: row.score,
+				damageDone: row.damage_done,
+				timeLimit: row.time_limit,
+				timescale: row.timescale,
+				endChallengeAfterKills: row.end_challenge_after_kills,
+				t: row.t,
+				scoreTicks: row.score_ticks,
+				damageTicks: row.damage_ticks,
+				// numeric[] arrives as strings.
+				killOffsets: row.kill_offsets.map(Number),
+			},
+		]),
+	);
 }
