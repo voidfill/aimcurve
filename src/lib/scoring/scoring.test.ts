@@ -251,10 +251,10 @@ describe('D5 pace', () => {
 		}
 	});
 
-	it('draws from the first tick, with a gap only at x = 0', () => {
+	it('draws from t = 0 with the first tick value, the limit of a linear first stretch', () => {
 		const lines = paceLines(curve(clockInput([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])), 5);
-		expect(Number.isNaN(lines.accumulated[0]!)).toBe(true); // t = 0: 0 / 0
-		expect(Number.isNaN(lines.local[0]!)).toBe(true);
+		expect(lines.accumulated[0]).toBeCloseTo(10, 9); // t = 0
+		expect(lines.local[0]).toBeCloseTo(10, 9);
 		expect(lines.accumulated[1]).toBeCloseTo(10, 9); // t = 1, 1 point/s over 10 s
 		expect(lines.local[5]).toBeCloseTo(10, 9);
 	});

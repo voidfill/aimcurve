@@ -3,22 +3,48 @@
  * See docs/superpowers/specs/2026-09-24-run-view-design.md.
  *
  * Bots touch the scoring model only through placement (`x` spans) and
- * contribution (Δu across a span), per scoring D8.
+ * contribution (Δu across a span), per scoring D8. A bot is engaged from
+ * `kill − TTK` to its kill; the time between one kill and the next engagement
+ * is dead time, which belongs to no bot.
  */
-import { type RunCurve, uAtX } from '../scoring';
+import { atTime, type RunCurve } from '../scoring';
 
 /** Per-kill detail in kill order, aligned with the scoring input's kill offsets. */
 export interface KillDetail {
 	bot: readonly string[];
 	hits: readonly number[];
 	shots: readonly number[];
+	/** Seconds from the start of the engagement to the kill. */
+	ttk: readonly number[];
 }
 
-/** One encounter: the span from the previous kill to kill `index`. */
+/** When each killed bot was engaged, in seconds of the run's own clock. */
+export interface Engagement {
+	index: number;
+	bot: string;
+	start: number;
+	end: number;
+}
+
+/**
+ * Engagements from kill times and TTK. A start is held between the previous
+ * kill and its own kill, so engagements never overlap and a TTK longer than
+ * the gap since the last kill cannot reach back past it.
+ */
+export function engagements(kills: KillDetail, times: readonly number[] | null): Engagement[] {
+	if (times === null || times.length !== kills.bot.length) return [];
+	let previous = 0;
+	return times.map((end, index) => {
+		const start = Math.min(end, Math.max(previous, end - (kills.ttk[index] ?? 0)));
+		previous = end;
+		return { index, bot: kills.bot[index]!, start, end };
+	});
+}
+
+/** One engagement placed on the chart: its span in progress, 0 → 1. */
 export interface Encounter {
 	index: number;
 	bot: string;
-	/** Progress span, 0 → 1. */
 	x0: number;
 	x1: number;
 }
@@ -37,34 +63,35 @@ export function botColors(names: readonly string[]): Map<string, string> {
 }
 
 /**
- * Encounter spans. Race: slot `k` is `[k/N, (k+1)/N]`, the same in every run.
- * Clock: `[t_{k−1}/T, t_k/T]` from 0, per run, from the run's own kill times.
+ * Chart spans. Race: slot `k` is `[k/N, (k+1)/N]`, the same in every run; dead
+ * time adds no progress, so it has no width there. Clock: the engagement's
+ * own times over `T`, with dead time left between spans.
  */
-export function encounters(curve: RunCurve, kills: KillDetail, times: readonly number[] | null): Encounter[] {
+export function encounters(curve: RunCurve, engaged: readonly Engagement[]): Encounter[] {
 	const { params } = curve;
 	if (params.kind === 'race') {
 		const n = params.bots;
-		return Array.from({ length: n }, (_, k) => ({ index: k, bot: kills.bot[k] ?? '', x0: k / n, x1: (k + 1) / n }));
+		return engaged.map((e) => ({ index: e.index, bot: e.bot, x0: e.index / n, x1: (e.index + 1) / n }));
 	}
-	if (times === null || times.length !== kills.bot.length) return [];
-	const out: Encounter[] = [];
-	let x0 = 0;
-	times.forEach((time, k) => {
-		const x1 = Math.min(1, Math.max(x0, time / params.durationS));
-		out.push({ index: k, bot: kills.bot[k]!, x0, x1 });
-		x0 = x1;
-	});
-	return out;
+	const x = (t: number) => Math.min(1, t / params.durationS);
+	return engaged.map((e) => ({ index: e.index, bot: e.bot, x0: x(e.start), x1: x(e.end) }));
 }
 
-function gained(curve: RunCurve, encounter: Encounter): number {
-	return uAtX(curve, encounter.x1) - uAtX(curve, encounter.x0);
+/** Seconds of dead time: before the first engagement and between the others. */
+export function deadTime(engaged: readonly Engagement[]): number {
+	let dead = 0;
+	let previous = 0;
+	for (const e of engaged) {
+		dead += e.start - previous;
+		previous = e.end;
+	}
+	return dead;
 }
 
 export interface RaceRow {
 	slot: number;
 	bot: string;
-	/** Seconds spent on this slot, including its share of respawn gap. */
+	/** Seconds engaged on this slot's bot, dead time excluded. */
 	split: number;
 	baseline: number | null;
 	/** `baseline − split`: positive means faster. */
@@ -74,49 +101,56 @@ export interface RaceRow {
 	deltaBest: number;
 }
 
-/** The fastest split per slot over `curves` (candidates and the inspected run). */
-export function bestSplits(curves: readonly RunCurve[], slots: number): number[] {
+export interface RaceTable {
+	rows: RaceRow[];
+	/** Dead time in seconds, this run and the baseline. */
+	dead: { split: number; baseline: number | null; delta: number | null };
+}
+
+/** The fastest engaged split per slot over `runs` (candidates and the inspected run). */
+export function bestSplits(runs: readonly (readonly Engagement[])[], slots: number): number[] {
 	const best = new Array<number>(slots).fill(Number.POSITIVE_INFINITY);
-	for (const curve of curves) {
-		if (curve.params.kind !== 'race' || curve.params.bots !== slots) continue;
-		for (let k = 0; k < slots; k++) {
-			best[k] = Math.min(best[k]!, uAtX(curve, (k + 1) / slots) - uAtX(curve, k / slots));
-		}
+	for (const engaged of runs) {
+		if (engaged.length !== slots) continue;
+		engaged.forEach((e, k) => (best[k] = Math.min(best[k]!, e.end - e.start)));
 	}
 	return best;
 }
 
 export function raceRows(
-	curve: RunCurve,
-	spans: readonly Encounter[],
-	baseline: RunCurve | null,
+	engaged: readonly Engagement[],
+	baseline: readonly Engagement[] | null,
 	best: readonly number[],
-): RaceRow[] {
-	return spans.map((encounter) => {
-		const split = gained(curve, encounter);
-		const base = baseline ? gained(baseline, encounter) : null;
-		const fastest = Math.min(best[encounter.index] ?? split, split);
+): RaceTable {
+	const base = baseline && baseline.length === engaged.length ? baseline : null;
+	const rows = engaged.map((e, k) => {
+		const split = e.end - e.start;
+		const other = base ? base[k]!.end - base[k]!.start : null;
+		const fastest = Math.min(best[k] ?? split, split);
 		return {
-			slot: encounter.index,
-			bot: encounter.bot,
+			slot: k,
+			bot: e.bot,
 			split,
-			baseline: base,
-			delta: base === null ? null : base - split,
+			baseline: other,
+			delta: other === null ? null : other - split,
 			best: fastest,
 			deltaBest: fastest - split,
 		};
 	});
+	const dead = deadTime(engaged);
+	const baseDead = base ? deadTime(base) : null;
+	return { rows, dead: { split: dead, baseline: baseDead, delta: baseDead === null ? null : baseDead - dead } };
 }
 
 export interface ClockRow {
 	bot: string;
-	/** Seconds in this bot's encounters. */
+	/** Seconds engaged with this bot. */
 	time: number;
 	encounters: number;
 	hits: number;
 	shots: number;
 	accuracy: number | null;
-	/** Δu over this bot's encounters: points gained while engaged. */
+	/** Δu over this bot's engagements: points gained while engaged. */
 	points: number;
 	baseline: number | null;
 	/** `points − baseline`. */
@@ -125,40 +159,51 @@ export interface ClockRow {
 
 export interface ClockTable {
 	rows: ClockRow[];
-	/** The time and points after the last kill, up to `T`. */
+	/** Time and points outside every engagement, before the last kill. */
+	dead: { time: number; points: number };
+	/** After the last kill: a bot engaged but not killed before time ran out. */
 	tail: { time: number; points: number };
 }
 
-function pointsByBot(curve: RunCurve, spans: readonly Encounter[]): Map<string, number> {
+function gained(curve: RunCurve, from: number, to: number): number {
+	return atTime(curve, to).u - atTime(curve, from).u;
+}
+
+function pointsByBot(curve: RunCurve, engaged: readonly Engagement[]): Map<string, number> {
 	const out = new Map<string, number>();
-	for (const encounter of spans) out.set(encounter.bot, (out.get(encounter.bot) ?? 0) + gained(curve, encounter));
+	for (const e of engaged) out.set(e.bot, (out.get(e.bot) ?? 0) + gained(curve, e.start, e.end));
 	return out;
 }
 
 /**
  * One row per bot, in order of first appearance. With a baseline, a bot the
- * baseline never met counts as 0 points there.
+ * baseline never met counts as 0 points there. Rows, dead time and the tail
+ * add up to the run's duration and final score.
  */
 export function clockRows(
 	curve: RunCurve,
-	spans: readonly Encounter[],
+	engaged: readonly Engagement[],
 	kills: KillDetail,
-	baseline: { curve: RunCurve; spans: readonly Encounter[] } | null,
+	baseline: { curve: RunCurve; engaged: readonly Engagement[] } | null,
 ): ClockTable {
 	const duration = curve.params.kind === 'clock' ? curve.params.durationS : 0;
-	const base = baseline ? pointsByBot(baseline.curve, baseline.spans) : null;
+	const base = baseline ? pointsByBot(baseline.curve, baseline.engaged) : null;
 	const rows = new Map<string, ClockRow>();
-	for (const encounter of spans) {
-		let row = rows.get(encounter.bot);
+	let deadPoints = 0;
+	let previous = 0;
+	for (const e of engaged) {
+		let row = rows.get(e.bot);
 		if (!row) {
-			row = { bot: encounter.bot, time: 0, encounters: 0, hits: 0, shots: 0, accuracy: null, points: 0, baseline: null, delta: null };
-			rows.set(encounter.bot, row);
+			row = { bot: e.bot, time: 0, encounters: 0, hits: 0, shots: 0, accuracy: null, points: 0, baseline: null, delta: null };
+			rows.set(e.bot, row);
 		}
-		row.time += (encounter.x1 - encounter.x0) * duration;
+		row.time += e.end - e.start;
 		row.encounters++;
-		row.hits += kills.hits[encounter.index] ?? 0;
-		row.shots += kills.shots[encounter.index] ?? 0;
-		row.points += gained(curve, encounter);
+		row.hits += kills.hits[e.index] ?? 0;
+		row.shots += kills.shots[e.index] ?? 0;
+		row.points += gained(curve, e.start, e.end);
+		deadPoints += gained(curve, previous, e.start);
+		previous = e.end;
 	}
 	for (const row of rows.values()) {
 		row.accuracy = row.shots > 0 ? row.hits / row.shots : null;
@@ -167,15 +212,15 @@ export function clockRows(
 			row.delta = row.points - row.baseline;
 		}
 	}
-	const lastX = spans.length > 0 ? spans[spans.length - 1]!.x1 : 0;
-	const tail = {
-		time: (1 - lastX) * duration,
-		points: curve.u[curve.u.length - 1]! - uAtX(curve, lastX),
+	const last = Math.min(previous, duration);
+	return {
+		rows: [...rows.values()],
+		dead: { time: deadTime(engaged), points: deadPoints },
+		tail: { time: Math.max(0, duration - last), points: curve.u[curve.u.length - 1]! - atTime(curve, last).u },
 	};
-	return { rows: [...rows.values()], tail };
 }
 
-/** The key of the row with the largest loss, or null when nothing was lost. */
+/** The index of the row with the largest loss, or null when nothing was lost. */
 export function largestLoss<T extends { delta: number | null }>(rows: readonly T[]): number | null {
 	let worst: number | null = null;
 	rows.forEach((row, i) => {

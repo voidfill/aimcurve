@@ -7,11 +7,11 @@
  * Every figure is an observation: the table never says why a bot went badly.
  */
 import { computed } from 'vue';
-import type { ClockTable, RaceRow } from '../lib/run/bots';
+import type { ClockTable, RaceTable } from '../lib/run/bots';
 import { largestLoss } from '../lib/run/bots';
 import { formatSigned, formatValue } from '../lib/run/format';
 
-export type BotTableData = { kind: 'race'; rows: RaceRow[] } | { kind: 'clock'; table: ClockTable };
+export type BotTableData = { kind: 'race'; table: RaceTable } | { kind: 'clock'; table: ClockTable };
 
 const props = defineProps<{
 	data: BotTableData;
@@ -43,6 +43,15 @@ interface Row {
 	cells: Cell[];
 }
 
+/** Dead time and the unfinished last bot: time that belongs to no killed bot. */
+interface Extra {
+	label: string;
+	cells: Cell[];
+}
+
+/** Shorter than this, a tail is float noise rather than a bot left alive. */
+const MIN_TAIL_S = 0.005;
+
 function signed(delta: number | null, digits: number): Cell {
 	if (delta === null) return { text: DASH, tone: 'dim' };
 	return { text: formatSigned(delta, digits), tone: delta > 0 ? 'ahead' : delta < 0 ? 'behind' : 'dim' };
@@ -53,14 +62,14 @@ const baseHeader = computed(() => props.baselineLabel ?? 'baseline');
 const columns = computed(() =>
 	props.data.kind === 'race'
 		? ['this run', baseHeader.value, 'Δ', 'best', 'Δ best']
-		: ['time', 'enc.', 'hits / shots', 'acc', 'points', `Δ ${baseHeader.value}`],
+		: ['engaged', 'enc.', 'hits / shots', 'acc', 'points', `Δ ${baseHeader.value}`],
 );
 
 const noDelta = computed(() => props.baselineFlat || props.baselineLabel === null);
 
 const rows = computed<Row[]>(() => {
 	if (props.data.kind === 'race') {
-		return props.data.rows.map((row) => ({
+		return props.data.table.rows.map((row) => ({
 			key: String(row.slot),
 			bot: row.bot,
 			cells: [
@@ -76,7 +85,7 @@ const rows = computed<Row[]>(() => {
 		key: row.bot,
 		bot: row.bot,
 		cells: [
-			{ text: `${formatValue(row.time, 1)} s`, tone: 'dim' },
+			{ text: `${formatValue(row.time, 2)} s`, tone: 'dim' },
 			{ text: formatValue(row.encounters), tone: 'dim' },
 			{ text: `${formatValue(row.hits)} / ${formatValue(row.shots)}`, tone: 'dim' },
 			{ text: row.accuracy === null ? DASH : `${formatValue(row.accuracy * 100, 1)}%`, tone: 'strong' },
@@ -88,7 +97,7 @@ const rows = computed<Row[]>(() => {
 
 const worst = computed(() => {
 	if (noDelta.value) return null;
-	const deltas: readonly { delta: number | null }[] = props.data.kind === 'race' ? props.data.rows : props.data.table.rows;
+	const deltas: readonly { delta: number | null }[] = props.data.table.rows;
 	const i = largestLoss(deltas);
 	return i === null ? null : rows.value[i]!.key;
 });
@@ -96,14 +105,46 @@ const worst = computed(() => {
 /** The Δ column the largest loss is emphasised in. */
 const deltaColumn = computed(() => (props.data.kind === 'race' ? 2 : 5));
 
-const tail = computed(() => (props.data.kind === 'clock' && props.data.table.rows.length > 0 ? props.data.table.tail : null));
+const extras = computed<Extra[]>(() => {
+	const dim = (text: string): Cell => ({ text, tone: 'dim' });
+	if (props.data.kind === 'race') {
+		const { dead } = props.data.table;
+		return [
+			{
+				label: 'dead time',
+				cells: [
+					dim(formatValue(dead.split, 2)),
+					dim(dead.baseline === null || noDelta.value ? DASH : formatValue(dead.baseline, 2)),
+					noDelta.value ? dim(DASH) : signed(dead.delta, 2),
+					dim(DASH),
+					dim(DASH),
+				],
+			},
+		];
+	}
+	const { dead, tail, rows: list } = props.data.table;
+	if (list.length === 0) return [];
+	const out: Extra[] = [
+		{
+			label: 'dead time',
+			cells: [dim(`${formatValue(dead.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(dead.points, 1)), dim(DASH)],
+		},
+	];
+	if (tail.time >= MIN_TAIL_S) {
+		out.push({
+			label: 'last bot, not killed',
+			cells: [dim(`${formatValue(tail.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(tail.points, 1)), dim(DASH)],
+		});
+	}
+	return out;
+});
 
 const title = computed(() => (props.data.kind === 'race' ? 'Per-bot splits' : 'Bot breakdown'));
 
 const subtitle = computed(() => {
 	const parts: string[] = [];
-	if (props.data.kind === 'race') parts.push('seconds per kill slot, respawn gap included');
-	else parts.push('points gained while engaged');
+	if (props.data.kind === 'race') parts.push('seconds engaged per bot (kill − TTK → kill); dead time between bots apart');
+	else parts.push('engaged from kill − TTK to the kill; points gained while engaged');
 	if (props.baselineFlat && props.baselineLabel) parts.push(`${props.baselineLabel} has no per-bot detail`);
 	else if (props.baselineLabel === null) parts.push('no baseline to compare with');
 	return parts.join(' · ');
@@ -156,14 +197,9 @@ function onKey(event: KeyboardEvent, key: string): void {
 							{{ cell.text }}
 						</td>
 					</tr>
-					<tr v-if="tail" class="tail">
-						<th scope="row" class="name"><i class="swatch" aria-hidden="true"></i>after last kill</th>
-						<td class="dim">{{ formatValue(tail.time, 1) }} s</td>
-						<td class="dim">{{ DASH }}</td>
-						<td class="dim">{{ DASH }}</td>
-						<td class="dim">{{ DASH }}</td>
-						<td class="dim">{{ formatValue(tail.points, 1) }}</td>
-						<td class="dim">{{ DASH }}</td>
+					<tr v-for="extra in extras" :key="extra.label" class="tail">
+						<th scope="row" class="name"><i class="swatch" aria-hidden="true"></i>{{ extra.label }}</th>
+						<td v-for="(cell, i) in extra.cells" :key="i" :class="cell.tone">{{ cell.text }}</td>
 					</tr>
 				</tbody>
 			</table>

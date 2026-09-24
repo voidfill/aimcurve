@@ -193,9 +193,10 @@ full run:
 - **Local pace** at point `i`: `project((u(t_i) − u(t_i − w)) / (x(t_i) − x(t_i − w)))`
   over a rolling window of `w` seconds of the run's own clock. The default is `w = 5 s`,
   and the page spec's smoothing setting changes it.
-- **Gaps, not zeroes.** Accumulated pace is undefined (`NaN`, drawn as a gap)
-  only at `x = 0`, where it would be `0 / 0`, so both lines start at the first
-  tick. Until a full window has been played, local pace uses the window played
+- **Gaps, not zeroes.** Accumulated pace is `0 / 0` at `x = 0`. Because `u` is
+  linear between `(0, 0)` and the first point, both paces are one constant over
+  that first stretch, so the lines start at `t = 0` with the first point's value:
+  its limit, not an invented value. Until a full window has been played, local pace uses the window played
   so far, `[0, t_i]`, and so equals accumulated pace. Local pace is also undefined
   when `Δx = 0`, for example a race window spent entirely in a respawn gap. Nothing
   divides by zero.

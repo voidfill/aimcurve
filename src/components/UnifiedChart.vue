@@ -43,6 +43,8 @@ const props = defineProps<{
 	readoutAt: ((x: number) => number) | null;
 	/** Recent runs contributing to the range. */
 	recentCount: number;
+	/** This run's elapsed seconds at progress `x`. */
+	timeAt: (x: number) => number;
 }>();
 
 const HEIGHT = 340;
@@ -200,27 +202,34 @@ function paintBots(u: uPlot): void {
 	// uPlot leaves the axis labels' alignment on the context.
 	ctx.textAlign = 'left';
 	ctx.textBaseline = 'top';
-	for (const e of list) {
+	const boundary = (x: number) => {
+		ctx.strokeStyle = '#2b3238';
+		ctx.lineWidth = ratio;
+		ctx.setLineDash([3 * ratio, 3 * ratio]);
+		ctx.beginPath();
+		ctx.moveTo(Math.round(x) + 0.5, top);
+		ctx.lineTo(Math.round(x) + 0.5, top + height);
+		ctx.stroke();
+		ctx.setLineDash([]);
+	};
+	const { left, width } = u.bbox;
+	list.forEach((e, k) => {
 		const x0 = px(u, e.x0);
 		const x1 = px(u, e.x1);
-		if (e.index > 0) {
-			ctx.strokeStyle = '#2b3238';
-			ctx.lineWidth = ratio;
-			ctx.setLineDash([3 * ratio, 3 * ratio]);
-			ctx.beginPath();
-			ctx.moveTo(Math.round(x0) + 0.5, top);
-			ctx.lineTo(Math.round(x0) + 0.5, top + height);
-			ctx.stroke();
-			ctx.setLineDash([]);
-		}
+		// A boundary where an engagement starts, and where it ends unless the
+		// next one starts within a pixel: dead time between bots then shows as
+		// the space between two lines, and the end of the last kill stays visible.
+		if (x0 - left > ratio) boundary(x0);
+		const next = list[k + 1];
+		if ((!next || px(u, next.x0) - x1 > ratio) && left + width - x1 > ratio) boundary(x1);
 		const pad = 6 * ratio;
 		const swatch = 6 * ratio;
-		if (x1 - x0 < textWidth(ctx, e.bot) + swatch + 3 * pad) continue;
+		if (x1 - x0 < textWidth(ctx, e.bot) + swatch + 3 * pad) return;
 		ctx.fillStyle = props.colors.get(e.bot) ?? '#2f363d';
 		ctx.fillRect(x0 + pad, top + 5 * ratio, swatch, swatch);
 		ctx.fillStyle = highlighted.has(e.index) ? '#9cc4ec' : '#8b9299';
 		ctx.fillText(e.bot, x0 + pad + swatch + 4 * ratio, top + 4 * ratio);
-	}
+	});
 }
 
 /** Over the lines: dim everything outside the highlighted encounters (Run B). */
@@ -425,7 +434,10 @@ const tip = computed(() => {
 	if (i === null || i < 0 || i >= props.data.x.length) return null;
 	const d = props.data;
 	const x = d.x[i]!;
-	const at = race.value ? `${formatValue(x * 100, 1)}% progress` : `${formatValue(d.display[i]!, 1)} s`;
+	// The exact time of the point, not a rounded axis value: ticks land at
+	// e.g. 31.99 s, and a race point sits wherever progress was reached.
+	const seconds = `${formatValue(props.timeAt(x), 2)} s`;
+	const at = race.value ? `${formatValue(x * 100, 1)}% · ${seconds}` : seconds;
 	const bot = props.encounters.find((e) => x >= e.x0 && x <= e.x1)?.bot ?? null;
 	const vis = visibility();
 	const b = props.baseline;

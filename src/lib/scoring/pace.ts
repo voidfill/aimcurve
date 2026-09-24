@@ -21,7 +21,7 @@ export function project(curve: RunCurve, rate: number): number {
 	return curve.params.kind === 'race' ? curve.params.budget - rate : rate;
 }
 
-/** Accumulated pace at one point: the run so far, projected. NaN only at x = 0. */
+/** Accumulated pace at one point: the run so far, projected. NaN at x = 0 (`paceLines` extends its lines there). */
 export function accumulatedAt(curve: RunCurve, x: number, u: number): number {
 	return x <= 0 ? Number.NaN : project(curve, u / x);
 }
@@ -46,6 +46,13 @@ export function paceLines(curve: RunCurve, windowS = DEFAULT_WINDOW_S): PaceLine
 		const start = atTime(curve, Math.max(0, t - windowS));
 		const dx = x - start.x;
 		local[i] = dx > 0 ? project(curve, (u - start.u) / dx) : Number.NaN;
+	}
+	// u is linear from (0, 0) to the first point, so over that first stretch
+	// both paces are one constant: the first point's value. Starting the lines
+	// at 0 with it is that limit, not an invented value.
+	if (n > 1) {
+		accumulated[0] = accumulated[1]!;
+		local[0] = local[1]!;
 	}
 	return { x: curve.x, accumulated, local };
 }

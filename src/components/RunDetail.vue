@@ -14,11 +14,20 @@ import StatsStrip from './StatsStrip.vue';
 import UnifiedChart, { type ChartLayers } from './UnifiedChart.vue';
 import { useRunAnalysis, type ChartSettings } from '../composables/useRunAnalysis';
 import { flatReadout } from '../lib/run/baseline';
-import { bestSplits, botColors, clockRows, type Encounter, encounters, raceRows } from '../lib/run/bots';
+import {
+	bestSplits,
+	botColors,
+	clockRows,
+	type Encounter,
+	type Engagement,
+	encounters,
+	engagements,
+	raceRows,
+} from '../lib/run/bots';
 import { type ChartBaseline, chartData } from '../lib/run/chart-data';
 import { formatScore, formatSigned, formatValue } from '../lib/run/format';
 import type { Attempt } from '../lib/run/queries';
-import { killTimes, paceFor, readout, recentRange, type RunCurve } from '../lib/scoring';
+import { atX, killTimes, paceFor, readout, recentRange, type RunCurve } from '../lib/scoring';
 
 const props = defineProps<{ attempt: Attempt }>();
 
@@ -51,15 +60,17 @@ const chart = computed(() => {
 	return chartData(cur, paceFor(cur, w), base, recent);
 });
 
-function spansOf(curve: RunCurve, stem: string): Encounter[] {
+/** When each killed bot of a loaded run was engaged, from its kill times and TTK. */
+function engagedOf(stem: string): Engagement[] {
 	const a = analysis.value;
 	const kills = a?.killsOf(stem);
 	const input = a?.inputOf(stem);
 	if (!kills || !input) return [];
-	return encounters(curve, kills, killTimes(input));
+	return engagements(kills, killTimes(input));
 }
 
-const spans = computed<Encounter[]>(() => (current.value ? spansOf(current.value, current.value.fileStem) : []));
+const engaged = computed<Engagement[]>(() => (current.value ? engagedOf(current.value.fileStem) : []));
+const spans = computed<Encounter[]>(() => (current.value ? encounters(current.value, engaged.value) : []));
 const colors = computed(() => botColors(spans.value.map((e) => e.bot)));
 
 const table = computed<BotTableData | null>(() => {
@@ -68,12 +79,13 @@ const table = computed<BotTableData | null>(() => {
 	if (!cur || !a || spans.value.length === 0) return null;
 	const base = baseCurve.value;
 	if (cur.params.kind === 'race') {
-		const best = bestSplits([...a.raceCandidates, cur], cur.params.bots);
-		return { kind: 'race', rows: raceRows(cur, spans.value, base, best) };
+		const runs = [...a.raceCandidates, cur].map((c) => engagedOf(c.fileStem));
+		const best = bestSplits(runs, cur.params.bots);
+		return { kind: 'race', table: raceRows(engaged.value, base ? engagedOf(base.fileStem) : null, best) };
 	}
 	const kills = a.killsOf(cur.fileStem)!;
-	const baseSpans = base ? { curve: base, spans: spansOf(base, base.fileStem) } : null;
-	return { kind: 'clock', table: clockRows(cur, spans.value, kills, baseSpans) };
+	const baseEngaged = base ? { curve: base, engaged: engagedOf(base.fileStem) } : null;
+	return { kind: 'clock', table: clockRows(cur, engaged.value, kills, baseEngaged) };
 });
 
 const chartBaseline = computed(() => {
@@ -87,6 +99,12 @@ const readoutAt = computed<((x: number) => number) | null>(() => {
 	if (!cur || !b || b.kind === 'none') return null;
 	if (b.kind === 'flat') return (x) => flatReadout(cur, b.score, x);
 	return (x) => readout(cur, b.curve, x).value;
+});
+
+/** This run's elapsed time at progress `x`, for the tooltip. */
+const timeAt = computed(() => {
+	const cur = current.value;
+	return (x: number) => (cur ? atX(cur, x).t : 0);
 });
 
 const layers = computed<ChartLayers>(() => ({
@@ -178,6 +196,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					:highlight="highlight"
 					:readout-at="readoutAt"
 					:recent-count="analysis.recent.length"
+					:time-at="timeAt"
 				/>
 				<footer class="legend">
 					<span>thin = local pace · thick = accumulated pace (projected final {{ race ? 'time' : 'score' }})</span>

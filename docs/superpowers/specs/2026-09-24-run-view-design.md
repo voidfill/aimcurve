@@ -195,8 +195,12 @@ from `u` (scoring D5).
 
 As in Run A, not Unified's chip strip or Run B's lane ribbon: each encounter
 boundary is a 1 px dashed vertical line, and the bot's name is plain mono text
-near the top at the start of its encounter. Encounter spans come from scoring
-D8: race `[(k−1)/N, k/N]`, clock `[t_{k−1}/T, t_k/T]` starting at 0.
+near the top at the start of its encounter. A bot is engaged from `kill − TTK` to
+its kill, the start held no earlier than the previous kill; the time between one
+kill and the next engagement is dead time. Race spans are `[(k−1)/N, k/N]` in
+progress, where dead time has no width. Clock spans are the engagement's own
+times over `T`, so dead time shows as the space between an end boundary and the
+next start boundary, and the end of the last kill stays marked.
 
 Density rules, so click scenarios with a hundred kills stay readable:
 
@@ -222,28 +226,31 @@ not match the kill table's bot names, so it cannot order them.)
 
 | column | value |
 | --- | --- |
-| this run | seconds spent on slot `k`: `u(k/N) − u((k−1)/N)` |
+| this run | seconds engaged on slot `k`: kill time − engagement start |
 | baseline | the same for the baseline run |
 | Δ | baseline − this run; positive means faster |
 | best | fastest split for slot `k` over all candidates and this run |
 | Δ best | best − this run |
 
-Splits include the slot's share of respawn gap (scoring D8), which the table
-sub-heading states. The header sub-line gives totals: this run, baseline, Δ.
+A final **dead time** row holds the time between bots for this run and the
+baseline, with its Δ, so splits and dead time add up to the completion time.
 
 **Clock with kills** — one row per bot, ordered by first appearance.
 
 | column | value |
 | --- | --- |
-| time | seconds in this bot's encounters |
+| engaged | seconds engaged with this bot |
 | enc. | encounter count |
 | hits / shots | summed from the kill rows |
 | acc | hits / shots; "—" when there were no shots |
 | points | Δu summed over this bot's encounters |
 | Δ | points − the baseline's points on the same bot |
 
-A muted final row, *after last kill*, holds the time and points after the last
-kill up to `T`, with no Δ. Δ compares totals per bot, and so it also
+Two muted final rows follow: **dead time**, the time and points between bots
+(before the first engagement included), and **last bot, not killed**, the time
+and points after the last kill up to `T`. The latter is engaged time on a bot the
+timer cut off, not a pause, so it is kept apart from dead time. Rows, dead time
+and the last bot add up to `T` and to the final score. Δ compares totals per bot, and so it also
 reflects time spent. The sub-heading says "points gained while engaged" and the
 page makes no causal claim.
 

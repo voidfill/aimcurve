@@ -327,16 +327,17 @@ export async function listScenarioRuns(pg: PGliteInterface, scenarioId: number):
 }
 
 /**
- * Per-kill bot name, hits and shots in kill order, keyed by run id. The order
+ * Per-kill bot name, hits, shots and TTK in kill order, keyed by run id. The order
  * matches `getScoringInputs`' kill offsets. Runs without kills are absent.
  */
 export async function getKillDetail(pg: PGliteInterface, runIds: number[]): Promise<Map<number, KillDetail>> {
-	const result = await pg.query<{ run_id: number; bots: string[]; hits: number[]; shots: number[] }>(
+	const result = await pg.query<{ run_id: number; bots: string[]; hits: number[]; shots: number[]; ttk: number[] }>(
 		`
 		select k.run_id,
 		       array_agg(b.name  order by k.ordinal) as bots,
 		       array_agg(k.hits  order by k.ordinal) as hits,
-		       array_agg(k.shots order by k.ordinal) as shots
+		       array_agg(k.shots order by k.ordinal) as shots,
+		       array_agg(k.ttk   order by k.ordinal) as ttk
 		from kill k
 		join bot b on b.id = k.bot_id
 		where k.run_id = any($1::integer[])
@@ -344,5 +345,7 @@ export async function getKillDetail(pg: PGliteInterface, runIds: number[]): Prom
 		`,
 		[runIds],
 	);
-	return new Map(result.rows.map((row) => [row.run_id, { bot: row.bots, hits: row.hits, shots: row.shots }]));
+	return new Map(
+		result.rows.map((row) => [row.run_id, { bot: row.bots, hits: row.hits, shots: row.shots, ttk: row.ttk }]),
+	);
 }
