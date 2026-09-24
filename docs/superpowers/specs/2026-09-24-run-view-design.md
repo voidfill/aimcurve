@@ -23,7 +23,7 @@ sensitivity, a settings page for chart defaults, Sessions and Scenarios.
 | | |
 | --- | --- |
 | R1 | Layout is Run A without the reading line, the cumulative chart and the rank bar |
-| R2 | The baseline is selectable; the default is the PB before this run |
+| R2 | One selectable baseline for every view; default PB before this run, flat when it has no curve |
 | R3 | The chart is uPlot on one shared x grid |
 | R4 | Chart layers and smoothing are toggles persisted per browser |
 | R5 | Bots along the chart are plain dashed boundaries with text labels |
@@ -71,31 +71,51 @@ main column, and the bot table scrolls horizontally.
 
 ### R2. The baseline is selectable; the default is the PB before this run
 
-A dropdown in the chart header offers three baselines. All three consider only
-**candidates**: completed runs of the same scenario hash that have a curve and
-are `comparable()` with the inspected run (scoring D4).
+A dropdown in the chart header offers four baselines. The choice is persisted per
+browser, not per run.
+
+Two sets of runs are involved. **Same-scenario runs** are the completed runs with
+the inspected run's scenario hash, with or without a `.perf`. **Candidates** are
+the same-scenario runs that have a curve and are `comparable()` with the
+inspected run (scoring D4).
 
 | option | chosen run | label |
 | --- | --- | --- |
-| PB before this run (default) | highest score among candidates that started before the inspected run | `PB before` |
-| All-time PB | highest score among all candidates, the inspected run excluded | `PB` |
+| PB before this run (default) | highest score among same-scenario runs that started before the inspected run | `PB before` |
+| All-time PB | highest score among all same-scenario runs, the inspected run excluded | `PB` |
+| Best charted before this run | highest score among candidates that started before the inspected run | `best charted` |
 | Previous run | the most recent candidate that started before the inspected run | `previous` |
 
-Ties on score go to the earlier run. The choice is persisted per browser, not
-per run.
+Ties on score go to the earlier run.
 
-**The true PB may have no curve.** For the two PB options, the true PB is the
-highest CSV score among completed same-scenario runs, curve or not. If it is not
-a candidate (no `.perf`, or not comparable), the baseline becomes the best
-candidate and is labelled `best charted`, and the *compared with* block adds the
-true PB's score with "no performance detail". The header delta is still computed
-against the charted baseline, so every number on the page refers to one run.
+**A baseline is either charted or flat.** The two PB options choose by CSV score
+alone, so the chosen run may have no curve.
 
-**No baseline.** When no run qualifies — first attempt, nothing comparable, or
-the inspected run is the all-time PB under that option — the *compared with*
-block and the delta say so in words ("first charted run", "this is the PB"),
-the chart draws this run only, and baseline layers are disabled rather than
-empty.
+- **Charted:** the chosen run is a candidate. It is compared at equal `x` as
+  usual.
+- **Flat:** the chosen run has no `.perf`, or has one that is not comparable.
+  Only its score is used: a horizontal line at the PB score on the projected-score
+  axis. That line is the pace that ties the PB if held evenly. The run's
+  accumulated pace ends above the line exactly when it beat the PB. The page
+  never suggests the PB's shape. Its label adds "· no curve" (for example
+  `PB before · no curve`), and R3, R6 and R7 say what each view does with it.
+  Same-scenario runs are assumed to share the scenario's length. A flat
+  baseline without a curve cannot be checked with `comparable()`.
+
+Best charted and Previous only choose among candidates, so they are always
+charted. Best charted is the option to use when a flat PB is not wanted.
+
+**One baseline for the whole page.** The header, the chart lines and shading, the
+tooltip, the footer and the bot table all show the one selected baseline.
+Switching the option updates every view together. Only the race *best* split
+column (R6) is independent, because it is a best over all candidates by
+definition and is labelled that way.
+
+**No baseline.** When no run qualifies — first attempt, nothing comparable for the
+two charted options, or the inspected run is itself the all-time PB — the
+*compared with* block and the delta say so in words ("first run", "no comparable
+charted run", "this is the PB"), the chart draws this run only, and baseline
+layers are disabled rather than empty.
 
 Runs without a `.perf` can still be inspected: header and stats render, and the
 chart and bot table are replaced by the existing "no performance detail"
@@ -112,7 +132,8 @@ and the baseline's `x` values, sorted and deduplicated. Every series is
 evaluated on that grid by linear interpolation between its own points. A gap in
 a source series (NaN from scoring D5) stays a gap: a grid point that falls
 inside or next to a source gap is `null`, and series use `spanGaps: false`.
-Recent-range series are evaluated on the same grid.
+Recent-range series are evaluated on the same grid. A flat baseline (R2)
+adds no grid points: it is a constant series at the PB score.
 
 Axes:
 
@@ -129,8 +150,9 @@ Series and styling, from Unified:
 | this run, accumulated | white, 2.8 px, solid | on |
 | this run, local | `#cfd6dd`, 1.1 px, solid | on |
 | baseline, accumulated | amber, 2.6 px, dash 7/5 | on when a baseline exists |
-| baseline, local | amber, 1.1 px, dash 4/3.5 | off |
-| accumulated gap | green where this run is ahead, red where behind, low alpha | on with both accumulated lines |
+| baseline, local | amber, 1.1 px, dash 4/3.5 | off; disabled with the reason when the baseline is flat |
+| flat baseline | amber, 2 px, dotted 2/4, labelled at its right end "PB <score> · no curve" | replaces the baseline's accumulated line when it is flat |
+| accumulated gap | green where this run is ahead, red where behind, low alpha; against a flat baseline it means above or below PB pace | on with both accumulated lines |
 | recent range | mean ± 1σ of accumulated pace, grey fill and a faint mean line | off |
 
 The gap fill cannot be a uPlot band, because its color depends on the sign. It
@@ -139,9 +161,11 @@ split at each crossing. Bot boundaries, labels and highlights (R5) are painted
 in the same hook, under the lines.
 
 **Tooltip.** uPlot's cursor drives a Vue-rendered overlay positioned from
-`setCursor`, flipped to the left of the crosshair near the right edge. Rows: time or progress and the bot at that
-point; local and accumulated pace for this run and the baseline; the cumulative
-difference vs the baseline (R7). Dots mark each visible line at the cursor.
+`setCursor`, flipped to the left of the crosshair near the right edge. Rows:
+time or progress and the bot at that point; local and accumulated pace for this
+run and the baseline (a flat baseline shows its PB score once, marked "no
+curve"); the cumulative difference vs the baseline (R7). Dots mark each visible
+line at the cursor.
 
 **Keyboard.** The chart is focusable. Left and right move the cursor one grid
 point, Home and End jump to the ends, Escape clears. This calls
@@ -224,6 +248,10 @@ page makes no causal claim.
 **Clock without kills** — no table. One line: "No kills were recorded, so this
 run has no bot encounters." It is a normal case.
 
+**Flat baseline.** The baseline and Δ columns show "—", and the sub-heading says
+"<label> has no per-bot detail". The PB is never spread evenly across bots or
+slots. The race *best* column is unaffected (R2).
+
 The race *best* column needs kill times for every candidate. It is loaded by a
 separate query when the run is a race, and race scenarios are small (at most a
 few hundred runs).
@@ -239,6 +267,11 @@ precision requirement is met without it:
 - **On inspection.** The tooltip row "vs <label>", from `readout(current,
   baseline, x)` at the cursor's `x`, labelled with that point so it is not
   mistaken for the final result.
+- **Flat baseline on inspection.** The row reads "vs <label> at even pace". It is
+  the difference from the PB spread evenly over progress: clock
+  `S_cur(x) − PB · x` points, race `PB_time · x − t_cur(x)` seconds. It is not where
+  the PB actually stood, and the label says so. At `x = 1` it equals the header
+  delta.
 
 The shaded gap is a pace difference, and no number is read off it.
 
@@ -249,7 +282,9 @@ src/lib/run/queries.ts      + listScenarioRuns(hash): id, stem, score, started_a
                             + bot fields in getScoringInputs: kill bot_id, hits, shots,
                               bot names, added_bots
                             + stats columns on Attempt
-src/lib/run/baseline.ts     R2: choose(option, inspected, runs, curves) → baseline | reason
+src/lib/run/baseline.ts     R2: choose(option, inspected, runs, curves)
+                              → { charted run } | { flat score } | { none, reason }
+                              + flatReadout(current, score, x) for R7
 src/lib/run/bots.ts         R6: botRows(curve, kills, baseline?) and raceRows(...)
 src/lib/run/chart-data.ts   R3: shared grid, interpolation, gaps → uPlot AlignedData
 src/composables/useRunAnalysis.ts
@@ -259,14 +294,16 @@ src/components/RunHeader.vue, StatsStrip.vue, UnifiedChart.vue,
                 ChartTooltip.vue, BotTable.vue, SelectionPill.vue
 ```
 
-Loading for one selection: `listScenarioRuns` (metadata only), then
-`getScoringInputs` for the inspected run, the three possible baselines and up to
-ten recent candidates, since switching the baseline option must not refetch.
+Loading for one selection: `listScenarioRuns` (metadata only), which already
+settles which runs the two PB options choose, since they go by score alone. Then
+`getScoringInputs` for the inspected run, the chosen runs of all four options and
+up to ten recent candidates, so switching the baseline option does not refetch.
 Curves come from the existing memoised `curveFor`. Comparability needs curves, so
-the scenario's perf-backed runs are walked in two orders and their inputs
+for the other options the scenario's perf-backed runs are walked and their inputs
 fetched in batches of 20 until each answer is settled: by score descending for
-the two PBs (the first comparable run wins), and by start time descending from the
-inspected run for *previous* and the recent set. A scenario whose runs are all
+*best charted* (the first comparable run wins), and by start time descending from
+the inspected run for *previous* and the recent set. A PB with a `.perf` has its
+input fetched too, to decide between charted and flat. A scenario whose runs are all
 comparable settles in one batch.
 
 Loading states follow `RunView`'s existing pattern: header and stats render from
@@ -277,8 +314,10 @@ without disturbing the header.
 ## Testing
 
 - **`baseline.ts`**: each option on a hand-built run list; ties; inspected run
-  first, last and PB; true PB without a curve (falls back to `best charted` and
-  reports the true PB score); incomparable runs skipped; no candidates.
+  first, last and PB; a PB without a `.perf` and a PB with an incomparable one
+  both come back flat; *best charted* and *previous* skip runs without a curve
+  and incomparable runs; no candidates; the flat readout equals the header delta at
+  `x = 1` and is zero at `x = 0`.
 - **`bots.ts`**: race splits sum to the run's elapsed time and match
   `uAtX(k/N)` differences; clock per-bot points plus the after-last-kill row sum
   to the final score; repeated encounters aggregate; no-kill runs yield no
