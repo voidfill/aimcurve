@@ -67,9 +67,9 @@ scenarios, are handled like every other fixed-clock scenario.
 
 | kind | meaning | runs |
 | --- | --- | ---: |
-| `clock` | fixed duration `T`; higher score is better | 2,001 |
+| `clock` | fixed duration `T`; higher score is better | 2,003 |
 | `race` | fixed work (a damage pool); `score = B − elapsed` | 153 (10 scenarios) |
-| `unsupported` | anything else | 2 |
+| `unsupported` | the race signals disagree, or there is no score series | 0 |
 
 **Race facts.** `score + elapsed = time_limit = 1000` in 153 / 153 runs, and every kill
 carries exactly `pool / N` damage in 153 / 153. The budget `B` is read from
@@ -79,19 +79,35 @@ carries exactly `pool / N` damage in 153 / 153. The budget `B` is read from
 `VT Aether … 90%`: 54 / 0.9 = 60 s. It is within 0.1 s of the last tick in
 1,999 / 2,003 non-race runs; the four exceptions are listed below.
 
-**`unsupported`** today is the kill-capped pair `VT Air Novice` and
-`VT Plaza Novice` (`end_challenge_after_kills = 5`). They score by hits but end
-at a variable time, so a projection to `T` would be fiction. They get no pace
-lines, and the UI says why. The two 1.0 s shortfalls, `Leapcorn Pure Easy` and
-`Star Clicking Novice`, are ordinary clock runs whose last tick fell short.
-They stay `clock`, and their endpoint is the CSV score (D5).
+**Kill-capped runs are `clock`, not races.** `VT Air Novice` and `VT Plaza Novice`
+set `end_challenge_after_kills = 5` and end well before `time_limit`, at 57.2 s and 69.3 s
+against 90 s. Their bots die on a timer, not from damage. Within each run, TTK for bots
+2–5 is constant to 0.003 s (0.12 s on the last Air bot), while hits per bot vary by
+up to 45 % (536–776). So the run length is set by the bot rotation, not by the player.
+Scoring is `score = hits` exactly, as in any tracking scenario. For these runs `T`
+is the run's own measured duration, the last tick, rather than `time_limit / timescale`.
+That run length is inferred to be the same every run from the constant TTK; the
+corpus has one run of each. If a future kill-capped scenario turns out to end based on
+performance, the comparability rule (D4, equal `T`) refuses its comparisons, and
+its own pace lines stay valid.
+
+The two 1.0 s shortfalls, `Leapcorn Pure Easy` and `Star Clicking Novice`, are
+ordinary clock runs whose last tick fell short. They keep `T = time_limit / timescale`,
+and their endpoint is the CSV score (D5).
+
+**`unsupported`** has no occurrences in the corpus. It exists so that a format change
+(D3) or a `.perf` without a score column degrades to "no pace lines, with the reason
+shown" rather than a wrong axis.
 
 ### D3. A run classifies itself from its own `.perf`; no schema change
 
 ```
 race        ⟺ time_limit = 1000  AND  countdown(score)
-clock       ⟺ time_limit < 1000  AND  NOT countdown(score)  AND  end_challenge_after_kills is null
+clock       ⟺ time_limit < 1000  AND  NOT countdown(score)
 unsupported ⟺ everything else, including the two signals disagreeing
+
+clock T     =  last tick                  if end_challenge_after_kills is set
+               time_limit / timescale     otherwise
 ```
 
 `countdown(score)`: `score[0] > 0`, and at least 90 % of interior ticks satisfy
@@ -241,9 +257,9 @@ Public shape (indicative):
 type ScoringKind = 'clock' | 'race' | 'unsupported';
 
 type ScoringParams =
-	| { kind: 'clock'; durationS: number }
+	| { kind: 'clock'; durationS: number; durationFrom: 'time-limit' | 'kill-cap' }
 	| { kind: 'race'; budget: number; pool: number; bots: number }
-	| { kind: 'unsupported'; reason: 'kill-capped' | 'signals-disagree' | 'no-score-series' };
+	| { kind: 'unsupported'; reason: 'signals-disagree' | 'no-score-series' };
 
 interface RunCurve {
 	params: ScoringParams;
@@ -268,8 +284,8 @@ interface PaceLines {
 - **Corpus invariants** in a new `test/fixtures/scoring-corpus.test.ts`, guarded by
   `raw.available` like the existing ingest sweep. These are the checks whose absence
   would let a real defect through silently:
-  - kinds partition as measured (153 race, 2 unsupported, the rest clock) with no hash
-    in two kinds;
+  - kinds partition as measured (153 race, the rest clock, 0 unsupported) with no
+    hash in two kinds;
   - the accumulated endpoint equals the CSV score: clock within float tolerance, race
     within 0.05 s;
   - race `(x, u)` with kill knots is non-decreasing in both coordinates;
