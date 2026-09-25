@@ -1,7 +1,7 @@
 import type { PGliteInterface } from '@electric-sql/pglite';
 import type { ScoringInput } from '../scoring';
 import type { ScenarioRun } from './baseline';
-import type { KillDetail } from './bots';
+import type { KillDetail, SlotStats } from './bots';
 
 /**
  * A completed attempt, assembled from `run_complete` joined to `config`.
@@ -324,6 +324,23 @@ export async function listScenarioRuns(pg: PGliteInterface, scenarioId: number):
 		startedAt: new Date(row.started_at).toISOString(),
 		hasPerf: row.has_perf,
 	}));
+}
+
+/** Each kill slot's TTK over every completed run of one scenario, for `fixedWindow`. */
+export async function getSlotStats(pg: PGliteInterface, scenarioId: number): Promise<SlotStats[]> {
+	const result = await pg.query<{ slot: number; runs: number; mean: number; spread: number }>(
+		`
+		select k.ordinal as slot, count(*)::integer as runs,
+		       avg(k.ttk)::float8 as mean, stddev_pop(k.ttk)::float8 as spread
+		from kill k
+		join run_complete r on r.id = k.run_id
+		where r.scenario_id = $1::integer and k.ttk > 0
+		group by k.ordinal
+		order by k.ordinal
+		`,
+		[scenarioId],
+	);
+	return result.rows;
 }
 
 /**

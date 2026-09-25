@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sample, unionGrid } from './chart-data';
+import { atX, type RunCurve } from '../scoring';
+import { sample, scrubGrid, unionGrid } from './chart-data';
 
 const f = (values: number[]) => Float64Array.from(values);
 
@@ -23,5 +24,21 @@ describe('R3 shared grid', () => {
 
 	it('does not extrapolate past a source', () => {
 		expect(sample(f([0.2, 0.8]), f([1, 2]), [0, 0.2, 1])).toEqual([null, 1, null]);
+	});
+});
+
+describe('scrub grid', () => {
+	it('has a point every hundredth of a second of the run, between its ticks', () => {
+		const curve: RunCurve = {
+			params: { kind: 'race', budget: 1000, pool: 1, bots: 1 },
+			fileStem: 'synthetic',
+			t: f([0, 0.99, 1.99]),
+			x: f([0, 0.2, 1]),
+			u: f([0, 0.99, 1.99]),
+			score: 998.01,
+		};
+		const grid = scrubGrid(curve);
+		expect(grid).toHaveLength(200);
+		grid.forEach((x, k) => expect(atX(curve, x).t).toBeCloseTo(k / 100, 9));
 	});
 });

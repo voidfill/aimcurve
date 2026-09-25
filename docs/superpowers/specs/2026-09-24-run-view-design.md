@@ -202,6 +202,19 @@ progress, where dead time has no width. Clock spans are the engagement's own
 times over `T`, so dead time shows as the space between an end boundary and the
 next start boundary, and the end of the last kill stays marked.
 
+What TTK covers differs by scenario (measured over the 2449-run dump), and two
+cases change the rule above:
+
+- **Fixed windows** (Aether, Ground, PGT): every slot's TTK is the same run to
+  run, within 2 % over at least two runs. The TTK counts from the previous
+  kill, so the ~1.4 s reset before bots 2 and 3 hides inside it: 18.99 s for
+  bot 1, 20.39 s after. The first slot's TTK is the live window, and no
+  engagement is longer than it; the rest of a TTK is dead time. The 1 Hz hit
+  ticks agree: the second after a kill has no hits.
+- **Click scenarios** (median shots per kill ≤ 3; tracking starts at 6): TTK
+  runs from the first hit, so it is ~0, and the time between kills is aiming at
+  no bot in particular. Neither spans nor the bot table are drawn.
+
 Density rules, so click scenarios with a hundred kills stay readable:
 
 - a label is drawn only if its span is wider than the label plus padding;
@@ -246,11 +259,10 @@ baseline, with its Δ, so splits and dead time add up to the completion time.
 | points | Δu summed over this bot's encounters |
 | Δ | points − the baseline's points on the same bot |
 
-Two muted final rows follow: **dead time**, the time and points between bots
-(before the first engagement included), and **last bot, not killed**, the time
-and points after the last kill up to `T`. The latter is engaged time on a bot the
-timer cut off, not a pause, so it is kept apart from dead time. Rows, dead time
-and the last bot add up to `T` and to the final score. Δ compares totals per bot, and so it also
+One muted final row follows: **dead time**, the time and points outside every
+engagement, `T − Σ engaged`, as the Python version had it: before the first
+engagement, between bots, and after the last kill up to `T`. Rows and dead time
+add up to `T` and to the final score. Δ compares totals per bot, and so it also
 reflects time spent. The sub-heading says "points gained while engaged" and the
 page makes no causal claim.
 

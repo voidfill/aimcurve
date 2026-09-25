@@ -6,6 +6,16 @@
  * contribution (Δu across a span), per scoring D8. A bot is engaged from
  * `kill − TTK` to its kill; the time between one kill and the next engagement
  * is dead time, which belongs to no bot.
+ *
+ * What TTK covers depends on the scenario, measured over the full dump:
+ *  - Most scenarios start it at the spawn, so a respawn gap (Air Pure's
+ *    0.26 s) sits between one kill and the next engagement: dead time as is.
+ *  - Fixed-window scenarios (Aether, Ground, PGT) start it at the previous
+ *    kill, so the reset before bots 2 and 3 (~1.4 s) hides inside their TTK:
+ *    18.99 s for bot 1, 20.39 s after. `fixedWindow` recovers the live part.
+ *  - Click scenarios start it at the first hit, so TTK is ~0 and the time
+ *    between kills is aiming at no bot in particular: `isClicking` drops the
+ *    breakdown there altogether.
  */
 import { atTime, type RunCurve } from '../scoring';
 
@@ -27,15 +37,61 @@ export interface Engagement {
 }
 
 /**
+ * Median shots per kill at or under this: a click scenario. Over the dump,
+ * click scenarios sit at 1–3 (3-Click at exactly 3) and the fewest a tracking
+ * or switching scenario takes is 6 (devTS Static, a machine gun).
+ */
+const CLICK_MAX_SHOTS = 3;
+
+/** Whether a run is a click scenario, where a per-bot breakdown means nothing. */
+export function isClicking(kills: KillDetail): boolean {
+	if (kills.shots.length === 0) return false;
+	const sorted = [...kills.shots].sort((a, b) => a - b);
+	return sorted[Math.floor((sorted.length - 1) / 2)]! <= CLICK_MAX_SHOTS;
+}
+
+/** One kill slot's TTK across every run of a scenario. */
+export interface SlotStats {
+	slot: number;
+	runs: number;
+	mean: number;
+	/** Population standard deviation. */
+	spread: number;
+}
+
+/**
+ * The widest relative spread a fixed window shows is 0.0001 and the tightest
+ * real kill 0.081 (the Python version's measurement over the same install).
+ */
+const WINDOW_MAX_SPREAD = 0.02;
+/** One run cannot show a TTK is fixed rather than merely what happened once. */
+const WINDOW_MIN_RUNS = 2;
+
+/**
+ * The live window of a fixed-window scenario, else null. Every slot's TTK must
+ * be the same run to run. The first slot has no kill before it to count from,
+ * so its TTK is the bot's live time alone; what later slots add is the reset.
+ */
+export function fixedWindow(slots: readonly SlotStats[]): number | null {
+	const judged = slots.filter((s) => s.runs >= WINDOW_MIN_RUNS);
+	const first = judged.find((s) => s.slot === 0);
+	if (!first) return null;
+	for (const s of judged) if (!(s.mean > 0) || s.spread / s.mean > WINDOW_MAX_SPREAD) return null;
+	return first.mean;
+}
+
+/**
  * Engagements from kill times and TTK. A start is held between the previous
  * kill and its own kill, so engagements never overlap and a TTK longer than
- * the gap since the last kill cannot reach back past it.
+ * the gap since the last kill cannot reach back past it. With a fixed `window`,
+ * no engagement is longer than it: the rest of the TTK is the reset.
  */
-export function engagements(kills: KillDetail, times: readonly number[] | null): Engagement[] {
+export function engagements(kills: KillDetail, times: readonly number[] | null, window: number | null = null): Engagement[] {
 	if (times === null || times.length !== kills.bot.length) return [];
 	let previous = 0;
 	return times.map((end, index) => {
-		const start = Math.min(end, Math.max(previous, end - (kills.ttk[index] ?? 0)));
+		const ttk = kills.ttk[index] ?? 0;
+		const start = Math.min(end, Math.max(previous, end - (window === null ? ttk : Math.min(ttk, window))));
 		previous = end;
 		return { index, bot: kills.bot[index]!, start, end };
 	});
@@ -159,10 +215,11 @@ export interface ClockRow {
 
 export interface ClockTable {
 	rows: ClockRow[];
-	/** Time and points outside every engagement, before the last kill. */
+	/**
+	 * Time and points outside every engagement: the duration less the engaged
+	 * time, so what follows the last kill is dead time too.
+	 */
 	dead: { time: number; points: number };
-	/** After the last kill: a bot engaged but not killed before time ran out. */
-	tail: { time: number; points: number };
 }
 
 function gained(curve: RunCurve, from: number, to: number): number {
@@ -177,8 +234,8 @@ function pointsByBot(curve: RunCurve, engaged: readonly Engagement[]): Map<strin
 
 /**
  * One row per bot, in order of first appearance. With a baseline, a bot the
- * baseline never met counts as 0 points there. Rows, dead time and the tail
- * add up to the run's duration and final score.
+ * baseline never met counts as 0 points there. Rows and dead time add up to
+ * the run's duration and final score.
  */
 export function clockRows(
 	curve: RunCurve,
@@ -189,21 +246,22 @@ export function clockRows(
 	const duration = curve.params.kind === 'clock' ? curve.params.durationS : 0;
 	const base = baseline ? pointsByBot(baseline.curve, baseline.engaged) : null;
 	const rows = new Map<string, ClockRow>();
-	let deadPoints = 0;
-	let previous = 0;
+	let engagedTime = 0;
+	let engagedPoints = 0;
 	for (const e of engaged) {
 		let row = rows.get(e.bot);
 		if (!row) {
 			row = { bot: e.bot, time: 0, encounters: 0, hits: 0, shots: 0, accuracy: null, points: 0, baseline: null, delta: null };
 			rows.set(e.bot, row);
 		}
+		const points = gained(curve, e.start, e.end);
 		row.time += e.end - e.start;
 		row.encounters++;
 		row.hits += kills.hits[e.index] ?? 0;
 		row.shots += kills.shots[e.index] ?? 0;
-		row.points += gained(curve, e.start, e.end);
-		deadPoints += gained(curve, previous, e.start);
-		previous = e.end;
+		row.points += points;
+		engagedTime += e.end - e.start;
+		engagedPoints += points;
 	}
 	for (const row of rows.values()) {
 		row.accuracy = row.shots > 0 ? row.hits / row.shots : null;
@@ -212,11 +270,9 @@ export function clockRows(
 			row.delta = row.points - row.baseline;
 		}
 	}
-	const last = Math.min(previous, duration);
 	return {
 		rows: [...rows.values()],
-		dead: { time: deadTime(engaged), points: deadPoints },
-		tail: { time: Math.max(0, duration - last), points: curve.u[curve.u.length - 1]! - atTime(curve, last).u },
+		dead: { time: Math.max(0, duration - engagedTime), points: curve.u[curve.u.length - 1]! - engagedPoints },
 	};
 }
 

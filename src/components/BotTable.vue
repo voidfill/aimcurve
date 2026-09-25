@@ -43,14 +43,11 @@ interface Row {
 	cells: Cell[];
 }
 
-/** Dead time and the unfinished last bot: time that belongs to no killed bot. */
+/** Dead time: time that belongs to no killed bot. */
 interface Extra {
 	label: string;
 	cells: Cell[];
 }
-
-/** Shorter than this, a tail is float noise rather than a bot left alive. */
-const MIN_TAIL_S = 0.005;
 
 function signed(delta: number | null, digits: number): Cell {
 	if (delta === null) return { text: DASH, tone: 'dim' };
@@ -122,21 +119,14 @@ const extras = computed<Extra[]>(() => {
 			},
 		];
 	}
-	const { dead, tail, rows: list } = props.data.table;
+	const { dead, rows: list } = props.data.table;
 	if (list.length === 0) return [];
-	const out: Extra[] = [
+	return [
 		{
 			label: 'dead time',
 			cells: [dim(`${formatValue(dead.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(dead.points, 1)), dim(DASH)],
 		},
 	];
-	if (tail.time >= MIN_TAIL_S) {
-		out.push({
-			label: 'last bot, not killed',
-			cells: [dim(`${formatValue(tail.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(tail.points, 1)), dim(DASH)],
-		});
-	}
-	return out;
 });
 
 const title = computed(() => (props.data.kind === 'race' ? 'Per-bot splits' : 'Bot breakdown'));

@@ -3,11 +3,13 @@
  * See docs/superpowers/specs/2026-09-24-run-view-design.md.
  *
  * The grid is the union of the inspected run's and the baseline's progress
- * values. Each series is linearly interpolated between its own points. A gap
+ * values, plus a point every `SCRUB_STEP_S` of the run's own clock: the cursor
+ * snaps to grid points, and the ~1 Hz ticks alone would only let it stop on
+ * whole ticks. Each series is linearly interpolated between its own points. A gap
  * (NaN) in a source stays a gap (`null`), and nothing is extrapolated past a
  * source's ends.
  */
-import type { PaceLines, RecentRange, RunCurve } from '../scoring';
+import { atTime, type PaceLines, type RecentRange, type RunCurve } from '../scoring';
 
 export type Sampled = (number | null)[];
 
@@ -17,6 +19,20 @@ export function unionGrid(...sources: readonly Float64Array[]): number[] {
 	for (const source of sources) for (const x of source) all.push(x);
 	all.sort((a, b) => a - b);
 	return all.filter((x, i) => i === 0 || x !== all[i - 1]);
+}
+
+/** Seconds between scrub points: the tooltip's time shows hundredths. */
+export const SCRUB_STEP_S = 0.01;
+
+/** Progress at every `SCRUB_STEP_S` of the run's clock, from 0 to its last tick. */
+export function scrubGrid(curve: RunCurve): Float64Array {
+	const end = curve.t[curve.t.length - 1] ?? 0;
+	const perSecond = Math.round(1 / SCRUB_STEP_S);
+	const steps = Math.floor(end * perSecond + 1e-9);
+	const out = new Float64Array(steps + 1);
+	// `k / 100` rather than `k * 0.01`, so the times land on exact hundredths.
+	for (let k = 0; k <= steps; k++) out[k] = atTime(curve, k / perSecond).x;
+	return out;
 }
 
 /**
@@ -84,7 +100,9 @@ export function chartData(
 	baseline: ChartBaseline,
 	recent: RecentRange | null,
 ): ChartData {
-	const x = baseline.kind === 'charted' ? unionGrid(current.x, baseline.curve.x) : unionGrid(current.x);
+	const scrub = scrubGrid(current);
+	const x =
+		baseline.kind === 'charted' ? unionGrid(current.x, baseline.curve.x, scrub) : unionGrid(current.x, scrub);
 	const empty = (): Sampled => new Array<number | null>(x.length).fill(null);
 	let baseAccumulated = empty();
 	let baseLocal = empty();

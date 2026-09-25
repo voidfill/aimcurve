@@ -13,11 +13,13 @@ import {
 	deadTime,
 	encounters,
 	engagements,
+	fixedWindow,
+	isClicking,
 	type KillDetail,
 	largestLoss,
 	raceRows,
 } from './bots';
-import { getKillDetail, getScoringInputs } from './queries';
+import { getKillDetail, getScoringInputs, getSlotStats } from './queries';
 
 let pg: PGlite;
 const inputs = new Map<string, ScoringInput>();
@@ -92,7 +94,7 @@ describe('R6 race splits', () => {
 });
 
 describe('R6 clock bot rows', () => {
-	it('with dead time and the unfinished bot, sum to the duration and the final score', () => {
+	it('with dead time, sum to the duration and the final score', () => {
 		const { input, curve, kills } = find('VT Aether Novice S5 Hard Bot 1 90% - Challenge - 2026.09.18-18.59.40');
 		const engaged = engagements(kills, killTimes(input));
 		expect(engaged.length).toBe(kills.bot.length);
@@ -101,11 +103,12 @@ describe('R6 clock bot rows', () => {
 		const [row] = table.rows;
 		expect(row!.encounters).toBe(engaged.length);
 		expect(row!.hits).toBe(kills.hits.reduce((a, b) => a + b, 0));
-		expect(row!.points + table.dead.points + table.tail.points).toBeCloseTo(input.score, 3);
+		expect(row!.points + table.dead.points).toBeCloseTo(input.score, 3);
 		const duration = curve.params.kind === 'clock' ? curve.params.durationS : 0;
-		expect(row!.time + table.dead.time + table.tail.time).toBeCloseTo(duration, 6);
-		// Bots follow each other within a few hundredths of a second.
-		expect(table.dead.time).toBeLessThan(0.1 * engaged.length);
+		expect(row!.time + table.dead.time).toBeCloseTo(duration, 6);
+		// The Python version's residual: the duration less every TTK, the
+		// time after the last window included.
+		expect(table.dead.time).toBeCloseTo(duration - kills.ttk.reduce((a, b) => a + b, 0), 6);
 	});
 
 	it('takes the per-bot difference against the baseline', () => {
@@ -121,6 +124,57 @@ describe('R6 clock bot rows', () => {
 		const none = { bot: [], hits: [], shots: [], ttk: [] };
 		expect(encounters(curve, engagements(none, []))).toEqual([]);
 		expect(clockRows(curve, [], none, null).rows).toEqual([]);
+	});
+});
+
+/** Each slot's TTK over every curated run of the named scenario. */
+async function windowOf(name: string): Promise<number | null> {
+	const { rows } = await pg.query<{ id: number }>('select id from scenario where name = $1', [name]);
+	expect(rows).toHaveLength(1);
+	return fixedWindow(await getSlotStats(pg, rows[0]!.id));
+}
+
+describe('fixed windows', () => {
+	it('hold every slot to the same TTK run to run, and the first slot is the live time', async () => {
+		// One curated run of it has kills, and one run shows nothing fixed.
+		expect(await windowOf('VT Aether Intermediate S5')).toBeNull();
+		// 18.99 s for bot 1, 20.39 s after: the 1.4 s reset hides in the later TTKs.
+		expect(await windowOf('VT Aether Novice S5 Hard Bot 1 90%')).toBeCloseTo(18.99, 1);
+		// Killable bots: TTK is how long it took.
+		expect(await windowOf('Air Pure Medium')).toBeNull();
+	});
+
+	it('need two runs of a slot and a tight spread', () => {
+		const slot = (s: number, runs: number, mean: number, spread: number) => ({ slot: s, runs, mean, spread });
+		expect(fixedWindow([slot(0, 1, 19, 0)])).toBeNull();
+		expect(fixedWindow([slot(0, 5, 19, 0.001), slot(1, 5, 20.4, 0.001), slot(2, 1, 3, 0)])).toBe(19);
+		expect(fixedWindow([slot(0, 5, 19, 0.001), slot(1, 5, 2, 0.5)])).toBeNull();
+	});
+
+	it('cut an engagement to the window, the rest of its TTK dead time', () => {
+		const kills = { bot: ['a', 'b'], hits: [0, 0], shots: [0, 0], ttk: [19, 20.4] };
+		expect(engagements(kills, [19, 39.4], 19)).toEqual([
+			{ index: 0, bot: 'a', start: 0, end: 19 },
+			{ index: 1, bot: 'b', start: 20.4, end: 39.4 },
+		]);
+	});
+
+	it('leave Aether with the resets between bots and the time after the last as dead time', async () => {
+		const { input, curve, kills } = find('VT Aether Novice S5 Hard Bot 1 90% - Challenge - 2026.09.18-18.59.40');
+		const window = (await windowOf('VT Aether Novice S5 Hard Bot 1 90%'))!;
+		const table = clockRows(curve, engagements(kills, killTimes(input), window), kills, null);
+		// Two resets of ~1.4 s and ~0.2 s after the last window.
+		expect(table.dead.time).toBeGreaterThan(2.9);
+		expect(table.dead.time).toBeLessThan(3.2);
+	});
+});
+
+describe('click scenarios', () => {
+	it('are told apart by shots per kill', () => {
+		expect(isClicking(find('1w2ts Perfected - Challenge').kills)).toBe(true);
+		expect(isClicking(find('VT 1w3ts Intermediate S5 Clusters').kills)).toBe(true);
+		expect(isClicking(find('Air Pure Medium - Challenge - 2026.09.18-18.44.15').kills)).toBe(false);
+		expect(isClicking(find('VT Aether Intermediate S5 - Challenge - 2026.09.18-19.10.23').kills)).toBe(false);
 	});
 });
 

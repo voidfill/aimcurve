@@ -22,6 +22,7 @@ import {
 	type Engagement,
 	encounters,
 	engagements,
+	isClicking,
 	raceRows,
 } from '../lib/run/bots';
 import { type ChartBaseline, chartData } from '../lib/run/chart-data';
@@ -60,13 +61,17 @@ const chart = computed(() => {
 	return chartData(cur, paceFor(cur, w), base, recent);
 });
 
-/** When each killed bot of a loaded run was engaged, from its kill times and TTK. */
+/**
+ * When each killed bot of a loaded run was engaged, from its kill times and
+ * TTK. None in a click scenario: there, the time between kills is aiming at no
+ * bot in particular, so neither the chart spans nor the table are drawn.
+ */
 function engagedOf(stem: string): Engagement[] {
 	const a = analysis.value;
 	const kills = a?.killsOf(stem);
 	const input = a?.inputOf(stem);
-	if (!kills || !input) return [];
-	return engagements(kills, killTimes(input));
+	if (!kills || !input || isClicking(kills)) return [];
+	return engagements(kills, killTimes(input), a!.window);
 }
 
 const engaged = computed<Engagement[]>(() => (current.value ? engagedOf(current.value.fileStem) : []));

@@ -20,8 +20,8 @@ import {
 	type ScenarioRun,
 	walkOrder,
 } from '../lib/run/baseline';
-import type { KillDetail } from '../lib/run/bots';
-import { type Attempt, getKillDetail, getScoringInputs, listScenarioRuns } from '../lib/run/queries';
+import { fixedWindow, type KillDetail } from '../lib/run/bots';
+import { type Attempt, getKillDetail, getScoringInputs, getSlotStats, listScenarioRuns } from '../lib/run/queries';
 import { classify, comparable, curveFor, type RunCurve, type ScoringInput } from '../lib/scoring';
 import { useDb } from './useDb';
 import { useImport } from './useImport';
@@ -69,6 +69,8 @@ export interface Analysis {
 	recent: RunCurve[];
 	/** Every comparable curve of the scenario, for the race *best* column; empty for clock. */
 	raceCandidates: RunCurve[];
+	/** A fixed-window scenario's live window in seconds, else null. */
+	window: number | null;
 }
 
 export interface RunAnalysisApi {
@@ -157,7 +159,10 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 			state.value = 'loading';
 		}
 		try {
-			const runs = await listScenarioRuns(handle, attempt.scenarioId);
+			const [runs, slots] = await Promise.all([
+				listScenarioRuns(handle, attempt.scenarioId),
+				getSlotStats(handle, attempt.scenarioId),
+			]);
 			if (mine !== gen) return;
 			const inspected = runs.find((r) => r.fileStem === attempt.fileStem) ?? {
 				id: attempt.id,
@@ -218,6 +223,7 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 				killsOf: (stem) => loader.kills.get(stem) ?? null,
 				recent: recentRuns(inspected, runs, current, loader.curveOf, RECENT),
 				raceCandidates,
+				window: fixedWindow(slots),
 			};
 			state.value = 'ready';
 			error.value = null;

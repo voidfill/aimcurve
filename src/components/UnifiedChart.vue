@@ -405,12 +405,31 @@ function moveTo(i: number): void {
 	u.setCursor({ left: u.valToPos(props.data.display[next]!, 'x'), top: u.bbox.height / uPlot.pxRatio / 2 });
 }
 
+/** Seconds an arrow key moves the cursor: the grid has a point every 0.01 s. */
+const KEY_STEP_S = 1;
+
+/** The grid point nearest `KEY_STEP_S` from `from`, in the run's own time, in `direction`. */
+function stepFrom(from: number, direction: 1 | -1): number {
+	const x = props.data.x;
+	const target = props.timeAt(x[from]!) + direction * KEY_STEP_S;
+	let i = from;
+	while (i + direction >= 0 && i + direction < x.length && direction * (target - props.timeAt(x[i + direction]!)) > 0) {
+		i += direction;
+	}
+	// `i` is the last point short of the target; the next one may be nearer.
+	const next = i + direction;
+	if (next < 0 || next >= x.length) return i;
+	// Always move: past a race's plateau the next point can be further than a step.
+	if (i === from) return next;
+	return Math.abs(props.timeAt(x[next]!) - target) < Math.abs(props.timeAt(x[i]!) - target) ? next : i;
+}
+
 function onKey(event: KeyboardEvent): void {
 	const n = props.data.display.length;
 	const current = idx.value;
 	let handled = true;
-	if (event.key === 'ArrowRight') moveTo(current === null ? 0 : current + 1);
-	else if (event.key === 'ArrowLeft') moveTo(current === null ? n - 1 : current - 1);
+	if (event.key === 'ArrowRight') moveTo(current === null ? 0 : stepFrom(current, 1));
+	else if (event.key === 'ArrowLeft') moveTo(current === null ? n - 1 : stepFrom(current, -1));
 	else if (event.key === 'Home') moveTo(0);
 	else if (event.key === 'End') moveTo(n - 1);
 	else if (event.key === 'Escape') plot.value?.setCursor({ left: -10, top: -10 });
@@ -434,8 +453,8 @@ const tip = computed(() => {
 	if (i === null || i < 0 || i >= props.data.x.length) return null;
 	const d = props.data;
 	const x = d.x[i]!;
-	// The exact time of the point, not a rounded axis value: ticks land at
-	// e.g. 31.99 s, and a race point sits wherever progress was reached.
+	// The exact time of the point, not a rounded axis value: the grid has a
+	// point every 0.01 s of this run, plus its ticks and the baseline's.
 	const seconds = `${formatValue(props.timeAt(x), 2)} s`;
 	const at = race.value ? `${formatValue(x * 100, 1)}% · ${seconds}` : seconds;
 	const bot = props.encounters.find((e) => x >= e.x0 && x <= e.x1)?.bot ?? null;
@@ -483,6 +502,7 @@ const tip = computed(() => {
 		role="img"
 		:aria-label="`Pace chart. Use the left and right arrow keys to inspect points; Escape clears.`"
 		@keydown="onKey"
+		@pointerdown="root?.focus({ preventScroll: true })"
 	>
 		<Teleport v-if="over" :to="over">
 			<div v-if="tip" class="tip" :style="{ left: `${tip.left}px` }" aria-live="polite">
