@@ -58,20 +58,8 @@ const over = shallowRef<HTMLElement | null>(null);
 const idx = ref<number | null>(null);
 const cursorLeft = ref(0);
 
-/**
- * The median split in two: lighter while its window fills, then full. The
- * first full point is in both, so the line is continuous.
- */
-function medianParts(): [(number | null)[], (number | null)[]] {
-	const firstFull = props.medianFull.indexOf(true);
-	const partial = props.median.map((v, i) => (firstFull === -1 || i <= firstFull ? v : null));
-	const full = props.median.map((v, i) => (props.medianFull[i] ? v : null));
-	return [partial, full];
-}
-
 function aligned(): uPlot.AlignedData {
-	const [partial, full] = medianParts();
-	return [[...props.x], [...props.y], [...props.best], partial, full];
+	return [[...props.x], [...props.y], [...props.best], [...props.median]];
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,6 +141,27 @@ function yRange(min: number, max: number): uPlot.Range.MinMax {
 	return uPlot.rangeNum(lo, hi, 0.1, true);
 }
 
+const MEDIAN = '#e8ebee';
+const MEDIAN_FAINT = 'rgba(232,235,238,0.2)';
+
+/**
+ * The median fades in from grey to white while its window fills: a gradient
+ * from the first median point to the first with a full window, solid after.
+ * uPlot calls this on every draw, so it follows the scale.
+ */
+function medianStroke(u: uPlot): CanvasGradient | string {
+	const first = props.median.findIndex((v) => v != null);
+	const full = props.medianFull.indexOf(true);
+	if (first === -1 || full <= first) return full === -1 ? MEDIAN_FAINT : MEDIAN;
+	const x0 = u.valToPos(props.x[first]!, 'x', true);
+	const x1 = u.valToPos(props.x[full]!, 'x', true);
+	if (!Number.isFinite(x0) || !Number.isFinite(x1) || x1 <= x0) return MEDIAN;
+	const gradient = u.ctx.createLinearGradient(x0, 0, x1, 0);
+	gradient.addColorStop(0, MEDIAN_FAINT);
+	gradient.addColorStop(1, MEDIAN);
+	return gradient;
+}
+
 function options(width: number): uPlot.Options {
 	return {
 		width,
@@ -190,8 +199,7 @@ function options(width: number): uPlot.Options {
 			// The values carry the cursor and the y range; their dots are painted.
 			{ show: true, paths: () => null, points: { show: false } },
 			{ stroke: '#f0b23f', width: 1.6, paths: uPlot.paths.stepped!({ align: 1 }), points: { show: false }, spanGaps: true },
-			{ stroke: 'rgba(232,235,238,0.35)', width: 2.4, points: { show: false }, spanGaps: true },
-			{ stroke: '#e8ebee', width: 2.4, points: { show: false }, spanGaps: true },
+			{ stroke: medianStroke, width: 2.4, points: { show: false }, spanGaps: true },
 		],
 		hooks: {
 			drawAxes: [paintUnder],
