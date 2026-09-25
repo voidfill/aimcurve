@@ -1,7 +1,14 @@
 {
   "recommendations": [
-    "astro-build.astro-vscode",
-    "bufbuild.vscode-buf"
+    "Vue.volar",
+    "vitest.explorer",
+    "bufbuild.vscode-buf",
+    "jnoortheen.nix-ide",
+    "mkhl.direnv",
+    "redhat.vscode-yaml",
+    "mechatroner.rainbow-csv"
   ],
-  "unwantedRecommendations": []
+  "unwantedRecommendations": [
+    "octref.vetur"
+  ]
 }
