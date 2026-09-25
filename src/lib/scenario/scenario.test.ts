@@ -61,9 +61,9 @@ describe('S5 lines', () => {
 
 describe('S1 and S7 links', () => {
 	it('encode the name into the documented Kovaak’s deep link', () => {
-		expect(kovaaksLink('voxTS Pure')).toBe('steam://run/824270/?action=jump-to-scenario;name=voxTS%20Pure');
+		expect(kovaaksLink('voxTS Pure')).toBe('steam://run/824270/?action=jump-to-scenario;name=voxTS%20Pure;mode=challenge');
 		expect(kovaaksLink('SYW (Smooth Your Wrist) #5')).toBe(
-			'steam://run/824270/?action=jump-to-scenario;name=SYW%20(Smooth%20Your%20Wrist)%20%235',
+			'steam://run/824270/?action=jump-to-scenario;name=SYW%20(Smooth%20Your%20Wrist)%20%235;mode=challenge',
 		);
 	});
 

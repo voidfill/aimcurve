@@ -5,11 +5,12 @@
 import { formatValue } from '../run/format';
 
 /**
- * Kovaak's 3.0 scenario deep link. It selects by name, not by hash: Kovaak's
- * opens whatever it currently has under that name.
+ * Kovaak's 3.0 scenario deep link, in challenge mode: without `mode=challenge`
+ * it opens in freeplay. It selects by name, not by hash: Kovaak's opens
+ * whatever it currently has under that name.
  */
 export function kovaaksLink(name: string): string {
-	return `steam://run/824270/?action=jump-to-scenario;name=${encodeURIComponent(name)}`;
+	return `steam://run/824270/?action=jump-to-scenario;name=${encodeURIComponent(name)};mode=challenge`;
 }
 
 export interface ScenarioVersion {

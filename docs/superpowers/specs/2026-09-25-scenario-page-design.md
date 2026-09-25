@@ -211,15 +211,16 @@ Kovaak's 3.0 documents scenario deep links:
 steam://run/824270/?action=jump-to-scenario;name=<name>
 ```
 
-with spaces as `%20`. The link is built with `encodeURIComponent(name)`. It is
-a plain `<a href>`, so the browser handles the protocol prompt.
+with spaces as `%20`. Tried by hand on 2026-09-25, that form opens the
+scenario in freeplay, so the undocumented `;mode=challenge` suffix seen in
+shared links is appended to open it as a challenge. The name is encoded
+with `encodeURIComponent(name)`. The link is a plain `<a href>`, so the browser
+handles the protocol prompt.
 
 The link selects by name, not by hash. On a version that is not the newest by
 last played among those sharing the name, the button's tooltip says Kovaak's
 opens whatever it currently has under that name, which may differ from this
-version. An undocumented `;mode=challenge` suffix is seen in shared links; it is
-tried by hand during implementation and adopted only if it works and the plain
-form does not already open the challenge.
+version.
 
 ### S8. Pure functions and one composable
 
