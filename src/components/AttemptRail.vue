@@ -4,6 +4,10 @@
  *
  * Explicitly *completed* attempts: resets and unattributed aborts are ingested
  * and are not shown here. Inspecting a reset is a later slice.
+ *
+ * The scenario filter has no control of its own here. It is set by links (a
+ * scenario page's Play in Run) and by Enter on the row of the run being shown;
+ * while it is on, a chip at the top names it and clears it.
  */
 import type { RouteLocationRaw } from 'vue-router';
 import AttemptRow from './AttemptRow.vue';
@@ -19,10 +23,15 @@ defineProps<{
 	loadingOlder: boolean;
 	hasNewer: boolean;
 	filtered: boolean;
+	/** The filtered scenario's name, or null without a filter. */
+	filterLabel: string | null;
+	/** Why scenario names could not be listed, if they could not. */
+	filterError: string | null;
 	linkTo: (stem: string) => RouteLocationRaw;
 }>();
 
 const emit = defineEmits<{
+	(event: 'filter', hash: string | null): void;
 	(event: 'load-older'): void;
 	(event: 'resume-latest'): void;
 	(event: 'retry'): void;
@@ -32,6 +41,14 @@ const emit = defineEmits<{
 <template>
 	<section class="rail" aria-labelledby="rail-heading">
 		<h2 id="rail-heading">Completed attempts</h2>
+
+		<p v-if="filterLabel !== null" class="chip">
+			<span class="chip-name" :title="filterLabel">{{ filterLabel }}</span>
+			<button type="button" @click="emit('filter', null)">Show all runs</button>
+		</p>
+		<p v-if="filterLabel !== null && filterError !== null" class="error">
+			Scenario names could not be listed. {{ filterError }}
+		</p>
 
 		<p v-if="hasNewer" class="newer">
 			<span>A newer completed attempt has been imported.</span>
@@ -64,6 +81,7 @@ const emit = defineEmits<{
 					:attempt="attempt"
 					:selected="attempt.fileStem === selectedStem"
 					:to="linkTo(attempt.fileStem)"
+					@filter="emit('filter', attempt.scenarioHash)"
 				/>
 			</li>
 		</ul>
@@ -139,5 +157,29 @@ button:disabled {
 
 .older {
 	align-self: flex-start;
+}
+
+.chip {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+	border: 1px solid var(--color-accent);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+	font-size: 0.8125rem;
+}
+
+.chip-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chip button {
+	flex: none;
+	font-size: 0.75rem;
 }
 </style>

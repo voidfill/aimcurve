@@ -58,8 +58,8 @@ const baseHeader = computed(() => props.baselineLabel ?? 'baseline');
 
 const columns = computed(() =>
 	props.data.kind === 'race'
-		? ['this run', baseHeader.value, 'Δ', 'best', 'Δ best']
-		: ['engaged', 'enc.', 'hits / shots', 'acc', 'points', `Δ ${baseHeader.value}`],
+		? ['this run', 'pace', baseHeader.value, 'Δ', 'best', 'Δ best']
+		: ['engaged', 'enc.', 'hits / shots', 'acc', 'points', 'pace', `Δ ${baseHeader.value}`],
 );
 
 const noDelta = computed(() => props.baselineFlat || props.baselineLabel === null);
@@ -71,6 +71,7 @@ const rows = computed<Row[]>(() => {
 			bot: row.bot,
 			cells: [
 				{ text: formatValue(row.split, 2), tone: 'strong' },
+				{ text: formatValue(row.pace, 2), tone: 'dim' },
 				row.baseline === null || noDelta.value ? { text: DASH, tone: 'dim' } : { text: formatValue(row.baseline, 2), tone: 'dim' },
 				noDelta.value ? { text: DASH, tone: 'dim' } : signed(row.delta, 2),
 				{ text: formatValue(row.best, 2), tone: 'dim' },
@@ -87,6 +88,7 @@ const rows = computed<Row[]>(() => {
 			{ text: `${formatValue(row.hits)} / ${formatValue(row.shots)}`, tone: 'dim' },
 			{ text: row.accuracy === null ? DASH : `${formatValue(row.accuracy * 100, 1)}%`, tone: 'strong' },
 			{ text: formatValue(row.points, 1), tone: 'strong' },
+			{ text: row.pace === null ? DASH : formatValue(row.pace, 0), tone: 'dim' },
 			noDelta.value ? { text: DASH, tone: 'dim' } : signed(row.delta, 1),
 		],
 	}));
@@ -100,7 +102,7 @@ const worst = computed(() => {
 });
 
 /** The Δ column the largest loss is emphasised in. */
-const deltaColumn = computed(() => (props.data.kind === 'race' ? 2 : 5));
+const deltaColumn = computed(() => (props.data.kind === 'race' ? 3 : 6));
 
 const extras = computed<Extra[]>(() => {
 	const dim = (text: string): Cell => ({ text, tone: 'dim' });
@@ -111,6 +113,7 @@ const extras = computed<Extra[]>(() => {
 				label: 'dead time',
 				cells: [
 					dim(formatValue(dead.split, 2)),
+					dim(DASH),
 					dim(dead.baseline === null || noDelta.value ? DASH : formatValue(dead.baseline, 2)),
 					noDelta.value ? dim(DASH) : signed(dead.delta, 2),
 					dim(DASH),
@@ -124,7 +127,7 @@ const extras = computed<Extra[]>(() => {
 	return [
 		{
 			label: 'dead time',
-			cells: [dim(`${formatValue(dead.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(dead.points, 1)), dim(DASH)],
+			cells: [dim(`${formatValue(dead.time, 2)} s`), dim(DASH), dim(DASH), dim(DASH), dim(formatValue(dead.points, 1)), dim(DASH), dim(DASH)],
 		},
 	];
 });
@@ -133,8 +136,9 @@ const title = computed(() => (props.data.kind === 'race' ? 'Per-bot splits' : 'B
 
 const subtitle = computed(() => {
 	const parts: string[] = [];
-	if (props.data.kind === 'race') parts.push('seconds engaged per bot (kill − TTK → kill); dead time between bots apart');
-	else parts.push('engaged from kill − TTK to the kill; points gained while engaged');
+	if (props.data.kind === 'race') {
+		parts.push('seconds engaged per bot (kill − TTK → kill); dead time between bots apart; pace = race time at this split');
+	} else parts.push('engaged from kill − TTK to the kill; points gained while engaged; pace = run score at this rate');
 	if (props.baselineFlat && props.baselineLabel) parts.push(`${props.baselineLabel} has no per-bot detail`);
 	else if (props.baselineLabel === null) parts.push('no baseline to compare with');
 	return parts.join(' · ');

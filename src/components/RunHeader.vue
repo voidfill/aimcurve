@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The result header (Run view R1): scenario and meta, the baseline, the signed
- * delta, and the result.
+ * delta, and the result. The scenario name links to its scenario page.
  *
  * Direction is uniform: positive is better in both kinds. A race's result is its
  * completion time, `budget − score`, and its delta is in seconds. Sign and arrow
@@ -140,7 +140,14 @@ const delta = computed(() => {
 	<section class="header" aria-labelledby="run-heading">
 		<div class="title">
 			<div class="name">
-				<h1 id="run-heading">{{ attempt.scenarioName }}</h1>
+				<h1 id="run-heading">
+					<RouterLink
+						:to="{ name: 'scenario', params: { hash: attempt.scenarioHash } }"
+						class="scenario-link"
+						title="Open this scenario's page"
+						>{{ attempt.scenarioName }}</RouterLink
+					>
+				</h1>
 				<div v-if="benchmark" class="benchmark">
 					<span
 						v-if="benchmark.badge"
@@ -230,6 +237,18 @@ h1 {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.scenario-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.scenario-link:hover,
+.scenario-link:focus-visible {
+	text-decoration: underline;
+	text-decoration-color: var(--color-accent);
+	text-underline-offset: 4px;
 }
 
 .benchmark {

@@ -149,6 +149,11 @@ export interface RaceRow {
 	bot: string;
 	/** Seconds engaged on this slot's bot, dead time excluded. */
 	split: number;
+	/**
+	 * The race time at this slot's pace: `split × slots`. What the whole race
+	 * would take if every slot went like this one, dead time aside.
+	 */
+	pace: number;
 	baseline: number | null;
 	/** `baseline − split`: positive means faster. */
 	delta: number | null;
@@ -187,6 +192,7 @@ export function raceRows(
 			slot: k,
 			bot: e.bot,
 			split,
+			pace: split * engaged.length,
 			baseline: other,
 			delta: other === null ? null : other - split,
 			best: fastest,
@@ -208,6 +214,14 @@ export interface ClockRow {
 	accuracy: number | null;
 	/** Δu over this bot's engagements: points gained while engaged. */
 	points: number;
+	/**
+	 * The score at this bot's pace: `points / time × duration`, what the whole
+	 * run would score if every second went like the time on this bot. Dead time
+	 * is left out, so bot paces need not average to the final score: on VT
+	 * Ground, where the time between bots scores little, they run above it.
+	 * Null when the bot took no time.
+	 */
+	pace: number | null;
 	baseline: number | null;
 	/** `points − baseline`. */
 	delta: number | null;
@@ -251,7 +265,7 @@ export function clockRows(
 	for (const e of engaged) {
 		let row = rows.get(e.bot);
 		if (!row) {
-			row = { bot: e.bot, time: 0, encounters: 0, hits: 0, shots: 0, accuracy: null, points: 0, baseline: null, delta: null };
+			row = { bot: e.bot, time: 0, encounters: 0, hits: 0, shots: 0, accuracy: null, points: 0, pace: null, baseline: null, delta: null };
 			rows.set(e.bot, row);
 		}
 		const points = gained(curve, e.start, e.end);
@@ -265,6 +279,7 @@ export function clockRows(
 	}
 	for (const row of rows.values()) {
 		row.accuracy = row.shots > 0 ? row.hits / row.shots : null;
+		row.pace = row.time > 0 ? (row.points / row.time) * duration : null;
 		if (base) {
 			row.baseline = base.get(row.bot) ?? 0;
 			row.delta = row.points - row.baseline;

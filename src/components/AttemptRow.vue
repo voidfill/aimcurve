@@ -8,6 +8,10 @@
  * used only so `aria-current` states *selection*, which is not the same thing
  * as route-exact-active: while following, the selected row's link is not the
  * current URL.
+ *
+ * Enter on the row of the run being shown filters the rail to its scenario:
+ * that row is already selected, so following its link would change nothing.
+ * Enter on any other row follows the link as usual.
  */
 import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
@@ -18,6 +22,14 @@ const props = defineProps<{
 	selected: boolean;
 	to: RouteLocationRaw;
 }>();
+
+const emit = defineEmits<{ (event: 'filter'): void }>();
+
+function onEnter(event: KeyboardEvent): void {
+	if (!props.selected || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+	event.preventDefault();
+	emit('filter');
+}
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {
 	dateStyle: 'short',
@@ -43,7 +55,9 @@ const score = computed(() =>
 			class="row"
 			:class="{ 'is-selected': selected }"
 			:aria-current="selected ? 'true' : undefined"
+			:title="selected ? 'Enter: show only this scenario' : undefined"
 			@click="navigate"
+			@keydown.enter="onEnter"
 		>
 			<span class="time">{{ startedAt }}</span>
 			<span class="scenario">{{ attempt.scenarioName }}</span>

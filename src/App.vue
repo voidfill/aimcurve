@@ -10,6 +10,11 @@ router.afterEach((to) => {
 		document.title = 'Data — aimcurve';
 		return;
 	}
+	// The Scenario view names the tab after its scenario once it has loaded.
+	if (to.name === 'scenario') {
+		document.title = 'Scenario — aimcurve';
+		return;
+	}
 	const run = to.query.run;
 	const stem = Array.isArray(run) ? run[0] : run;
 	document.title = typeof stem === 'string' && stem.length > 0 ? `${stem} — aimcurve` : 'Run — aimcurve';

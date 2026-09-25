@@ -8,6 +8,7 @@ export const router = createRouter({
 	routes: [
 		{ path: '/', name: 'run', component: RunView },
 		{ path: '/data', name: 'data', component: () => import('./views/DataView.vue') },
+		{ path: '/scenario/:hash', name: 'scenario', component: () => import('./views/ScenarioView.vue') },
 		{ path: '/:pathMatch(.*)*', redirect: { name: 'run' } },
 	],
 });

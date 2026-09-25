@@ -71,6 +71,7 @@ describe('R6 race splits', () => {
 		expect(table.dead.split).toBeGreaterThan(0);
 		expect(table.rows[0]!.bot).toBe('AIR1_Short_close');
 		expect(table.rows.every((row) => row.delta === null && row.deltaBest === 0)).toBe(true);
+		expect(table.rows.map((row) => row.pace)).toEqual(table.rows.map((row) => row.split * 5));
 	});
 
 	it('compares slot by slot against a baseline, positive when faster', () => {
@@ -109,6 +110,15 @@ describe('R6 clock bot rows', () => {
 		// The Python version's residual: the duration less every TTK, the
 		// time after the last window included.
 		expect(table.dead.time).toBeCloseTo(duration - kills.ttk.reduce((a, b) => a + b, 0), 6);
+	});
+
+	it('scale each bot to a whole-run pace: points per engaged second over the duration', () => {
+		const { input, curve, kills } = find('VT Aether Novice S5 Hard Bot 1 90% - Challenge - 2026.09.18-18.59.40');
+		const [row] = clockRows(curve, engagements(kills, killTimes(input)), kills, null).rows;
+		const duration = curve.params.kind === 'clock' ? curve.params.durationS : 0;
+		expect(row!.pace).toBeCloseTo((row!.points / row!.time) * duration, 9);
+		// Time outside the engagements is left out, so pace and score differ.
+		expect(row!.pace!).not.toBe(input.score);
 	});
 
 	it('takes the per-bot difference against the baseline', () => {

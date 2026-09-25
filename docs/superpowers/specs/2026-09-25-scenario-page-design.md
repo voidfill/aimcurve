@@ -26,7 +26,7 @@ Kovaak's" button on Run.
 | S3 | Layout: header, progression chart, configs + PB, recent runs |
 | S4 | A config group is sens scale, H/V sens, DPI, FOV and FOV scale |
 | S5 | Overall tab: runs by attempt number, PB step, rolling median, rank bands |
-| S6 | Bot tabs plot exactly Run's bot-table figure, computed on the page on demand |
+| S6 | Bot tabs plot each bot's pace on the score scale, with rank bands, computed on demand |
 | S7 | Open in Kovaak's uses the documented Steam deep link, by name |
 | S8 | Pure functions for grouping, series and links; one composable joins them |
 
@@ -66,8 +66,10 @@ Changes to Run:
   `<scenario name> · Show all runs`. Show all runs clears the filter (the same
   `setFilter(null)` the select used). An unknown hash shows
   `Unknown scenario · <short hash> · Show all runs`.
-- **Enter** on a focused rail row filters the rail to that row's scenario.
-  Clicking a row keeps selecting it, as today.
+- **Enter** on the row of the run being shown filters the rail to that row's
+  scenario. That row is already selected, so following its link would change
+  nothing; Enter on any other row follows its link and selects it, as a click
+  does.
 - The empty state's "Show all scenarios" action stays.
 
 The rail is otherwise untouched; it gets its own rework later.
@@ -98,7 +100,8 @@ A single column, no rail, full main width. Top to bottom:
 4. **Recent runs.** The last 20 completed runs, newest first: time, score, Δ to
    the PB before that run (the Run R2 *PB before* meaning, labelled as such),
    rank when mapped, and the config group marker. Each row links to Run
-   inspecting that run. **Show more** appends the next 20.
+   inspecting that run, with the rail filtered to this scenario (the chip clears
+   it). **Show more** appends the next 20.
 
 Loading and error states follow Run: "Starting the local database…", a danger
 notice with the error and a retry when a query fails. Resets are not listed or
@@ -115,10 +118,12 @@ split one sens into several near-identical groups. A group's key is:
 Runs whose `config` rows differ only in other keys share a group. The group's
 other keys are not shown in this slice.
 
-Each group gets a stable marker, assigned in order of first use: a colour from a
-fixed palette plus an index label (`C1`, `C2`, …), so colour is never the only
-carrier. When there are more groups than palette colours, the oldest groups share
-a neutral colour and keep their labels.
+Each group gets a stable label in order of first use (`C1`, `C2`, …), so colour
+is never the only carrier. The three most recently used groups get a colour,
+in the order of their labels; the rest share a neutral grey. Three is the most a
+scatter can carry: the first three dark slots of the dataviz reference palette
+(`#3987e5`, `#d95926`, `#199e70`) validate all-pairs on the chart surface
+(worst CVD ΔE 9.4, normal-vision ΔE 20.9, all ≥ 3:1), and no fourth does.
 
 ### S5. Overall tab
 
@@ -143,20 +148,36 @@ a neutral colour and keep their labels.
 
 A scenario with a single completed run shows its dot and no median line.
 
-### S6. Bot tabs plot exactly Run's bot-table figure
+### S6. Bot tabs plot the pace in Run's bot table
 
 Tabs: `Overall`, then one per bot for a clock scenario in the order Run's bot
 table uses, or one per kill slot for a race (labelled `<slot> · <bot name>`).
 Click scenarios (`isClicking`) get no bot tabs, as Run shows no breakdown there.
 The tab set is decided from the latest completed run with kill detail.
 
-Each dot is the value Run's bot table shows for that bot in that run: the bot's
-**points** for a clock run, the **split** for a race slot. It is computed by the
-same functions Run uses (`engagements`, `encounters`, the clock rows,
-`raceRows`, `fixedWindow`), so a dot and Run's table can never disagree. The tab
-draws the same "best so far" step line and rolling median as S5, with up as
-better (shorter splits up). No rank bands: benchmark thresholds apply to the
-whole score only.
+A bot's own figure, its points or a race slot's split, is a fraction of the
+run's result, so it cannot sit on the rank thresholds' scale: on VT Ground
+Intermediate S5 a bot scores about 1,000 points against thresholds from about
+2,600. The thresholds are not extrapolated. Instead each dot is the bot's
+**pace**, the whole-run result at that bot's rate, which is what Run's pace
+lines show over that bot's stretch:
+
+- clock: `points / engaged seconds × duration`, a score;
+- race: `split × slots`, a race time, plotted as `budget − time` on the same
+  score scale as the Overall tab.
+
+Run's bot table gains a **pace** column with the same figure, so every value on
+a bot tab appears on Run. Both come from the same functions (`engagements`,
+`clockRows`, `raceRows`, `fixedWindow`), and a dot's tooltip also shows the
+table's points or split. Bot tabs share the Overall tab's axis, "best so far"
+step line, rolling median and rank bands; the bands mean rank-equivalent pace,
+not a rank achieved.
+
+Time outside every engagement is left out of a bot's pace, so bot paces need
+not add up to the final result, and the tab says so. On VT Ground, where the
+time between bots scores little, the latest run's bots averaged about 2,985
+pace in a run that scored 2,864. On a fixed-window scenario whose resets still
+score, pace can sit at or below the result.
 
 Runs without a `.perf` or kill detail leave a gap, never a zero. The tab header
 says the coverage ("212 of 240 runs have bot detail").
@@ -168,8 +189,17 @@ lifetime, so switching tabs is instant; curves are already memoised by file stem
 The tab shows a loading state meanwhile.
 
 Budget: **under 300 ms** from opening a bot tab to drawn, for a 300-run
-scenario, measured on the real corpus during implementation and recorded in the
-plan. If it misses, the fallback is to persist per-run bot values at ingest (a
+scenario.
+
+Measured on 2026-09-25. The full dump's largest scenario with kills has 64
+completed runs (`test/fixtures/scenario-corpus.test.ts`, Node, in-process
+PGlite): VT Ground Intermediate S5, 64 runs, 3 tabs, 39 ms of queries and 3 ms
+of computation; VT Aether Intermediate S5, 51 runs, 23 ms and 1 ms. Queries
+grow with the runs' tick arrays, so 300 runs extrapolates to roughly 200 ms. In
+the browser, on the same 78-run scenario, the first bot tab drew 29 ms after the
+click with the database warm, and 479 ms when clicked straight after a cold page
+load. Click scenarios never load bot detail, since the reference run already
+shows they have no tabs. If it misses, the fallback is to persist per-run bot values at ingest (a
 new table and a reimport), not to thin the data. A web worker is the step before
 that if the cost is in computation rather than queries.
 
@@ -226,8 +256,8 @@ small components (`ScenarioHeader`, `ProgressChart`, `ConfigTable`, `PbCard`,
    switcher; neither page counts the other's runs.
 4. The Overall tab's PB line ends at the PB card's value; its dots match the
    recent-runs table; races read "up is better".
-5. For a sample of runs, each bot tab's value equals Run's bot table for that run
-   and bot.
+5. For a sample of runs, each bot tab's pace and points or split equal Run's bot
+   table for that run and bot.
 6. A bot tab on a 300-run scenario draws within the S6 budget; the measurement is
    recorded.
 7. Configs group runs that differ only in crosshair; a sens change starts a new

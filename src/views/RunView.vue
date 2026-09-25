@@ -12,7 +12,6 @@ import { useMediaQuery } from '@vueuse/core';
 import AttemptRail from '../components/AttemptRail.vue';
 import RunDetail from '../components/RunDetail.vue';
 import SelectionPill from '../components/SelectionPill.vue';
-import ScenarioFilter from '../components/ScenarioFilter.vue';
 import { useAttempts } from '../composables/useAttempts';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
@@ -46,6 +45,19 @@ const inspectedAt = computed(() =>
 	mode.value === 'inspect' && selected.value ? timeFormat.format(new Date(selected.value.startedAt)) : null,
 );
 
+/**
+ * The rail filter's chip label: the scenario's name, or its short hash while
+ * the names load, when they cannot be listed, or when this browser has no
+ * such scenario.
+ */
+const filterLabel = computed(() => {
+	const hash = scenarioHash.value;
+	if (hash === null) return null;
+	const name = scenarios.value.find((option) => option.hash === hash)?.name;
+	if (name) return name;
+	return filterState.value === 'unknown' ? `Unknown scenario · ${hash.slice(0, 8)}` : hash.slice(0, 8);
+});
+
 /** Below this the rail stops being a column and becomes an ordinary section. */
 const narrow = useMediaQuery('(max-width: 799px)');
 
@@ -76,14 +88,6 @@ const onboarding = computed(
 	</Teleport>
 	<div class="run" :class="{ narrow }">
 		<div class="result">
-			<ScenarioFilter
-				:options="scenarios"
-				:selected="scenarioHash"
-				:state="filterState"
-				:error="scenariosError"
-				@change="setFilter"
-			/>
-
 			<section v-if="dbError !== null" class="notice danger" role="alert">
 				<h1>Attempts are unavailable</h1>
 				<p>The local database could not be opened, so no attempt can be read.</p>
@@ -169,7 +173,10 @@ const onboarding = computed(
 				:loading-older="loadingOlder"
 				:has-newer="hasNewer"
 				:filtered="scenarioHash !== null"
+				:filter-label="filterLabel"
+				:filter-error="scenariosError"
 				:link-to="linkTo"
+				@filter="setFilter"
 				@load-older="loadOlder()"
 				@resume-latest="resumeLatest()"
 				@retry="retry()"
