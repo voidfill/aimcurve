@@ -43,8 +43,8 @@ const bench = useBenchmarkRank(
 const chartRanks = computed<ChartRanks | null>(() => {
 	const c = bench.selected.value;
 	const r = bench.rank.value;
-	if (c === null || r === null) return null;
-	return { ranks: c.benchmark.ranks, thresholds: c.thresholds, next: r.next };
+	if (c === null) return null;
+	return { ranks: c.benchmark.ranks, thresholds: c.thresholds, next: r?.next ?? null };
 });
 
 const current = computed(() => analysis.value?.current ?? null);

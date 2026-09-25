@@ -48,7 +48,13 @@ export function useBenchmarkRank(
 	);
 
 	const candidates = computed(() => (snapshot.value && name.value !== null ? candidatesOf(snapshot.value, name.value) : []));
-	const selected = computed(() => (name.value === null ? null : pick(candidates.value, picks.value[name.value.trim()])));
+	/** The stored picks, or none when storage holds something else. */
+	const stored = computed(() => (typeof picks.value === 'object' && picks.value !== null ? picks.value : {}));
+	const selected = computed(() => {
+		if (name.value === null) return null;
+		const id = stored.value[name.value.trim()];
+		return pick(candidates.value, typeof id === 'number' ? id : undefined);
+	});
 	const rank = computed(() => {
 		const s = score.value;
 		const c = selected.value;
@@ -57,7 +63,7 @@ export function useBenchmarkRank(
 
 	function setPick(benchmarkId: number): void {
 		if (name.value === null) return;
-		picks.value = { ...picks.value, [name.value.trim()]: benchmarkId };
+		picks.value = { ...stored.value, [name.value.trim()]: benchmarkId };
 	}
 
 	return { candidates, selected, rank, setPick };

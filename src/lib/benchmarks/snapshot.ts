@@ -104,6 +104,7 @@ function toNumbers(raw: readonly unknown[]): number[] {
 
 /** Why a ladder is not usable, or null when it is. */
 function ladderProblem(thresholds: readonly number[]): string | null {
+	if (thresholds.length === 0) return 'no thresholds';
 	if (thresholds.some((t) => !Number.isFinite(t))) return 'non-numeric thresholds';
 	for (let i = 1; i < thresholds.length; i++) {
 		if (thresholds[i]! < thresholds[i - 1]!) return 'decreasing thresholds';

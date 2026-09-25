@@ -234,6 +234,12 @@ scenario from `performances.zip` against its benchmark ladder. If a race ladder
 turns out to be in seconds, `buildSnapshot` needs a conversion and this section
 changes.
 
+**Verified 2026-09-25:** all 10 race scenarios in the full dump (budget 1000)
+have ascending ladders in CSV score units, for example `Air Pure Medium` scores
+906–919 against Viscose Benchmarks S2 `870..930`. No conversion is needed. The
+11 ladders skipped as decreasing are upstream typos in a single value, such as
+`[…, 75, 74]`, not ladders in seconds.
+
 The score is the inspected run's CSV `score`. A run with a null score shows no
 rank.
 

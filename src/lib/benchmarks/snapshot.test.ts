@@ -84,6 +84,13 @@ describe('B2 buildSnapshot', () => {
 		expect(built.skipped[0]).toContain('"B" has non-numeric thresholds');
 	});
 
+	it('drops a difficulty with no ranks and empty ladders', () => {
+		const empty = { benchmarkName: 'X', difficulties: [{ difficultyName: 'D', kovaaksBenchmarkId: 1, rankColors: {} }] };
+		const built = buildSnapshot([empty], new Map([[1, response({ A: [] })]]));
+		expect(built.benchmarks).toEqual([]);
+		expect(built.skipped[0]).toContain('"A" has no thresholds');
+	});
+
 	it('fails on an integer-like rank name', () => {
 		const bad = { benchmarkName: 'X', difficulties: [{ difficultyName: 'D', kovaaksBenchmarkId: 1, rankColors: { '1': '#fff' } }] };
 		expect(() => buildSnapshot([bad], new Map([[1, response({ A: [1] })]]))).toThrow(/integer-like/);

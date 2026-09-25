@@ -61,3 +61,15 @@ describe('useBenchmarkRank', () => {
 		expect(api.rank.value).toBeNull();
 	});
 });
+
+describe('useBenchmarkRank storage', () => {
+	it('falls back to the default when storage holds something else', async () => {
+		const picks = ref(null as unknown as Record<string, number>);
+		const api = useBenchmarkRank(ref('Pasu'), ref(160), { load: async () => snapshot, picks });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(api.selected.value?.benchmark.id).toBe(10);
+		api.setPick(20);
+		expect(picks.value).toEqual({ Pasu: 20 });
+	});
+});

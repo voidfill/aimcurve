@@ -70,9 +70,12 @@ const benchmark = computed(() => {
 	const color = r !== null && r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
 	const kind = props.current?.params.kind ?? null;
 	const score = props.attempt.score;
+	// While the analysis loads, a race is not known to be one yet: its gap would
+	// show in points first and switch to seconds.
+	const settled = props.baseline !== null;
 	return {
 		badge: r === null ? null : { name: rankName(c, r.k), color, ink: color === null ? null : inkFor(color) },
-		gap: r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
+		gap: settled && r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
 		name: benchmarkName(c),
 		options: props.candidates.map((o) => ({
 			id: o.benchmark.id,
