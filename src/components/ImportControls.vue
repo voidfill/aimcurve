@@ -13,6 +13,7 @@
 import { computed } from 'vue';
 import LinkSetup from './LinkSetup.vue';
 import { canPickDirectory, type Connection } from '../lib/run/import-controller';
+import { importOptions } from '../lib/run/import-options';
 
 const props = defineProps<{
 	connection: Connection;
@@ -28,16 +29,8 @@ const emit = defineEmits<{
 
 const canConnect = canPickDirectory();
 
-/**
- * `connected`, `reconnect` and `error` all leave something to drop: a live
- * watcher, a stored folder permission, or both. `none` has nothing and
- * `snapshot` has nothing either — its handle is already cleared and nothing is
- * watched — so offering it there would name a connection that does not exist.
- */
-const canDisconnect = computed(() => props.connection !== 'none' && props.connection !== 'snapshot');
-
-const needsReconnect = computed(() => props.connection === 'reconnect');
-const showConnect = computed(() => canConnect && props.connection !== 'connected' && !needsReconnect.value);
+/** Shared with the header's import control, so the two offer the same things. */
+const options = computed(() => importOptions(props.connection, canConnect));
 
 /**
  * The controller copies the `FileList` before its first await, so clearing the
@@ -71,14 +64,14 @@ function onFiles(event: Event): void {
 				<p>New attempts show up on their own while this page is open.</p>
 
 				<div class="actions">
-					<button v-if="needsReconnect" type="button" :disabled="disabled" @click="emit('reconnect')">
+					<button v-if="options.reconnect" type="button" :disabled="disabled" @click="emit('reconnect')">
 						Reconnect
 					</button>
-					<button v-if="showConnect" type="button" :disabled="disabled" @click="emit('connect')">
+					<button v-if="options.connect === 'connect'" type="button" :disabled="disabled" @click="emit('connect')">
 						Connect folder
 					</button>
 					<button
-						v-if="needsReconnect && canConnect"
+						v-if="options.connect === 'another'"
 						type="button"
 						class="ghost"
 						:disabled="disabled"
@@ -87,7 +80,7 @@ function onFiles(event: Event): void {
 						Use another folder
 					</button>
 					<button
-						v-if="canDisconnect"
+						v-if="options.disconnect"
 						type="button"
 						class="ghost"
 						:disabled="disabled"
@@ -107,7 +100,8 @@ function onFiles(event: Event): void {
 					<path d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
 				</svg>
 				<h3>Import files once</h3>
-				<p>A one-time copy. Works everywhere, but does not update on its own.</p>
+				<p>A one-time copy. Works everywhere, Program Files included, but does not update on its own.</p>
+				<p v-if="options.live" class="note">This stops watching the connected folder.</p>
 
 				<div class="actions">
 					<label class="picker" :class="{ disabled }">

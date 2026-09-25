@@ -1,65 +1,49 @@
 <script setup lang="ts">
 /**
- * The application bar: brand, the two destinations this slice has, and a
- * persistent data-status link.
+ * The application bar: brand and destinations on the left, then the view's
+ * own status, then the data control at the far right.
  *
  * The Run link points at the last Run location visited, so coming back from
  * Data restores the inspected run, the filter, and whether following was on.
  *
- * The right-hand slot belongs to whichever view fills it: Run puts its
- * selection pill there. It is selection state, never connection state.
+ * The status slot belongs to whichever view fills it: Run puts its selection
+ * pill there. It is selection state, never connection state; connection state
+ * is the import control's, and that control is also the way to the Data page.
  *
- * Only Run and Data exist here. Sessions, Scenarios and Benchmarks are later
- * slices and are deliberately absent rather than present and dead.
+ * Only Run exists as a destination here. Sessions, Scenarios and Benchmarks
+ * are later slices and are deliberately absent rather than present and dead.
  */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { useImport } from '../composables/useImport';
+import ImportButton from './ImportButton.vue';
 import { useSelection } from '../composables/useSelection';
-import type { Connection } from '../lib/run/import-controller';
 
 const route = useRoute();
-const { state } = useImport();
 const { rememberedRunRoute } = useSelection();
 
-const STATUS: Record<Connection, string> = {
-	none: 'Not connected',
-	connected: 'Connected',
-	reconnect: 'Reconnect needed',
-	snapshot: 'Snapshot',
-	error: 'Import failed',
-};
-
-const status = computed(() => (state.busy ? 'Importing…' : STATUS[state.connection]));
 const onRun = computed(() => route.name === 'run');
-const onData = computed(() => route.name === 'data');
 </script>
 
 <template>
 	<header>
-		<strong class="brand">aim<span>curve</span></strong>
+		<RouterLink v-slot="{ href, navigate }" :to="rememberedRunRoute" custom>
+			<a :href="href" class="brand" @click="navigate">aim<span>curve</span></a>
+		</RouterLink>
 		<nav aria-label="Primary">
 			<RouterLink v-slot="{ href, navigate }" :to="rememberedRunRoute" custom>
 				<a
 					:href="href"
+					class="tab"
 					:class="{ active: onRun }"
 					:aria-current="onRun ? 'page' : undefined"
 					@click="navigate"
-					>Run</a
+					><span>Run</span></a
 				>
-			</RouterLink>
-			<RouterLink
-				:to="{ name: 'data' }"
-				class="data-link"
-				:class="{ active: onData }"
-				:aria-current="onData ? 'page' : undefined"
-			>
-				<span>Data</span>
-				<span class="status" :class="state.connection">{{ status }}</span>
 			</RouterLink>
 		</nav>
 		<!-- The Run view teleports its Follow latest / inspecting pill here. -->
 		<div id="app-bar-status" class="bar-status"></div>
+		<ImportButton />
 	</header>
 </template>
 
@@ -67,62 +51,94 @@ const onData = computed(() => route.name === 'data');
 header {
 	display: flex;
 	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--space-3) 24px;
+	align-items: stretch;
+	column-gap: 20px;
 	min-height: 46px;
-	padding: var(--space-1) 18px;
+	padding: 0 18px;
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-surface);
+}
+
+header > * {
+	align-self: center;
 }
 
 .brand {
 	font: 500 13px/1 var(--font-mono);
 	letter-spacing: 0.06em;
 	color: var(--color-text-faint);
+	text-decoration: none;
+	transition: color 120ms ease;
 }
 
 .brand span {
 	color: var(--color-text);
 }
 
+.brand:hover {
+	color: var(--color-text-muted);
+}
+
 nav {
 	display: flex;
-	align-items: center;
+	align-self: stretch;
 	gap: 2px;
 }
 
-a {
+/*
+ * The tab fills the bar's height so its underline can sit on the bar's bottom
+ * border; the hover wash is on the label, so it stays a compact pill.
+ */
+.tab {
+	position: relative;
+	display: flex;
+	align-items: center;
 	color: var(--color-text-muted);
 	text-decoration: none;
-	padding: 6px 11px;
-	border-radius: 3px;
 	font-size: 12.5px;
 }
 
-a:hover {
+.tab span {
+	padding: 6px 11px;
+	border-radius: 5px;
+	transition:
+		background-color 120ms ease,
+		color 120ms ease;
+}
+
+.tab:hover span {
+	color: var(--color-text-strong);
+	background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.tab::after {
+	content: '';
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: -1px;
+	height: 2px;
+	border-radius: 2px 2px 0 0;
+	background: var(--color-accent);
+	transform: scaleX(0);
+	transition: transform 160ms ease;
+}
+
+.tab.active {
 	color: var(--color-text);
 }
 
-a.active {
-	color: var(--color-text);
-	background: var(--color-surface-raised);
-	box-shadow: inset 0 0 0 1px var(--color-border-strong);
+.tab.active::after {
+	transform: scaleX(1);
 }
 
-.data-link {
-	display: flex;
-	align-items: baseline;
-	gap: var(--space-2);
+.tab:focus-visible {
+	outline: none;
 }
 
-.status {
-	font: 400 11px/1 var(--font-mono);
-	color: var(--color-text-muted);
-}
-
-.status.reconnect,
-.status.error {
-	color: var(--color-danger);
+.tab:focus-visible span {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 1px;
 }
 
 .bar-status {

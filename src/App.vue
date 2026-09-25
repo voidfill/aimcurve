@@ -19,6 +19,7 @@ router.afterEach((to) => {
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import AppHeader from './components/AppHeader.vue';
+import DropImport from './components/DropImport.vue';
 import { useDb } from './composables/useDb';
 import { useImport } from './composables/useImport';
 
@@ -80,5 +81,6 @@ watch(dbError, (error) => {
 	<main>
 		<RouterView />
 	</main>
+	<DropImport />
 	<p class="sr-only" aria-live="polite">{{ announcement }}</p>
 </template>
