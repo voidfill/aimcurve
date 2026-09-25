@@ -138,7 +138,7 @@ function onPick(event: Event): void {
 			<RouterLink v-slot="{ href, navigate }" :to="playTo" custom>
 				<a :href="href" class="action primary" @click="play($event, navigate)">Play in Run</a>
 			</RouterLink>
-			<a :href="kovaaks" class="action" :title="kovaaksTitle">Open in Kovaak’s</a>
+			<a :href="kovaaks" class="action kovaaks" :title="kovaaksTitle">Open in Kovaak’s</a>
 		</div>
 	</section>
 </template>
@@ -281,5 +281,17 @@ h1 {
 
 .action.primary:hover {
 	background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+/* Kovaak's own orange, so the way out to the game reads as the game's. */
+.action.kovaaks {
+	--kovaaks: #ff8a1f;
+	border-color: var(--kovaaks);
+	color: var(--kovaaks);
+}
+
+.action.kovaaks:hover {
+	background: color-mix(in srgb, var(--kovaaks) 14%, transparent);
+	color: #ffb066;
 }
 </style>
