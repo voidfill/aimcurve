@@ -6,3 +6,6 @@
 # `raw/` is gitignored and never reaches LFS.
 test/fixtures/curated/**/*.perf filter=lfs diff=lfs merge=lfs -text
 test/fixtures/curated/**/*.csv  filter=lfs diff=lfs merge=lfs -text
+
+# Sourced by bash through direnv; a CR would break it.
+.envrc eol=lf
