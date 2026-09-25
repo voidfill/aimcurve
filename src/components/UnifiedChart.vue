@@ -16,8 +16,10 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { useResizeObserver } from '@vueuse/core';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { chartColor } from '../lib/benchmarks/format';
+import type { RankStep } from '../lib/benchmarks/snapshot';
 import type { Encounter } from '../lib/run/bots';
-import type { ChartData } from '../lib/run/chart-data';
+import { type ChartData, yBounds } from '../lib/run/chart-data';
 import { formatSigned, formatValue } from '../lib/run/format';
 
 export interface ChartLayers {
@@ -26,6 +28,14 @@ export interface ChartLayers {
 	baseline: boolean;
 	baseLocal: boolean;
 	recent: boolean;
+	ranks: boolean;
+}
+
+/** The selected benchmark ladder, and the rank above the run's score (B7 of the benchmark ranks design). */
+export interface ChartRanks {
+	ranks: readonly RankStep[];
+	thresholds: readonly number[];
+	next: number | null;
 }
 
 const props = defineProps<{
@@ -45,6 +55,8 @@ const props = defineProps<{
 	recentCount: number;
 	/** This run's elapsed seconds at progress `x`. */
 	timeAt: (x: number) => number;
+	/** Rank bands, or null when the scenario has no rank. */
+	ranks: ChartRanks | null;
 }>();
 
 const HEIGHT = 340;
@@ -116,7 +128,7 @@ function px(u: uPlot, x: number): number {
 	return u.valToPos(x * props.data.xMax, 'x', true);
 }
 
-/** Under the lines: highlight tint, accumulated gap, bot boundaries and labels. */
+/** Under the lines: rank bands, highlight tint, accumulated gap, bot boundaries and labels. */
 function paintUnder(u: uPlot): void {
 	const ctx = u.ctx;
 	const { top, height } = u.bbox;
@@ -125,6 +137,8 @@ function paintUnder(u: uPlot): void {
 	ctx.beginPath();
 	ctx.rect(u.bbox.left, top, u.bbox.width, height);
 	ctx.clip();
+
+	if (props.ranks && props.layers.ranks) paintRanks(u, props.ranks);
 
 	if (props.highlight) {
 		for (const e of props.highlight) {
@@ -143,6 +157,44 @@ function paintUnder(u: uPlot): void {
 
 	paintBots(u);
 	ctx.restore();
+}
+
+/**
+ * Each rank's band from its threshold up to the next, open at the top, with a
+ * line on each threshold and the rank's name at the right edge. Tied ranks have
+ * no band, and their higher rank's name is the one labelled. Labels are drawn
+ * upward and one within 12 px of the last is dropped.
+ */
+function paintRanks(u: uPlot, ladder: ChartRanks): void {
+	const ctx = u.ctx;
+	const ratio = uPlot.pxRatio;
+	const { left, top, width } = u.bbox;
+	const t = ladder.thresholds;
+	const Y = (v: number) => u.valToPos(v, 'y', true);
+	ctx.font = `${9.5 * ratio}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+	ctx.textAlign = 'right';
+	ctx.textBaseline = 'bottom';
+	let lastLabel = Number.POSITIVE_INFINITY;
+	for (let k = 0; k < t.length; k++) {
+		if (t[k + 1] === t[k]) continue;
+		const color = chartColor(ladder.ranks[k]?.color ?? '');
+		const y0 = Y(t[k]!);
+		const y1 = k + 1 < t.length ? Y(t[k + 1]!) : top;
+		if (y1 < y0) {
+			ctx.globalAlpha = 0.08;
+			ctx.fillStyle = color;
+			ctx.fillRect(left, y1, width, y0 - y1);
+		}
+		ctx.globalAlpha = 0.55;
+		ctx.fillStyle = color;
+		ctx.fillRect(left, Math.round(y0), width, ratio);
+		ctx.globalAlpha = 0.9;
+		if (lastLabel - y0 >= 12 * ratio) {
+			ctx.fillText(ladder.ranks[k]?.name ?? '', left + width - 4 * ratio, y0 - 2 * ratio);
+			lastLabel = y0;
+		}
+	}
+	ctx.globalAlpha = 1;
 }
 
 function paintGap(u: uPlot): void {
@@ -280,7 +332,12 @@ function options(width: number): uPlot.Options {
 		},
 		scales: {
 			x: { time: false, range: [0, xMax] },
-			y: { range: (_u, min, max) => uPlot.rangeNum(min, max, 0.1, true) },
+			y: {
+				range: (_u, min, max) => {
+					const [lo, hi] = yBounds(min, max, props.ranks, props.layers.ranks);
+					return uPlot.rangeNum(lo, hi, 0.1, true);
+				},
+			},
 		},
 		axes: [
 			{
@@ -391,6 +448,13 @@ watch(
 watch(
 	() => [props.highlight, props.encounters, props.colors],
 	() => plot.value?.redraw(false),
+);
+
+// The y range depends on the rank layer. Setting the x scale explicitly is what
+// makes uPlot rerun the auto y range, and so the range callback.
+watch(
+	() => [props.ranks, props.layers.ranks],
+	() => plot.value?.setScale('x', { min: 0, max: props.data.xMax }),
 );
 
 /* ------------------------------------------------------------------ */

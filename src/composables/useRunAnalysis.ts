@@ -32,6 +32,8 @@ export interface ChartSettings {
 	baseline: boolean;
 	baseLocal: boolean;
 	recent: boolean;
+	/** Benchmark rank bands (B7 of the benchmark ranks design). */
+	ranks: boolean;
 	option: BaselineOption;
 	/** Local-pace window, seconds. */
 	window: 1 | 3 | 5;
@@ -43,6 +45,7 @@ const DEFAULTS: ChartSettings = {
 	baseline: true,
 	baseLocal: false,
 	recent: false,
+	ranks: true,
 	option: 'pb-before',
 	window: 5,
 };

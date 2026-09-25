@@ -76,7 +76,9 @@ later. This spec does not use it.
    are ignored. Single-rank ladders are valid.
 2. For each difficulty, `GET https://kovaaks.com/webapp-backend/benchmarks/player-progress-rank-benchmark?benchmarkId=<id>&steamId=00000000000000000`.
    The placeholder steam ID needs no identity. Read
-   `categories.*.scenarios.<name>.rank_maxes`.
+   `categories.*.scenarios.<name>.rank_maxes`. Some difficulties (2108, 2487
+   on 2026-09-25) send these as numeric strings (`"1750"`), which are read as
+   numbers; any other non-number makes the ladder unusable.
 
 No other endpoints are called: no subscriber counts, no leaderboard totals, and
 no Evxl internals.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { atX, type RunCurve } from '../scoring';
-import { sample, scrubGrid, unionGrid } from './chart-data';
+import { sample, scrubGrid, unionGrid, yBounds } from './chart-data';
 
 const f = (values: number[]) => Float64Array.from(values);
 
@@ -40,5 +40,30 @@ describe('scrub grid', () => {
 		const grid = scrubGrid(curve);
 		expect(grid).toHaveLength(200);
 		grid.forEach((x, k) => expect(atX(curve, x).t).toBeCloseTo(k / 100, 9));
+	});
+});
+
+describe('B7 y bounds', () => {
+	it('extends to a near target', () => {
+		expect(yBounds(0, 100, { next: 140 }, true)).toEqual([0, 140]);
+	});
+
+	it('does not extend to a far target', () => {
+		expect(yBounds(0, 100, { next: 151 }, true)).toEqual([0, 100]);
+	});
+
+	it('keeps the bounds at the top rank and with the layer off', () => {
+		expect(yBounds(0, 100, { next: null }, true)).toEqual([0, 100]);
+		expect(yBounds(0, 100, { next: 120 }, false)).toEqual([0, 100]);
+		expect(yBounds(0, 100, null, true)).toEqual([0, 100]);
+	});
+
+	it('extends for an unranked run only when its first threshold is near', () => {
+		expect(yBounds(200, 400, { next: 480 }, true)).toEqual([200, 480]);
+		expect(yBounds(200, 400, { next: 900 }, true)).toEqual([200, 400]);
+	});
+
+	it('keeps the data max when the target is already inside the data', () => {
+		expect(yBounds(0, 100, { next: 80 }, true)).toEqual([0, 100]);
 	});
 });

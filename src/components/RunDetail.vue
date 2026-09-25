@@ -11,7 +11,8 @@ import ChartControls from './ChartControls.vue';
 import BotTable, { type BotTableData } from './BotTable.vue';
 import RunHeader from './RunHeader.vue';
 import StatsStrip from './StatsStrip.vue';
-import UnifiedChart, { type ChartLayers } from './UnifiedChart.vue';
+import UnifiedChart, { type ChartLayers, type ChartRanks } from './UnifiedChart.vue';
+import { useBenchmarkRank } from '../composables/useBenchmarkRank';
 import { useRunAnalysis, type ChartSettings } from '../composables/useRunAnalysis';
 import { flatReadout } from '../lib/run/baseline';
 import {
@@ -33,6 +34,18 @@ import { atX, killTimes, paceFor, readout, recentRange, type RunCurve } from '..
 const props = defineProps<{ attempt: Attempt }>();
 
 const { state, error, analysis, baseline, settings, retry } = useRunAnalysis(toRef(props, 'attempt'));
+const bench = useBenchmarkRank(
+	computed(() => props.attempt.scenarioName),
+	computed(() => props.attempt.score),
+);
+
+/** The selected ladder and the run's next rank, for the chart's rank layer (B7). */
+const chartRanks = computed<ChartRanks | null>(() => {
+	const c = bench.selected.value;
+	const r = bench.rank.value;
+	if (c === null || r === null) return null;
+	return { ranks: c.benchmark.ranks, thresholds: c.thresholds, next: r.next };
+});
 
 const current = computed(() => analysis.value?.current ?? null);
 const race = computed(() => current.value?.params.kind === 'race');
@@ -118,6 +131,7 @@ const layers = computed<ChartLayers>(() => ({
 	baseline: settings.value.baseline,
 	baseLocal: settings.value.baseLocal,
 	recent: settings.value.recent,
+	ranks: settings.value.ranks,
 }));
 
 /* Bot highlight: hover wins over the pinned row. */
@@ -160,7 +174,15 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 
 <template>
 	<div class="detail">
-		<RunHeader :attempt="attempt" :current="current" :baseline="baseline" />
+		<RunHeader
+			:attempt="attempt"
+			:current="current"
+			:baseline="baseline"
+			:candidates="bench.candidates.value"
+			:selected="bench.selected.value"
+			:rank="bench.rank.value"
+			@pick="bench.setPick"
+		/>
 		<StatsStrip :attempt="attempt" />
 
 		<section class="panel chart-panel" aria-label="Pace chart">
@@ -188,6 +210,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					:recent-count="analysis.recent.length"
 					:baseline-kind="baseline.kind"
 					:baseline-label="baseline.kind === 'none' ? null : baseline.label"
+					:has-ranks="chartRanks !== null"
 					@update="update"
 				/>
 				<UnifiedChart
@@ -202,6 +225,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					:readout-at="readoutAt"
 					:recent-count="analysis.recent.length"
 					:time-at="timeAt"
+					:ranks="chartRanks"
 				/>
 				<footer class="legend">
 					<span>thin = local pace · thick = accumulated pace (projected final {{ race ? 'time' : 'score' }})</span>

@@ -142,3 +142,20 @@ export function chartData(
 export function axisValue(curve: RunCurve, y: number): number {
 	return curve.params.kind === 'race' ? curve.params.budget - y : y;
 }
+
+/**
+ * The y range before padding (B7 of the benchmark ranks design). With the rank
+ * layer on, it reaches up to the next rank's threshold when that is near: no
+ * further above the data than half the data's own span, so a far target never
+ * flattens the curves.
+ */
+export function yBounds(
+	dataMin: number,
+	dataMax: number,
+	rank: { next: number | null } | null,
+	layerOn: boolean,
+): [number, number] {
+	const next = rank?.next ?? null;
+	if (!layerOn || next === null || next - dataMax > 0.5 * (dataMax - dataMin)) return [dataMin, dataMax];
+	return [dataMin, Math.max(dataMax, next)];
+}

@@ -14,12 +14,14 @@ const props = defineProps<{
 	recentCount: number;
 	baselineKind: 'charted' | 'flat' | 'none';
 	baselineLabel: string | null;
+	/** Whether the scenario has a benchmark rank to band the chart with. */
+	hasRanks: boolean;
 }>();
 
 const emit = defineEmits<{ (event: 'update', patch: Partial<ChartSettings>): void }>();
 
 interface Toggle {
-	key: 'local' | 'accumulated' | 'baseline' | 'baseLocal' | 'recent';
+	key: 'local' | 'accumulated' | 'baseline' | 'baseLocal' | 'recent' | 'ranks';
 	label: string;
 	rule: string;
 	disabled: string | null;
@@ -49,6 +51,12 @@ const toggles = computed<Toggle[]>(() => {
 			label: props.recentCount >= 10 ? 'recent range' : `recent · ${props.recentCount}`,
 			rule: '8px solid rgba(142,154,166,.35)',
 			disabled: props.recentCount === 0 ? 'No earlier comparable runs' : null,
+		},
+		{
+			key: 'ranks',
+			label: 'ranks',
+			rule: '8px solid rgba(202,177,72,.3)',
+			disabled: props.hasRanks ? null : 'This scenario is in no known benchmark',
 		},
 	];
 });
