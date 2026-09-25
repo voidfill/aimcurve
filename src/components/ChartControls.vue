@@ -14,8 +14,8 @@ const props = defineProps<{
 	recentCount: number;
 	baselineKind: 'charted' | 'flat' | 'none';
 	baselineLabel: string | null;
-	/** Whether the scenario has a benchmark rank to band the chart with. */
-	hasRanks: boolean;
+	/** Why the rank bands cannot be shown, or null when they can. */
+	ranksDisabled: string | null;
 }>();
 
 const emit = defineEmits<{ (event: 'update', patch: Partial<ChartSettings>): void }>();
@@ -56,7 +56,7 @@ const toggles = computed<Toggle[]>(() => {
 			key: 'ranks',
 			label: 'ranks',
 			rule: '8px solid rgba(202,177,72,.3)',
-			disabled: props.hasRanks ? null : 'This scenario is in no known benchmark',
+			disabled: props.ranksDisabled,
 		},
 	];
 });

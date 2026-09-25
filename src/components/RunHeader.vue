@@ -27,7 +27,7 @@ const props = defineProps<{
 	rank: RankResult | null;
 }>();
 
-const emit = defineEmits<{ (event: 'pick', benchmarkId: number): void }>();
+const emit = defineEmits<{ (event: 'pick', benchmarkId: number | null): void }>();
 
 const budget = computed(() => (props.current?.params.kind === 'race' ? props.current.params.budget : null));
 const race = computed(() => budget.value !== null);
@@ -62,33 +62,41 @@ function benchmarkName(c: Candidate): string {
 	return `${c.benchmark.name} · ${c.benchmark.difficulty}`;
 }
 
+/** The select's value for no benchmark. */
+const NO_BENCHMARK = 'none';
+
 /** B6: the rank badge, the gap to the next rank, and the benchmark choice. */
 const benchmark = computed(() => {
+	if (props.candidates.length === 0) return null;
 	const c = props.selected;
 	const r = props.rank;
-	if (c === null) return null;
+	const score = props.attempt.score;
+	const options = props.candidates.map((o) => ({
+		value: String(o.benchmark.id),
+		text:
+			benchmarkName(o) +
+			(score === null ? '' : ` — ${rankName(o, rankOf(o.thresholds, score).k)}`) +
+			(o.isDefault ? ' (default)' : ''),
+	}));
+	options.push({ value: NO_BENCHMARK, text: 'None' });
+	// None picked: only the choice remains.
+	if (c === null) return { value: NO_BENCHMARK, badge: null, gap: null, options };
 	const color = r !== null && r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
 	const kind = props.current?.params.kind ?? null;
-	const score = props.attempt.score;
 	// While the analysis loads, a race is not known to be one yet: its gap would
 	// show in points first and switch to seconds.
 	const settled = props.baseline !== null;
 	return {
+		value: String(c.benchmark.id),
 		badge: r === null ? null : { name: rankName(c, r.k), color, ink: color === null ? null : inkFor(color) },
 		gap: settled && r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
-		name: benchmarkName(c),
-		options: props.candidates.map((o) => ({
-			id: o.benchmark.id,
-			text:
-				benchmarkName(o) +
-				(score === null ? '' : ` — ${rankName(o, rankOf(o.thresholds, score).k)}`) +
-				(o.isDefault ? ' (default)' : ''),
-		})),
+		options,
 	};
 });
 
 function onPick(event: Event): void {
-	emit('pick', Number((event.target as HTMLSelectElement).value));
+	const value = (event.target as HTMLSelectElement).value;
+	emit('pick', value === NO_BENCHMARK ? null : Number(value));
 }
 
 const NONE: Record<Extract<Baseline, { kind: 'none' }>['reason'], string> = {
@@ -142,13 +150,12 @@ const delta = computed(() => {
 						>{{ benchmark.badge.name }}</span
 					>
 					<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
-					<label v-if="benchmark.options.length > 1" class="chip">
+					<label class="chip">
 						<span class="sr-only">Benchmark</span>
-						<select :value="selected!.benchmark.id" @change="onPick">
-							<option v-for="option in benchmark.options" :key="option.id" :value="option.id">{{ option.text }}</option>
+						<select :value="benchmark.value" @change="onPick">
+							<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
 						</select>
 					</label>
-					<span v-else class="in">{{ benchmark.name }}</span>
 				</div>
 			</div>
 			<p class="meta">
@@ -249,10 +256,6 @@ h1 {
 .gap {
 	font-variant-numeric: tabular-nums;
 	color: var(--color-text);
-}
-
-.in {
-	color: var(--color-text-faint);
 }
 
 .chip select {

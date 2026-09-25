@@ -21,8 +21,12 @@ export function candidates(snapshot: Snapshot, name: string): Candidate[] {
 	}));
 }
 
-/** The stored pick when it still contains the scenario, else the default; null without candidates. */
-export function pick(list: readonly Candidate[], storedId: number | undefined): Candidate | null {
+/**
+ * The stored pick when it still contains the scenario, else the default. A
+ * stored `null` is an explicit choice of no benchmark. Null without candidates.
+ */
+export function pick(list: readonly Candidate[], storedId: number | null | undefined): Candidate | null {
+	if (storedId === null) return null;
 	if (storedId !== undefined) {
 		const stored = list.find((c) => c.benchmark.id === storedId);
 		if (stored) return stored;

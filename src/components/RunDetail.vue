@@ -47,6 +47,14 @@ const chartRanks = computed<ChartRanks | null>(() => {
 	return { ranks: c.benchmark.ranks, thresholds: c.thresholds, next: r?.next ?? null };
 });
 
+const ranksDisabled = computed(() =>
+	bench.candidates.value.length === 0
+		? 'This scenario is in no known benchmark'
+		: bench.selected.value === null
+			? 'No benchmark is selected'
+			: null,
+);
+
 const current = computed(() => analysis.value?.current ?? null);
 const race = computed(() => current.value?.params.kind === 'race');
 const budget = computed(() => (current.value?.params.kind === 'race' ? current.value.params.budget : null));
@@ -210,7 +218,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					:recent-count="analysis.recent.length"
 					:baseline-kind="baseline.kind"
 					:baseline-label="baseline.kind === 'none' ? null : baseline.label"
-					:has-ranks="chartRanks !== null"
+					:ranks-disabled="ranksDisabled"
 					@update="update"
 				/>
 				<UnifiedChart

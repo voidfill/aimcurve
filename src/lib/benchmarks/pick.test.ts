@@ -40,6 +40,10 @@ describe('B4 candidates and pick', () => {
 		expect(pick(list, 10)?.benchmark.id).toBe(10);
 	});
 
+	it('picks no benchmark for a stored null', () => {
+		expect(pick(list, null)).toBeNull();
+	});
+
 	it('ignores a stale pick', () => {
 		expect(pick(list, 99)?.benchmark.id).toBe(10);
 	});

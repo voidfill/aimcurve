@@ -21,17 +21,18 @@ function loadSnapshot(): Promise<Snapshot> {
 export interface BenchmarkRankApi {
 	/** The benchmarks containing the scenario, default first. */
 	candidates: ComputedRef<Candidate[]>;
+	/** Null without candidates, or when none is picked. */
 	selected: ComputedRef<Candidate | null>;
 	/** The score's rank in the selected benchmark; null without a score. */
 	rank: ComputedRef<RankResult | null>;
-	/** Stores an explicit pick for the scenario, keyed by KovaaK's benchmark ID. */
-	setPick: (benchmarkId: number) => void;
+	/** Stores an explicit pick for the scenario: a KovaaK's benchmark ID, or null for none. */
+	setPick: (benchmarkId: number | null) => void;
 }
 
 export interface BenchmarkRankOptions {
 	load?: () => Promise<Snapshot>;
-	/** Trimmed scenario name → picked KovaaK's benchmark ID. */
-	picks?: Ref<Record<string, number>>;
+	/** Trimmed scenario name → picked KovaaK's benchmark ID, or null for none. */
+	picks?: Ref<Record<string, number | null>>;
 }
 
 export function useBenchmarkRank(
@@ -40,7 +41,7 @@ export function useBenchmarkRank(
 	options: BenchmarkRankOptions = {},
 ): BenchmarkRankApi {
 	const snapshot = shallowRef<Snapshot | null>(null);
-	const picks = options.picks ?? useStorage<Record<string, number>>('aimcurve.benchmark-pick', {}, localStorage);
+	const picks = options.picks ?? useStorage<Record<string, number | null>>('aimcurve.benchmark-pick', {}, localStorage);
 
 	(options.load ?? loadSnapshot)().then(
 		(loaded) => (snapshot.value = loaded),
@@ -53,7 +54,7 @@ export function useBenchmarkRank(
 	const selected = computed(() => {
 		if (name.value === null) return null;
 		const id = stored.value[name.value.trim()];
-		return pick(candidates.value, typeof id === 'number' ? id : undefined);
+		return pick(candidates.value, typeof id === 'number' || id === null ? id : undefined);
 	});
 	const rank = computed(() => {
 		const s = score.value;
@@ -61,7 +62,7 @@ export function useBenchmarkRank(
 		return c === null || s === null ? null : rankOf(c.thresholds, s);
 	});
 
-	function setPick(benchmarkId: number): void {
+	function setPick(benchmarkId: number | null): void {
 		if (name.value === null) return;
 		picks.value = { ...stored.value, [name.value.trim()]: benchmarkId };
 	}

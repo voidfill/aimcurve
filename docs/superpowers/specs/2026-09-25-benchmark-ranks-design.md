@@ -198,7 +198,7 @@ The default is the first candidate. For example,
 is also in S5.5 defaults to S5.5.
 
 The pick is stored with `useStorage('aimcurve.benchmark-pick', {}, localStorage)`
-as `Record<trimmedScenarioName, kovaaksBenchmarkId>`:
+as `Record<trimmedScenarioName, kovaaksBenchmarkId | null>`:
 - It is keyed by the KovaaK's benchmark ID because that ID is stable across
   regenerations, while indices are not.
 - Every explicit pick is stored, including a pick of the current default. A
@@ -206,6 +206,9 @@ as `Record<trimmedScenarioName, kovaaksBenchmarkId>`:
   the user chose.
 - A stored pick whose benchmark no longer contains the scenario is ignored, and
   the default is used.
+- A stored `null` is an explicit choice of no benchmark: no badge, gap or bands
+  are shown, and the select stays so another benchmark can be picked. Like any
+  explicit pick, it survives regeneration.
 
 ### B5. Rank is the count of thresholds at or below the score
 
@@ -258,11 +261,12 @@ loaded. The header may shift once when the chunk arrives. That is accepted.
   When there is no curve (CSV-only or unsupported), it is in points. It is omitted
   at the top rank.
 - **Benchmark select.** A native `<select>`, styled as a chip, so keyboard and
-  Escape behaviour come from the platform. It shows only when there is more than
-  one candidate. With a single candidate the benchmark is plain text. Each option
+  Escape behaviour come from the platform. It shows whenever the scenario has a
+  candidate, even a single one, because its last option is "None" (B4). Each option
   reads `Voltaic S5 · Intermediate — Gold`: the candidate and this run's rank in
   it. The default option is suffixed "(default)". Choosing an option stores the
-  pick (B4).
+  pick (B4). With None picked, only the select is shown, and the chart's
+  ranks toggle is disabled with "No benchmark is selected".
 
 ### B7. Rank bands are painted under the chart as a layer; the y range reaches only a near target
 
