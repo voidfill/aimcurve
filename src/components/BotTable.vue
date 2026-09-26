@@ -239,7 +239,11 @@ h2 {
 }
 
 .scroll {
+	flex: 1 1 auto;
+	min-height: 0;
 	overflow: auto;
+	/* Columns keep their width whether or not the rows overflow. */
+	scrollbar-gutter: stable;
 }
 
 table {
@@ -247,7 +251,12 @@ table {
 	border-collapse: collapse;
 }
 
+/* Pinned while the rows scroll, over the panel's own background. */
 thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--color-surface);
 	text-align: right;
 	font: 400 9.5px/1 var(--font-mono);
 	text-transform: uppercase;

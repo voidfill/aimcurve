@@ -59,7 +59,10 @@ const props = defineProps<{
 	ranks: ChartRanks | null;
 }>();
 
+/** The plot's height unless the layout gives the element one (see `.chart`). */
 const HEIGHT = 340;
+/** Below this a layout-given height is ignored as not yet laid out. */
+const MIN_HEIGHT = 120;
 const FONT = '10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const AXIS = '#7a828a';
 const GRID = '#171c21';
@@ -273,13 +276,13 @@ function line(show: boolean, style: Pick<uPlot.Series, 'stroke' | 'width' | 'das
 	return { show, spanGaps: false, points: { show: false }, ...style };
 }
 
-function options(width: number): uPlot.Options {
+function options(width: number, height: number): uPlot.Options {
 	const flat = props.baseline?.kind === 'flat';
 	const vis = visibility();
 	const xMax = props.data.xMax;
 	return {
 		width,
-		height: HEIGHT,
+		height,
 		legend: { show: false },
 		padding: [18, 12, 0, 0],
 		cursor: {
@@ -356,7 +359,9 @@ function build(): void {
 	plot.value?.destroy();
 	const el = root.value;
 	if (!el) return;
-	const u = new uPlot(options(Math.max(200, el.clientWidth)), aligned(), el);
+	const style = getComputedStyle(el);
+	const inner = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+	const u = new uPlot(options(Math.max(200, el.clientWidth), plotHeight(inner)), aligned(), el);
 	plot.value = u;
 	over.value = u.over;
 	syncPoints(u);
@@ -366,9 +371,16 @@ function build(): void {
 onMounted(build);
 onBeforeUnmount(() => plot.value?.destroy());
 
+function plotHeight(content: number): number {
+	return content >= MIN_HEIGHT ? Math.floor(content) : HEIGHT;
+}
+
 useResizeObserver(root, (entries) => {
-	const width = Math.floor(entries[0]!.contentRect.width);
-	if (plot.value && width > 0 && width !== plot.value.width) plot.value.setSize({ width, height: HEIGHT });
+	const rect = entries[0]!.contentRect;
+	const width = Math.floor(rect.width);
+	const height = plotHeight(rect.height);
+	const u = plot.value;
+	if (u && width > 0 && (width !== u.width || height !== u.height)) u.setSize({ width, height });
 });
 
 // Styling depends on these; everything else is pushed into the live instance.
@@ -546,9 +558,16 @@ const tip = computed(() => {
 </template>
 
 <style scoped>
+/*
+	Content-box, so the height is the plot's whatever padding a parent adds. A
+	parent that sizes the element itself (a flex layout) overrides the height,
+	and the plot follows the element.
+*/
 .chart {
+	box-sizing: content-box;
+	height: 340px;
 	position: relative;
-	width: 100%;
+	width: auto;
 	min-width: 0;
 	cursor: crosshair;
 }

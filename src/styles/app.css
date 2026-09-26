@@ -65,10 +65,41 @@ select {
 	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Scrollbars match the dark surfaces; the property inherits into every scroller. */
-:root {
-	scrollbar-color: var(--color-border-strong) transparent;
-	scrollbar-width: thin;
+/*
+	Scrollbars: a slim rounded thumb on no track, with no arrow buttons.
+	Chromium and Safari draw them from the pseudo-elements; Chromium ignores
+	those once the standard properties are set, so the standard ones are for
+	Firefox only (it has no buttons to remove).
+*/
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-button {
+	display: none;
+}
+
+::-webkit-scrollbar-thumb {
+	border: 3px solid transparent;
+	border-radius: 999px;
+	background: var(--color-border-strong) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: #3d454d;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+	:root {
+		scrollbar-color: var(--color-border-strong) transparent;
+		scrollbar-width: thin;
+	}
 }
 
 /* Base typography */
@@ -85,10 +116,21 @@ body {
 	gutter is always reserved, so a page growing past the viewport does not
 	shift sideways.
 */
+/*
+	The document itself never scrolls: while a window is resized the viewport
+	units lag a frame behind, and a document that could scroll flashes a
+	scrollbar and shifts the page sideways.
+*/
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+}
+
 #app {
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr);
-	height: 100dvh;
+	height: 100%;
 	overflow: hidden;
 }
 

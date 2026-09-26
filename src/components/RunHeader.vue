@@ -275,12 +275,13 @@ h1 {
 	margin-top: 6px;
 }
 
+/* One line always: a long benchmark name shortens the select instead of wrapping. */
 .benchmark {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
 	max-width: 100%;
+	white-space: nowrap;
 	min-height: 22px;
 	line-height: 1;
 	font: 400 11.5px/1.2 var(--font-mono);
@@ -307,8 +308,15 @@ h1 {
 	color: var(--color-text);
 }
 
+.chip {
+	display: flex;
+	min-width: 0;
+}
+
 .chip select {
+	min-width: 0;
 	max-width: min(100%, 56ch);
+	text-overflow: ellipsis;
 	height: 22px;
 	padding: 2px 6px;
 	border: 1px solid var(--color-border-strong);

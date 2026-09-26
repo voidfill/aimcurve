@@ -32,7 +32,15 @@ import { formatScore, formatSigned, formatValue } from '../lib/run/format';
 import type { Attempt } from '../lib/run/queries';
 import { atX, killTimes, paceFor, readout, recentRange, type RunCurve } from '../lib/scoring';
 
-const props = defineProps<{ attempt: Attempt }>();
+const props = defineProps<{
+	attempt: Attempt;
+	/**
+	 * The detail fills its column's height: the chart takes what the header,
+	 * stats and bot table leave, and the bot table scrolls once the chart is at
+	 * its floor. Off, the chart has its fixed height and the page scrolls.
+	 */
+	fill?: boolean;
+}>();
 
 const {
 	state,
@@ -204,11 +212,16 @@ const footer = computed(() => {
 	};
 });
 
+/** The chart panel holds, or is about to hold, a chart: only then does it take the spare height. */
+const grows = computed(
+	() => state.value !== 'error' && (analysis.value === null || (!analysis.value.noCurve && chart.value !== null)),
+);
+
 const noKills = computed(() => current.value !== null && current.value.params.kind === 'clock' && spans.value.length === 0);
 </script>
 
 <template>
-	<div class="detail" :class="{ stale }" :aria-busy="stale">
+	<div class="detail" :class="{ stale, fill }" :aria-busy="stale">
 		<RunHeader
 			:attempt="shown"
 			:current="current"
@@ -220,7 +233,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 		/>
 		<StatsStrip :attempt="shown" />
 
-		<section class="panel chart-panel" aria-label="Pace chart">
+		<section class="panel chart-panel" :class="{ grows }" aria-label="Pace chart">
 			<template v-if="state === 'error'">
 				<div class="message danger" role="alert">
 					<p>The performance detail could not be read. {{ error }}</p>
@@ -334,6 +347,44 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 .message.reserve {
 	min-height: 428px;
 	align-content: flex-start;
+}
+
+/*
+	Filling: the chart panel takes the height left over, down to a floor; the
+	bot table keeps its own height until the chart is at that floor, then
+	shrinks to its own and scrolls. Below both floors the column scrolls.
+
+	Both start from a zero basis, so the detail's own height is the sum of the
+	floors and it never outgrows the column by itself. The bot table's huge
+	grow factor hands it the spare height first, up to its natural height;
+	everything past that goes to the chart.
+*/
+.detail.fill {
+	flex: 1 0 auto;
+}
+
+.detail.fill .chart-panel.grows {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0;
+	min-height: 320px;
+}
+
+.detail.fill .chart-panel.grows :deep(.chart) {
+	flex: 1 1 0;
+	height: auto;
+	min-height: 0;
+}
+
+.detail.fill .message.reserve {
+	min-height: 0;
+}
+
+.detail.fill .bots {
+	flex: 1000 1 0;
+	/* Its header, column heads and exactly four rows, as a three-bot table with dead time stands. */
+	min-height: 156px;
+	max-height: max-content;
 }
 
 .message.danger {

@@ -85,7 +85,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	<p v-else-if="dbError === null && (!ready || hasRuns === null)" class="muted starting pending">
 		{{ ready ? 'Loading attempts…' : 'Starting the local database…' }}
 	</p>
-	<div v-else class="run" :class="{ narrow }">
+	<div v-else class="run" :class="{ narrow, fill: !narrow }">
 		<div class="result">
 			<section v-if="dbError !== null" class="notice danger" role="alert">
 				<h1>Attempts are unavailable</h1>
@@ -132,7 +132,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 				</section>
 
 				<template v-else-if="selected !== null">
-					<RunDetail :attempt="selected" />
+					<RunDetail :attempt="selected" :fill="!narrow" />
 
 					<p v-if="selectionOutsideFilter" class="note">
 						This attempt is not in the scenario the filter selects, so it is not in the rail. The
@@ -187,6 +187,22 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	grid-template-columns: minmax(0, 1fr);
 }
 
+/*
+	Wider, the view fills the page and never scrolls it: the rail and the result
+	each take the full height. The result fits itself to that height (see
+	RunDetail) and scrolls on its own only when even its floors do not fit.
+*/
+.run.fill {
+	grid-template-rows: minmax(0, 1fr);
+	align-items: stretch;
+}
+
+.run.fill .result {
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
 .result {
 	display: flex;
 	flex-direction: column;
@@ -199,17 +215,12 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	flex-direction: column;
 	gap: var(--space-2);
 	min-width: 0;
-	/* The rail stays in view and scrolls independently of the result column. */
-	position: sticky;
-	top: 12px;
-	max-height: calc(100dvh - var(--app-bar-height) - 24px);
-	overflow: hidden;
 }
 
-.run.narrow .rail-column {
-	position: static;
-	max-height: none;
-	overflow: visible;
+/* The rail scrolls its own list, independently of the result column. */
+.run.fill .rail-column {
+	min-height: 0;
+	overflow: hidden;
 }
 
 .notice {
