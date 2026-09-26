@@ -3,6 +3,10 @@ import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
 	plugins: [vue()],
+	// Relative, so the build works under GitHub Pages' /aimcurve/ subpath or a
+	// custom domain alike. Safe because routing is hash-based: index.html is
+	// always the page at the root of the deploy.
+	base: './',
 	server: {
 		// OPFS and IndexedDB are origin-scoped. A silently reassigned port looks
 		// identical to lost data during persistence testing.
