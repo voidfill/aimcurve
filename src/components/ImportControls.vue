@@ -3,8 +3,8 @@
  * The two ways in: connect the stats folder, or hand over a set of files once.
  *
  * Disconnect removes the stored folder permission and stops the watching. It
- * removes no imported rows, and this slice deliberately offers no control that
- * deletes local data.
+ * removes no imported rows; deleting local data is the Data page's own section.
+ * The page header introduces the two, so this is only the choice itself.
  *
  * The click handlers call straight through: the controller needs the user
  * activation of the click to open a directory picker, so nothing may be
@@ -46,15 +46,7 @@ function onFiles(event: Event): void {
 </script>
 
 <template>
-	<section class="controls" aria-labelledby="controls-heading">
-		<div class="intro">
-			<h2 id="controls-heading">Import your stats</h2>
-			<p>
-				Point aimcurve at the Kovaak's folder holding <code>stats</code> and
-				<code>performances</code>. Fully local: your stats stay in this browser. No server, no account, no tracking.
-			</p>
-		</div>
-
+	<section class="controls" aria-label="Ways to import">
 		<div class="options">
 			<article
 				class="option"
@@ -129,22 +121,6 @@ function onFiles(event: Event): void {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
-}
-
-.intro {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-1);
-}
-
-h2 {
-	font-size: 1.125rem;
-}
-
-.intro p {
-	color: var(--color-text-muted);
-	font-size: 0.9375rem;
-	max-width: 60ch;
 }
 
 .options {
