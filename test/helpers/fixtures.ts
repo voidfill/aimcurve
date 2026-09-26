@@ -55,3 +55,9 @@ export const curated = fixtureSet(join(fixturesDir, 'curated'));
  * file we have; always guard on `raw.available`.
  */
 export const raw = fixtureSet(join(fixturesDir, 'raw'));
+
+/**
+ * The About page's sample runs: every completed Air Spectral Easy run of two
+ * weeks, committed like `curated`. The demo snapshot is generated from these.
+ */
+export const demo = fixtureSet(join(fixturesDir, 'demo'));

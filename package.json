@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "bench": "vitest bench --reporter=verbose",
     "gen:proto": "buf generate",
-    "gen:benchmarks": "node --experimental-strip-types scripts/gen-benchmarks.ts"
+    "gen:benchmarks": "node --experimental-strip-types scripts/gen-benchmarks.ts",
+    "gen:demo": "vitest run src/lib/demo/snapshot.test.ts --update"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.15.0",
