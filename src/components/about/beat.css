@@ -1,0 +1,86 @@
+/* One walkthrough beat on the About page: its copy, then its chart. */
+.beat {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.copy {
+	max-width: 62ch;
+}
+
+/* Two beats' copy over one chart: side by side while both fit. */
+.copies {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+	gap: var(--space-4) var(--space-8);
+	margin-bottom: var(--space-2);
+}
+
+.bots {
+	margin-top: calc(var(--space-2) - var(--space-4));
+}
+
+.step {
+	font: 500 12px/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	color: var(--color-accent);
+	margin-bottom: var(--space-2);
+}
+
+h2 {
+	font-size: clamp(1.35rem, 1.1rem + 1vw, 1.75rem);
+	color: var(--color-text-strong);
+	letter-spacing: -0.01em;
+	margin-bottom: var(--space-2);
+}
+
+.copy p:not(.step) {
+	color: var(--color-text-muted);
+}
+
+strong {
+	font-weight: 600;
+	color: var(--color-text);
+}
+
+strong.ahead {
+	color: var(--color-ahead);
+}
+
+strong.behind {
+	color: var(--color-behind);
+}
+
+.panel {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 3px;
+	min-width: 0;
+}
+
+.chart-panel {
+	padding-bottom: 8px;
+}
+
+.chart-panel :deep(.chart) {
+	padding: 4px 8px 0 0;
+}
+
+.sample {
+	padding: 8px 12px 0;
+	font: 400 11px/1.4 var(--font-mono);
+	color: var(--color-text-faint);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.placeholder {
+	height: 344px;
+}
+
+.message {
+	padding: var(--space-4);
+	color: var(--color-danger);
+	font-size: 0.875rem;
+}

@@ -15,6 +15,9 @@
  * scenario pages, which sit under the directory (L1 of its design). Sessions
  * and Benchmarks are later slices and are deliberately absent rather than
  * present and dead.
+ *
+ * About is a quiet text link beside the data control, not a tab: it is where
+ * first-time visitors land, not a place regulars work in.
  */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
@@ -28,6 +31,7 @@ const { rememberedRoute: rememberedScenariosRoute } = useDirectoryRoute();
 
 const onRun = computed(() => route.name === 'run');
 const onScenarios = computed(() => route.name === 'scenarios' || route.name === 'scenario');
+const onAbout = computed(() => route.name === 'about');
 </script>
 
 <template>
@@ -59,6 +63,13 @@ const onScenarios = computed(() => route.name === 'scenarios' || route.name === 
 		</nav>
 		<!-- The Run view teleports its Follow latest / inspecting pill here. -->
 		<div id="app-bar-status" class="bar-status"></div>
+		<RouterLink
+			class="about"
+			:class="{ active: onAbout }"
+			:to="{ name: 'about' }"
+			:aria-current="onAbout ? 'page' : undefined"
+			>About</RouterLink
+		>
 		<ImportButton />
 	</header>
 </template>
@@ -161,5 +172,17 @@ nav {
 	margin-left: auto;
 	display: flex;
 	align-items: center;
+}
+
+.about {
+	font-size: 12.5px;
+	color: var(--color-text-faint);
+	text-decoration: none;
+	transition: color 120ms ease;
+}
+
+.about:hover,
+.about.active {
+	color: var(--color-text);
 }
 </style>
