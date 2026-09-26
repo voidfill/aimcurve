@@ -118,6 +118,7 @@ function ariaSort(key: SortKey, sort: SortKey, dir: SortDir) {
 <style scoped>
 .scroll {
 	overflow: auto;
+	scrollbar-gutter: stable;
 }
 
 table {
@@ -125,7 +126,13 @@ table {
 	border-collapse: collapse;
 }
 
+/* Pinned while the body scrolls; the rule under it is a shadow because a sticky cell's border scrolls away. */
 thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--color-surface);
+	box-shadow: inset 0 -1px 0 var(--color-border);
 	text-align: right;
 	padding: 0;
 	white-space: nowrap;

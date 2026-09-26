@@ -60,6 +60,9 @@ const filterLabel = computed(() => {
 	return filterState.value === 'unknown' ? `Unknown scenario · ${hash.slice(0, 8)}` : hash.slice(0, 8);
 });
 
+/** The rail marks the requested row at once, not after the attempt has loaded. */
+const railStem = computed(() => (mode.value === 'inspect' ? fileStem.value : (selected.value?.fileStem ?? null)));
+
 /** Below this the rail stops being a column and becomes an ordinary section. */
 const narrow = useMediaQuery('(max-width: 799px)');
 
@@ -79,7 +82,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 		/>
 	</Teleport>
 	<EmptyState v-if="onboarding" class="page" />
-	<p v-else-if="dbError === null && (!ready || hasRuns === null)" class="muted starting">
+	<p v-else-if="dbError === null && (!ready || hasRuns === null)" class="muted starting pending">
 		{{ ready ? 'Loading attempts…' : 'Starting the local database…' }}
 	</p>
 	<div v-else class="run" :class="{ narrow }">
@@ -92,7 +95,8 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 			</section>
 
 			<template v-else>
-				<p v-if="selectionState === 'loading'" class="muted">Loading attempt…</p>
+				<!-- A switch keeps the previous attempt on screen until the next resolves. -->
+				<p v-if="selectionState === 'loading' && selected === null" class="muted pending">Loading attempt…</p>
 
 				<section v-else-if="selectionState === 'error'" class="notice danger" role="alert">
 					<h1>This attempt could not be read</h1>
@@ -146,7 +150,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 		<aside class="rail-column">
 			<AttemptRail
 				:attempts="items"
-				:selected-stem="selected?.fileStem ?? null"
+				:selected-stem="railStem"
 				:state="railState"
 				:error="railError"
 				:has-more="hasMore"
@@ -195,12 +199,15 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	flex-direction: column;
 	gap: var(--space-2);
 	min-width: 0;
-	/* The rail scrolls independently of the result column. */
-	max-height: calc(100vh - 8rem);
+	/* The rail stays in view and scrolls independently of the result column. */
+	position: sticky;
+	top: 12px;
+	max-height: calc(100dvh - var(--app-bar-height) - 24px);
 	overflow: hidden;
 }
 
 .run.narrow .rail-column {
+	position: static;
 	max-height: none;
 	overflow: visible;
 }

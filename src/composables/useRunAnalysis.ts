@@ -155,12 +155,10 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 			state.value = 'idle';
 			return;
 		}
-		// Keep showing the previous analysis of the same run while an import
-		// re-runs this; a different run starts from a clean slate.
-		if (analysis.value?.inspected.fileStem !== attempt.fileStem) {
-			analysis.value = null;
-			state.value = 'loading';
-		}
+		// The previous analysis stays in place while this runs: an import re-running
+		// the same run keeps it on screen, and a different run is swapped in whole
+		// once it is ready. `analysis.inspected` says which run it describes.
+		if (analysis.value?.inspected.fileStem !== attempt.fileStem) state.value = 'loading';
 		try {
 			const [runs, slots] = await Promise.all([
 				listScenarioRuns(handle, attempt.scenarioId),

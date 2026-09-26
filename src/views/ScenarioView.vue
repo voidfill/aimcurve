@@ -98,7 +98,7 @@ watch(
 			<RouterLink :to="{ name: 'data' }">Open Data to retry</RouterLink>
 		</section>
 
-		<p v-else-if="!ready || (state === 'loading' && data === null)" class="muted">
+		<p v-else-if="!ready || (state === 'loading' && data === null)" class="muted pending">
 			{{ ready ? 'Loading scenario…' : 'Starting the local database…' }}
 		</p>
 

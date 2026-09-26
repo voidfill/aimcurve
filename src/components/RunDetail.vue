@@ -3,10 +3,11 @@
  * One inspected run, fully analysed: header, stats, the unified chart and the
  * bot breakdown, all against one baseline (Run view R1, R2).
  *
- * The header and stats render from the attempt straight away. The chart and
- * table wait for the analysis, and a failure there leaves the header in place.
+ * On first mount the header and stats render from the attempt straight away
+ * and the chart and table wait for the analysis. A later switch holds the
+ * previous run until the next is analysed. A failure leaves the header in place.
  */
-import { computed, ref, toRef, watch } from 'vue';
+import { computed, ref, shallowRef, toRef, watch } from 'vue';
 import ChartControls from './ChartControls.vue';
 import BotTable, { type BotTableData } from './BotTable.vue';
 import RunHeader from './RunHeader.vue';
@@ -33,10 +34,36 @@ import { atX, killTimes, paceFor, readout, recentRange, type RunCurve } from '..
 
 const props = defineProps<{ attempt: Attempt }>();
 
-const { state, error, analysis, baseline, settings, retry } = useRunAnalysis(toRef(props, 'attempt'));
+const {
+	state,
+	error,
+	analysis: latest,
+	baseline: latestBaseline,
+	settings,
+	retry,
+} = useRunAnalysis(toRef(props, 'attempt'));
+
+/**
+ * The attempt on screen. Switching runs keeps the previous one, header, chart
+ * and table together, until the new one's analysis is ready (or has failed),
+ * then swaps everything in one frame. Blanking the page in between would flash
+ * a loading line and collapse the chart for a few dozen milliseconds.
+ */
+const shown = shallowRef(props.attempt);
+watch([() => props.attempt, state, latest], ([attempt]) => {
+	const same = attempt.fileStem === shown.value.fileStem;
+	const settled = state.value === 'error' || latest.value?.inspected.fileStem === attempt.fileStem;
+	if (same || settled) shown.value = attempt;
+});
+const stale = computed(() => shown.value.fileStem !== props.attempt.fileStem);
+
+/** The analysis of the attempt on screen; null while its first one loads or after a failure. */
+const analysis = computed(() => (latest.value?.inspected.fileStem === shown.value.fileStem ? latest.value : null));
+const baseline = computed(() => (analysis.value === null ? null : latestBaseline.value));
+
 const bench = useBenchmarkRank(
-	computed(() => props.attempt.scenarioName),
-	computed(() => props.attempt.score),
+	computed(() => shown.value.scenarioName),
+	computed(() => shown.value.score),
 );
 
 /** The selected ladder and the run's next rank, for the chart's rank layer (B7). */
@@ -146,7 +173,7 @@ const layers = computed<ChartLayers>(() => ({
 const hovered = ref<string | null>(null);
 const pinned = ref<string | null>(null);
 watch(
-	() => props.attempt.fileStem,
+	() => shown.value.fileStem,
 	() => {
 		hovered.value = null;
 		pinned.value = null;
@@ -166,13 +193,13 @@ function toggle(key: string): void {
 /** R7 at rest: the final accumulated values and the exact difference. */
 const footer = computed(() => {
 	const b = baseline.value;
-	const score = props.attempt.score;
+	const score = shown.value.score;
 	if (!b || b.kind === 'none' || score === null) return null;
 	const digits = race.value ? 2 : 1;
-	const shown = (s: number) => (budget.value === null ? formatScore(s) : `${formatValue(budget.value - s, 2)} s`);
+	const fmt = (s: number) => (budget.value === null ? formatScore(s) : `${formatValue(budget.value - s, 2)} s`);
 	const diff = score - b.score;
 	return {
-		text: `final ${shown(score)} vs ${b.label} ${shown(b.score)} · ${formatSigned(diff, digits)} ${race.value ? 's' : 'pts'}`,
+		text: `final ${fmt(score)} vs ${b.label} ${fmt(b.score)} · ${formatSigned(diff, digits)} ${race.value ? 's' : 'pts'}`,
 		tone: diff > 0 ? 'ahead' : diff < 0 ? 'behind' : '',
 	};
 });
@@ -181,9 +208,9 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 </script>
 
 <template>
-	<div class="detail">
+	<div class="detail" :class="{ stale }" :aria-busy="stale">
 		<RunHeader
-			:attempt="attempt"
+			:attempt="shown"
 			:current="current"
 			:baseline="baseline"
 			:candidates="bench.candidates.value"
@@ -191,7 +218,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 			:rank="bench.rank.value"
 			@pick="bench.setPick"
 		/>
-		<StatsStrip :attempt="attempt" />
+		<StatsStrip :attempt="shown" />
 
 		<section class="panel chart-panel" aria-label="Pace chart">
 			<template v-if="state === 'error'">
@@ -200,7 +227,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					<button type="button" @click="retry()">Try again</button>
 				</div>
 			</template>
-			<p v-else-if="state !== 'ready' || !analysis" class="message">Loading detail…</p>
+			<p v-else-if="!analysis" class="message pending reserve">Loading detail…</p>
 			<template v-else-if="analysis.noCurve">
 				<p v-if="analysis.noCurve.reason === 'no-perf'" class="message">
 					No performance detail was imported for this attempt. The result above is complete and valid; only the
@@ -268,6 +295,13 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 	flex-direction: column;
 	gap: 8px;
 	min-width: 0;
+	transition: opacity 120ms ease;
+}
+
+/* The previous run while the next one loads: dimmed only if the load is slow. */
+.detail.stale {
+	opacity: 0.55;
+	transition-delay: 200ms;
 }
 
 .panel {
@@ -294,6 +328,12 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 	color: var(--color-text-muted);
 	font-size: 0.875rem;
 	max-width: 80ch;
+}
+
+/* The loaded panel's height (controls, chart, legend), so the chart arriving moves nothing below it. */
+.message.reserve {
+	min-height: 428px;
+	align-content: flex-start;
 }
 
 .message.danger {

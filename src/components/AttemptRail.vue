@@ -60,7 +60,7 @@ const emit = defineEmits<{
 			<button type="button" @click="emit('retry')">Try again</button>
 		</p>
 
-		<p v-else-if="state === 'loading' && attempts.length === 0" class="muted">Loading attempts…</p>
+		<p v-else-if="state === 'loading' && attempts.length === 0" class="muted pending">Loading attempts…</p>
 
 		<p v-else-if="state === 'ready' && attempts.length === 0" class="muted">
 			{{
@@ -113,6 +113,8 @@ h2 {
 	flex-direction: column;
 	gap: var(--space-1);
 	overflow-y: auto;
+	/* Rows keep their width whether or not the list overflows. */
+	scrollbar-gutter: stable;
 	min-height: 0;
 }
 

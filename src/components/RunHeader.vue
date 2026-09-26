@@ -148,29 +148,33 @@ const delta = computed(() => {
 						>{{ attempt.scenarioName }}</RouterLink
 					>
 				</h1>
-				<div v-if="benchmark" class="benchmark">
-					<span
-						v-if="benchmark.badge"
-						class="badge"
-						:class="{ unranked: benchmark.badge.color === null }"
-						:style="benchmark.badge.color ? { background: benchmark.badge.color, color: benchmark.badge.ink! } : undefined"
-						>{{ benchmark.badge.name }}</span
-					>
-					<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
-					<label class="chip">
-						<span class="sr-only">Benchmark</span>
-						<select :value="benchmark.value" @change="onPick">
-							<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
-						</select>
-					</label>
+			</div>
+			<div class="line">
+				<p class="meta">
+					<template v-for="(part, i) in meta" :key="i">
+						<i v-if="i > 0" aria-hidden="true"></i>
+						<span>{{ part }}</span>
+					</template>
+				</p>
+				<div class="benchmark">
+					<template v-if="benchmark">
+						<span
+							v-if="benchmark.badge"
+							class="badge"
+							:class="{ unranked: benchmark.badge.color === null }"
+							:style="benchmark.badge.color ? { background: benchmark.badge.color, color: benchmark.badge.ink! } : undefined"
+							>{{ benchmark.badge.name }}</span
+						>
+						<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
+						<label class="chip">
+							<span class="sr-only">Benchmark</span>
+							<select :value="benchmark.value" @change="onPick">
+								<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
+							</select>
+						</label>
+					</template>
 				</div>
 			</div>
-			<p class="meta">
-				<template v-for="(part, i) in meta" :key="i">
-					<i v-if="i > 0" aria-hidden="true"></i>
-					<span>{{ part }}</span>
-				</template>
-			</p>
 		</div>
 
 		<div class="compared">
@@ -180,9 +184,12 @@ const delta = computed(() => {
 					<span v-if="compared.label" class="base">{{ compared.label }}</span>
 					<span :class="{ words: !compared.label }">{{ compared.value }}</span>
 				</div>
-				<div v-if="compared.sub" class="sub">{{ compared.sub }}</div>
+				<div class="sub">{{ compared.sub ?? ' ' }}</div>
 			</template>
-			<div v-else class="value muted">…</div>
+			<template v-else>
+				<div class="value muted">…</div>
+				<div class="sub">&nbsp;</div>
+			</template>
 		</div>
 
 		<div
@@ -196,7 +203,10 @@ const delta = computed(() => {
 				</div>
 				<div class="sub">{{ delta.words }}<template v-if="delta.pct"> · {{ delta.abs }}</template></div>
 			</template>
-			<div v-else class="big none" aria-hidden="true">—</div>
+			<template v-else>
+				<div class="big none" aria-hidden="true">—</div>
+				<div class="sub">&nbsp;</div>
+			</template>
 		</div>
 
 		<div class="result">
@@ -210,9 +220,14 @@ const delta = computed(() => {
 </template>
 
 <style scoped>
+/*
+	The three figures have fixed columns and single-line text, so a run with
+	wider numbers or a longer baseline note does not move anything else in the
+	header when switching runs.
+*/
 .header {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto auto auto;
+	grid-template-columns: minmax(0, 1fr) 16rem 13.5rem 11.5rem;
 	align-items: end;
 	gap: var(--space-3) 26px;
 	padding-bottom: 12px;
@@ -220,10 +235,6 @@ const delta = computed(() => {
 }
 
 .name {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 14px;
 	min-width: 0;
 }
 
@@ -251,17 +262,36 @@ h1 {
 	text-underline-offset: 4px;
 }
 
+/*
+	The benchmark has its own line under the meta, reserved even when the
+	scenario is in no benchmark, so the header is one height for every run and
+	switching runs never moves the page below it.
+*/
+.line {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	margin-top: 6px;
+}
+
 .benchmark {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
+	max-width: 100%;
+	min-height: 22px;
+	line-height: 1;
 	font: 400 11.5px/1.2 var(--font-mono);
 	color: var(--color-text-muted);
 }
 
 .badge {
-	padding: 3px 7px;
+	display: inline-flex;
+	align-items: center;
+	height: 22px;
+	padding: 0 7px;
 	border-radius: 3px;
 	font-weight: 600;
 	letter-spacing: 0.02em;
@@ -279,6 +309,7 @@ h1 {
 
 .chip select {
 	max-width: min(100%, 56ch);
+	height: 22px;
 	padding: 2px 6px;
 	border: 1px solid var(--color-border-strong);
 	border-radius: 3px;
@@ -298,7 +329,6 @@ h1 {
 }
 
 .meta {
-	margin-top: 6px;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -346,6 +376,20 @@ h1 {
 .compared .words {
 	font-size: 13px;
 	color: var(--color-text-muted);
+}
+
+.compared,
+.delta,
+.result {
+	min-width: 0;
+}
+
+.compared .value,
+.sub,
+.result .value {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .sub {
@@ -422,7 +466,7 @@ h1 {
 
 @media (max-width: 1100px) {
 	.header {
-		grid-template-columns: repeat(3, auto);
+		grid-template-columns: 16rem 13.5rem 11.5rem;
 		justify-content: start;
 	}
 

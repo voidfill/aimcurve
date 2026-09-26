@@ -36,7 +36,7 @@ const { state } = useImport();
 	justify-content: center;
 	gap: var(--space-3);
 	/* The viewport below the application bar, less the page's own padding. */
-	min-height: calc(100dvh - 46px - 3rem);
+	min-height: calc(100dvh - var(--app-bar-height) - 3rem);
 	padding: var(--space-8) var(--space-4);
 	text-align: center;
 }

@@ -301,9 +301,9 @@ export function useAttempts(): AttemptsApi {
 	 * An import pass that wrote rows re-reads the selection. Flipping to
 	 * `loading` each time would blank the result the user is reading, so a refresh of the *same*
 	 * selection keeps the resolved summary on screen while it is in flight. A
-	 * different stem still shows the loading line: continuing to render the
-	 * previous attempt under a link that names another one would be showing the
-	 * wrong run.
+	 * different stem does enter `loading`, but `selected` keeps the previous
+	 * attempt: the view holds it on screen, marked busy and dimmed if the load is
+	 * slow, rather than blanking the page for a few milliseconds per switch.
 	 */
 	function beginSelectionLoad(stem: string | null): void {
 		if (selected.value !== null && resolvedStem === stem) return;

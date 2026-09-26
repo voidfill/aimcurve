@@ -215,7 +215,7 @@ const anyNeutral = computed(() => props.data.groups.some((g) => g.color === null
 			Bot detail could not be read. {{ botError }}
 			<button type="button" @click="emit('load-bots')">Try again</button>
 		</p>
-		<p v-else-if="series === null || lines === null" class="message">Loading bot detail…</p>
+		<p v-else-if="series === null || lines === null" class="message pending">Loading bot detail…</p>
 		<ProgressChart
 			v-else
 			:x="x"

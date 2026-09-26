@@ -49,7 +49,7 @@ const stop = watch(search, (el) => {
 </script>
 
 <template>
-	<div class="scenarios">
+	<div class="scenarios" :class="{ fill: rows.length > 0 }">
 		<section v-if="dbError !== null" class="notice danger" role="alert">
 			<h1>Scenarios are unavailable</h1>
 			<p>The local database could not be opened, so no run can be read.</p>
@@ -57,7 +57,7 @@ const stop = watch(search, (el) => {
 			<RouterLink :to="{ name: 'data' }">Open Data to retry</RouterLink>
 		</section>
 
-		<p v-else-if="!ready || (state === 'loading' && rows.length === 0)" class="muted">
+		<p v-else-if="!ready || (state === 'loading' && rows.length === 0)" class="muted pending">
 			{{ ready ? 'Loading scenarios…' : 'Starting the local database…' }}
 		</p>
 
@@ -88,7 +88,7 @@ const stop = watch(search, (el) => {
 					@input="setQ(($event.target as HTMLInputElement).value)"
 				/>
 			</header>
-			<p v-if="waiting" class="none">Loading benchmarks…</p>
+			<p v-if="waiting" class="none pending">Loading benchmarks…</p>
 			<ScenarioTable
 				v-else-if="shown.length"
 				:rows="shown"
@@ -115,12 +115,25 @@ const stop = watch(search, (el) => {
 	min-width: 0;
 }
 
+/*
+	The panel fills the page's height and the table scrolls inside it, so the
+	search, benchmark and column headings stay in view over any number of rows.
+*/
 .panel {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	max-height: 100%;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: 3px;
-	min-width: 0;
 	overflow: hidden;
+}
+
+.panel > :deep(.scroll) {
+	flex: 1 1 auto;
+	min-height: 0;
 }
 
 .panel header {

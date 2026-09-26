@@ -5,7 +5,11 @@
  */
 import { router } from './router';
 
-router.afterEach((to) => {
+router.afterEach((to, from) => {
+	// The page scroller is `main`, not the window, so the router's own scroll
+	// handling never reaches it. A new page starts at its top; a query change
+	// within one (picking a run, sorting) keeps the reader's place.
+	if (to.path !== from.path) document.querySelector('#app > main')?.scrollTo(0, 0);
 	if (to.name === 'data') {
 		document.title = 'Data — aimcurve';
 		return;

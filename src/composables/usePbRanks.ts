@@ -7,7 +7,7 @@
 import { computed, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
 import { type DirectoryRow, hasBenchmark, type PbRank, pbRanks } from '../lib/scenario/directory';
-import { loadSnapshot, storedPicks, usePicks } from './useBenchmarkRank';
+import { loadSnapshot, loadedSnapshot, storedPicks, usePicks } from './useBenchmarkRank';
 
 export interface PbRanksApi {
 	/** Null until loaded, and after a failed load. */
@@ -22,20 +22,21 @@ export interface PbRanksApi {
 
 /** `requested` is the URL's benchmark ID, which may be unknown to the snapshot. */
 export function usePbRanks(rows: Ref<readonly DirectoryRow[]>, requested: Ref<number | null>): PbRanksApi {
-	const snapshot = shallowRef<Snapshot | null>(null);
-	const settled = ref(false);
+	const snapshot = shallowRef<Snapshot | null>(loadedSnapshot());
+	const settled = ref(snapshot.value !== null);
 	const picks = usePicks();
 
-	loadSnapshot().then(
-		(loaded) => {
-			snapshot.value = loaded;
-			settled.value = true;
-		},
-		(err: unknown) => {
-			console.error('The benchmark snapshot could not be loaded', err);
-			settled.value = true;
-		},
-	);
+	if (!settled.value)
+		loadSnapshot().then(
+			(loaded) => {
+				snapshot.value = loaded;
+				settled.value = true;
+			},
+			(err: unknown) => {
+				console.error('The benchmark snapshot could not be loaded', err);
+				settled.value = true;
+			},
+		);
 
 	const bench = computed(() => {
 		const id = requested.value;

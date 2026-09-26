@@ -12,6 +12,16 @@ import { rankOf, type RankResult } from '../lib/benchmarks/rank';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
 
 let shared: Promise<Snapshot> | null = null;
+let loaded: Snapshot | null = null;
+
+/**
+ * The snapshot if it has already loaded. A component mounted after that starts
+ * from it, so its first frame already has ranks instead of popping them in a
+ * microtask later.
+ */
+export function loadedSnapshot(): Snapshot | null {
+	return loaded;
+}
 
 /**
  * The snapshot, loaded once and shared by every user of it. A failed load is
@@ -19,7 +29,7 @@ let shared: Promise<Snapshot> | null = null;
  */
 export function loadSnapshot(): Promise<Snapshot> {
 	shared ??= import('../data/benchmarks.json').then(
-		(module) => module.default as unknown as Snapshot,
+		(module) => (loaded = module.default as unknown as Snapshot),
 		(err: unknown) => {
 			shared = null;
 			throw err;
@@ -64,13 +74,14 @@ export function useBenchmarkRank(
 	score: Ref<number | null>,
 	options: BenchmarkRankOptions = {},
 ): BenchmarkRankApi {
-	const snapshot = shallowRef<Snapshot | null>(null);
+	const snapshot = shallowRef<Snapshot | null>(options.load ? null : loadedSnapshot());
 	const picks = options.picks ?? usePicks();
 
-	(options.load ?? loadSnapshot)().then(
-		(loaded) => (snapshot.value = loaded),
-		(err: unknown) => console.error('The benchmark snapshot could not be loaded', err),
-	);
+	if (snapshot.value === null)
+		(options.load ?? loadSnapshot)().then(
+			(loaded) => (snapshot.value = loaded),
+			(err: unknown) => console.error('The benchmark snapshot could not be loaded', err),
+		);
 
 	const candidates = computed(() => (snapshot.value && name.value !== null ? candidatesOf(snapshot.value, name.value) : []));
 	/** The stored picks, or none when storage holds something else. */
