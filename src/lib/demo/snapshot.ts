@@ -18,18 +18,19 @@ import type { ScenarioVersion } from '../scenario/link';
 import type { HistoryRun, Scenario } from '../scenario/queries';
 import type { ScoringInput } from '../scoring';
 
-/** Air Spectral Easy: the run About charts is one of its 39. */
+/** Air Spectral Easy: the run About charts is one of its runs. */
 export const DEMO_SCENARIO_HASH = '28c12fc03478e987f910709ce18a5cfa';
 
 /**
- * VT Aether Intermediate S5, About's progression chart: 51 runs over three
- * months, the median climbing from about 2000 to 2750.
+ * VT Aether Intermediate S5, About's progression chart: months of runs with a
+ * steady climb through several ranks.
  */
 export const DEMO_PROGRESS_HASH = 'c4c11bf8a727b6e6c836138535bd0879';
 
 /**
- * The run About charts: it led its PB-before by 2.2 points at the halfway mark
- * and finished 3.3 behind, the clearest "where did it slip" of the set.
+ * The run About charts: it led its PB-before mid-run and finished behind, the
+ * clearest "where did it slip" of the set. About's copy reads the numbers from
+ * the data; the `useRunCharts` test holds the shape.
  */
 export const DEMO_RUN_STEM = 'Air Spectral Easy - Challenge - 2026.09.09-18.46.26';
 

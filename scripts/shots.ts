@@ -10,6 +10,8 @@
  *
  * Needs `pnpm dev` running (or BASE_URL). Chrome is found at its usual install
  * path, or set CHROME. Uses a throwaway profile, so it never touches your data.
+ * Each page gets SHOTS_TIMEOUT_MS (default 60 s) to draw its charts: a cold dev
+ * server optimizes dependencies first.
  * See docs/preview-assets.md.
  */
 import { spawn } from 'node:child_process';
@@ -19,6 +21,8 @@ import { join } from 'node:path';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4321/';
 const PORT = 9333;
+const TIMEOUT_MS = Number(process.env.SHOTS_TIMEOUT_MS ?? 60_000);
+const POLL_MS = 250;
 const CHROMES = [
 	process.env.CHROME,
 	'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -52,8 +56,8 @@ try {
 		// Charts draw on canvas after the demo snapshot and the benchmark ladder load.
 		await retry(async () => {
 			const { result } = await cdp('Runtime.evaluate', { expression: ready, returnByValue: true });
-			if (result.value !== true) throw new Error(`not ready: ${ready}`);
-		});
+			if (result.value !== true) throw new Error(`${hash} not ready after ${TIMEOUT_MS} ms: ${ready}`);
+		}, TIMEOUT_MS / POLL_MS);
 		await new Promise((r) => setTimeout(r, 500));
 	}
 
@@ -80,13 +84,13 @@ try {
 	rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
 }
 
-async function retry<T>(fn: () => Promise<T>, tries = 60): Promise<T> {
+async function retry<T>(fn: () => Promise<T>, tries = 40): Promise<T> {
 	for (let i = 0; ; i++) {
 		try {
 			return await fn();
 		} catch (err) {
 			if (i >= tries) throw err;
-			await new Promise((r) => setTimeout(r, 250));
+			await new Promise((r) => setTimeout(r, POLL_MS));
 		}
 	}
 }
@@ -101,6 +105,11 @@ async function connect(url: string): Promise<Call> {
 	});
 	let id = 0;
 	const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+	// A crashed or closed browser fails every call still waiting, instead of hanging.
+	ws.onclose = () => {
+		for (const p of pending.values()) p.reject(new Error('Chrome closed the DevTools connection'));
+		pending.clear();
+	};
 	ws.onmessage = (event) => {
 		const msg = JSON.parse(String(event.data));
 		const p = pending.get(msg.id);

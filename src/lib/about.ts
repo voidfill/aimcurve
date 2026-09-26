@@ -7,6 +7,8 @@
  * are never redirected.
  */
 
+import { START_LOCATION } from 'vue-router';
+
 /** Set once About has been shown. */
 export const SEEN_ABOUT_KEY = 'aimcurve.seen-about';
 
@@ -26,6 +28,20 @@ export function shouldShowAbout(target: LandingTarget, keys: readonly string[] |
 	if (keys === null) return false;
 	if (target.path !== '/' || target.hasQuery) return false;
 	return !keys.some((key) => key.startsWith(KEY_PREFIX));
+}
+
+/**
+ * The router guard's decision: About for a first-time visitor's page load on
+ * the bare root, else nothing. Only the load's own navigation (`from` is
+ * START_LOCATION): clicking Run later never bounces anyone.
+ */
+export function firstVisitRedirect(
+	to: { path: string; query: object },
+	from: unknown,
+	keys: readonly string[] | null,
+): { name: 'about' } | undefined {
+	if (from !== START_LOCATION) return undefined;
+	return shouldShowAbout({ path: to.path, hasQuery: Object.keys(to.query).length > 0 }, keys) ? { name: 'about' } : undefined;
 }
 
 /** The storage keys present, or null when storage is blocked. */

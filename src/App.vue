@@ -3,18 +3,11 @@
  * Route titles. Registered at module scope so exactly one hook exists for the
  * document's lifetime, whatever happens to the component.
  */
-import { START_LOCATION } from 'vue-router';
 import { router } from './router';
-import { shouldShowAbout, storageKeys } from './lib/about';
+import { firstVisitRedirect, storageKeys } from './lib/about';
 
-// A first-time visitor on the bare root sees About first (D6 of the About
-// design). Only the page load's own navigation: clicking Run later never
-// bounces anyone.
-router.beforeEach((to, from) => {
-	if (from !== START_LOCATION) return;
-	if (shouldShowAbout({ path: to.path, hasQuery: Object.keys(to.query).length > 0 }, storageKeys()))
-		return { name: 'about' };
-});
+// A first-time visitor on the bare root sees About first (D6 of the About design).
+router.beforeEach((to, from) => firstVisitRedirect(to, from, storageKeys()));
 
 router.afterEach((to, from) => {
 	// The page scroller is `main`, not the window, so the router's own scroll

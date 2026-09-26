@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SEEN_ABOUT_KEY, shouldShowAbout } from './about';
+import { START_LOCATION } from 'vue-router';
+import { firstVisitRedirect, SEEN_ABOUT_KEY, shouldShowAbout } from './about';
 
 const root = { path: '/', hasQuery: false };
 
@@ -25,5 +26,22 @@ describe('shouldShowAbout', () => {
 
 	it('does not redirect when storage cannot be read', () => {
 		expect(shouldShowAbout(root, null)).toBe(false);
+	});
+});
+
+describe('firstVisitRedirect', () => {
+	const at = (path: string, query: Record<string, string> = {}) => ({ path, query });
+
+	it('redirects only the page load’s own navigation', () => {
+		expect(firstVisitRedirect(at('/'), START_LOCATION, [])).toEqual({ name: 'about' });
+		expect(firstVisitRedirect(at('/'), at('/data'), [])).toBeUndefined();
+	});
+
+	it('leaves a root carrying a query alone', () => {
+		expect(firstVisitRedirect(at('/', { run: 'x' }), START_LOCATION, [])).toBeUndefined();
+	});
+
+	it('leaves a returning visitor alone', () => {
+		expect(firstVisitRedirect(at('/'), START_LOCATION, ['aimcurve.run-chart'])).toBeUndefined();
 	});
 });

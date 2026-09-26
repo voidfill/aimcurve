@@ -91,3 +91,19 @@ describe('AboutView', () => {
 		app.unmount();
 	});
 });
+
+describe('AboutDemo', () => {
+	it('says so, instead of waiting forever, when a sample is missing', async () => {
+		const { default: AboutDemo } = await import('../components/about/AboutDemo.vue');
+		const { snapshotSource } = await import('../lib/demo/snapshot');
+		const { [DEMO_PROGRESS_HASH]: _, ...scenarios } = snapshot.scenarios;
+		const source = snapshotSource({ ...snapshot, scenarios });
+		const attempt = Object.values(snapshot.attempts).find((a) => a.scenarioHash !== DEMO_PROGRESS_HASH)!;
+		const app = createApp({ render: () => h(AboutDemo, { attempt }) });
+		app.provide(SOURCE_KEY, { source: shallowRef(source), revision: ref(0) });
+		const root = document.createElement('div');
+		app.mount(root);
+		await vi.waitFor(() => expect(root.querySelector('[role="alert"]')?.textContent).toMatch(/could not be/i), { timeout: 10_000 });
+		app.unmount();
+	});
+});

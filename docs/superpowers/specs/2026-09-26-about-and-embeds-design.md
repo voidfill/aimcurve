@@ -31,8 +31,10 @@ scrolling, and has one obvious action — import their stats.
   generic.
 - **Absolute URLs.** `og:image` and `og:url` must be absolute. The site deploys
   to `https://voidfill.github.io/aimcurve/`; a custom domain may follow.
-- **No database on About.** Opening PGlite and migrating takes seconds. About
-  must render its charts without it.
+- **About never waits on the database.** Opening PGlite and migrating takes
+  seconds, so About renders its charts without reading it. The database still
+  starts in the background on every page, About included, so it is ready by
+  the time the visitor imports.
 
 ## Non-goals
 
@@ -351,9 +353,10 @@ Rewritten product-first:
 - **About isolation:** mounting `AboutView` under a provider whose pg source
   throws on every call renders the charts without calling it (D2), and writes
   no `localStorage` key but `aimcurve.seen-about` (D3).
-- **Import graph:** a build assertion that the modules bundled into About's
-  own lazy chunks (excluding the shared entry, which legitimately holds
-  `useDb`) include neither `src/db/client.ts` nor `@electric-sql/pglite`.
+- **Import graph:** dropped. It guarded where PGlite's code sits in the
+  bundle, which stopped mattering once the database is warmed on every page;
+  the About isolation test holds the guarantee that matters, that About never
+  waits on the database.
 - **Manual:** About renders with no network wait for the database (check with
   OPFS empty and throttled CPU); Discord and X card validators show the image
   and text for the deployed URL.

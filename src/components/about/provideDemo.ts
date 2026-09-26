@@ -22,18 +22,18 @@ export function provideDemo() {
 	const attempt = shallowRef<Attempt | null>(null);
 
 	async function load(): Promise<void> {
-		state.value = 'loading';
 		try {
 			const [module] = await Promise.all([import('../../data/demo-snapshot.json'), loadSnapshot()]);
 			const snapshot = module.default as unknown as DemoSnapshot;
 			attempt.value = snapshot.attempts[DEMO_RUN_STEM] ?? null;
 			source.value = snapshotSource(snapshot);
-			state.value = 'ready';
+			// A snapshot without the pinned run would leave About on a placeholder forever.
+			state.value = attempt.value ? 'ready' : 'error';
 		} catch {
 			state.value = 'error';
 		}
 	}
 
 	void load();
-	return { state, attempt, load };
+	return { state, attempt };
 }

@@ -4,7 +4,7 @@
  * lines, session breaks, dot colours, rank bands and the tooltip.
  *
  * Pure assembly over the scenario's data: the scenario page feeds it its tabs
- * and persisted axis, the About page the Overall tab on dates.
+ * and persisted axis, the About page the Overall tab by attempt.
  */
 import { computed, type ComputedRef, type Ref } from 'vue';
 import type { ProgressTip } from '../components/ProgressChart.vue';

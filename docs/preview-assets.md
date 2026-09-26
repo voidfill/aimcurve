@@ -73,8 +73,8 @@ To change what the card shows, edit `src/views/dev/CardView.vue`, open
 - The snapshot answers every query exactly as the database would
   (`src/lib/demo/snapshot.test.ts`, plus the `useRunAnalysis` and `useScenario`
   parity suites).
-- About never reads the database and writes no storage beyond
-  `aimcurve.seen-about` (`src/views/AboutView.test.ts`).
-- `pnpm build` fails if About's own chunks pull in PGlite (`vite.config.ts`).
+- About never reads the database, so its charts never wait for it (the app
+  still warms the database in the background for the import), and it writes no
+  storage beyond `aimcurve.seen-about` (`src/views/AboutView.test.ts`).
 - The CSVs carry the author's settings (sensitivity, DPI, FOV, resolution,
   crosshair). Publishing them is intended.

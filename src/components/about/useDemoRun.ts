@@ -16,7 +16,7 @@ import type { Attempt } from '../../lib/run/queries';
 const LAYERS: ChartLayers = { local: true, accumulated: true, baseline: true, baseLocal: false, recent: false, ranks: true };
 
 export function useDemoRun(attempt: Ref<Attempt>) {
-	const { state, analysis, baseline } = useRunAnalysis(
+	const { state, analysis, baseline, retry } = useRunAnalysis(
 		computed<Attempt | null>(() => attempt.value),
 		ref<BaselineOption>('pb-before'),
 	);
@@ -26,5 +26,5 @@ export function useDemoRun(attempt: Ref<Attempt>) {
 		{ picks: ref({}) },
 	);
 	const charts = useRunCharts(analysis, baseline, bench, { layers: ref(LAYERS), window: ref(5) });
-	return { state, bench, charts };
+	return { state, retry, bench, charts };
 }

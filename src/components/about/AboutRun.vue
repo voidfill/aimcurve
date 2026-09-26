@@ -17,7 +17,7 @@ import { useDemoRun } from './useDemoRun';
 
 const props = defineProps<{ attempt: Attempt }>();
 
-const { state, bench, charts } = useDemoRun(toRef(props, 'attempt'));
+const { state, retry, bench, charts } = useDemoRun(toRef(props, 'attempt'));
 const { current, budget, chart, layers, chartBaseline, chartRanks, readoutAt, timeAt, spans, colors, table, hovered, pinned, highlight, toggle } =
 	charts;
 
@@ -74,7 +74,9 @@ const benchName = computed(() => bench.selected.value?.benchmark.name ?? null);
 		</div>
 		<div class="panel chart-panel" data-shot="pace">
 			<p class="sample">Sample run · {{ attempt.scenarioName }}</p>
-			<p v-if="state === 'error'" class="message" role="alert">This sample could not be drawn.</p>
+			<p v-if="state === 'error'" class="message" role="alert">
+				This sample could not be drawn. <button type="button" @click="retry()">Try again</button>
+			</p>
 			<UnifiedChart
 				v-else-if="current && chart && chartBaseline"
 				:data="chart"

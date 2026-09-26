@@ -15,7 +15,15 @@ import { markAboutSeen } from '../lib/about';
 
 const PRIVACY = 'Fully local: your stats stay in this browser. No server, no account, no tracking.';
 
-const { state, attempt, load } = provideDemo();
+const { state, attempt } = provideDemo();
+
+/**
+ * Browsers remember a failed dynamic import for the page's lifetime, so
+ * importing the snapshot again would fail again: a retry reloads the page.
+ */
+function reload(): void {
+	location.reload();
+}
 
 const walkthrough = ref<HTMLElement | null>(null);
 function scrollToWalkthrough(): void {
@@ -47,7 +55,7 @@ onMounted(markAboutSeen);
 			</template>
 			<p v-else-if="state === 'error'" class="error" role="alert">
 				The sample runs could not be loaded.
-				<button type="button" class="ghost" @click="load">Try again</button>
+				<button type="button" class="ghost" @click="reload">Reload the page</button>
 			</p>
 			<div v-else class="placeholder" aria-busy="true" aria-label="Loading the sample runs"></div>
 		</div>

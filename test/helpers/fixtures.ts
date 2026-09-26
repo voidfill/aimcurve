@@ -57,7 +57,8 @@ export const curated = fixtureSet(join(fixturesDir, 'curated'));
 export const raw = fixtureSet(join(fixturesDir, 'raw'));
 
 /**
- * The About page's sample runs: every completed Air Spectral Easy run of two
- * weeks, committed like `curated`. The demo snapshot is generated from these.
+ * The About page's sample runs: every completed run of the demo scenarios,
+ * committed like `curated`. The demo snapshot is generated from these; see
+ * docs/preview-assets.md.
  */
 export const demo = fixtureSet(join(fixturesDir, 'demo'));
