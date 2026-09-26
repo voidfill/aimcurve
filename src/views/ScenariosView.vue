@@ -5,6 +5,7 @@
  * See docs/superpowers/specs/2026-09-26-scenarios-directory-design.md.
  */
 import { computed, useTemplateRef, watch } from 'vue';
+import EmptyState from '../components/EmptyState.vue';
 import ScenarioTable from '../components/ScenarioTable.vue';
 import { usePbRanks } from '../composables/usePbRanks';
 import { useDb } from '../composables/useDb';
@@ -66,14 +67,7 @@ const stop = watch(search, (el) => {
 			<button type="button" @click="retry()">Try again</button>
 		</section>
 
-		<section v-else-if="rows.length === 0" class="notice">
-			<h1>Nothing imported yet</h1>
-			<p>
-				Scenarios appear here once runs are imported. The files are parsed and stored in this browser: nothing is
-				uploaded, and nothing syncs to your other devices.
-			</p>
-			<RouterLink :to="{ name: 'data' }">Import your stats</RouterLink>
-		</section>
+		<EmptyState v-else-if="rows.length === 0" />
 
 		<section v-else class="panel" aria-labelledby="scenarios-heading">
 			<header>

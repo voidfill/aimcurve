@@ -10,10 +10,12 @@
 import { computed } from 'vue';
 import { useMediaQuery } from '@vueuse/core';
 import AttemptRail from '../components/AttemptRail.vue';
+import EmptyState from '../components/EmptyState.vue';
 import RunDetail from '../components/RunDetail.vue';
 import SelectionPill from '../components/SelectionPill.vue';
 import { useAttempts } from '../composables/useAttempts';
 import { useDb } from '../composables/useDb';
+import { useHasRuns } from '../composables/useHasRuns';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
 import { timeFormat } from '../lib/run/format';
@@ -61,19 +63,9 @@ const filterLabel = computed(() => {
 /** Below this the rail stops being a column and becomes an ordinary section. */
 const narrow = useMediaQuery('(max-width: 799px)');
 
-/**
- * The first-use state: a working database with nothing in it and no filter
- * hiding anything.
- */
-const onboarding = computed(
-	() =>
-		dbError.value === null &&
-		ready.value &&
-		railState.value === 'ready' &&
-		items.value.length === 0 &&
-		filterState.value === 'all' &&
-		selected.value === null,
-);
+/** A working database with no completed run: the page is only the empty state. */
+const hasRuns = useHasRuns();
+const onboarding = computed(() => dbError.value === null && ready.value && hasRuns.value === false);
 </script>
 
 <template>
@@ -86,29 +78,17 @@ const onboarding = computed(
 			@resume-latest="resumeLatest()"
 		/>
 	</Teleport>
-	<div class="run" :class="{ narrow }">
+	<EmptyState v-if="onboarding" class="page" />
+	<p v-else-if="dbError === null && (!ready || hasRuns === null)" class="muted starting">
+		{{ ready ? 'Loading attempts…' : 'Starting the local database…' }}
+	</p>
+	<div v-else class="run" :class="{ narrow }">
 		<div class="result">
 			<section v-if="dbError !== null" class="notice danger" role="alert">
 				<h1>Attempts are unavailable</h1>
 				<p>The local database could not be opened, so no attempt can be read.</p>
 				<p>{{ dbError.message }}</p>
 				<RouterLink :to="{ name: 'data' }">Open Data to retry</RouterLink>
-			</section>
-
-			<p v-else-if="!ready" class="muted">Starting the local database…</p>
-
-			<section v-else-if="onboarding" class="notice">
-				<h1>Nothing imported yet</h1>
-				<p>
-					aimcurve reads the stats files Kovaak's writes on this computer. The files are parsed and
-					stored in this browser: nothing is uploaded, nothing is installed, no account exists, nothing
-					is shared publicly, and nothing syncs to your other devices.
-				</p>
-				<p>
-					Connect your <code>FPSAimTrainer/stats</code> folder — or import a one-time snapshot of it if
-					your browser cannot connect to folders.
-				</p>
-				<RouterLink :to="{ name: 'data' }">Import your stats</RouterLink>
 			</section>
 
 			<template v-else>
@@ -267,6 +247,11 @@ const onboarding = computed(
 
 .muted {
 	color: var(--color-text-muted);
+}
+
+.page,
+.starting {
+	padding: 12px 18px 24px;
 }
 
 button {

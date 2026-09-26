@@ -9,12 +9,14 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ConfigTable from '../components/ConfigTable.vue';
+import EmptyState from '../components/EmptyState.vue';
 import PbCard from '../components/PbCard.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import RecentRuns from '../components/RecentRuns.vue';
 import ScenarioHeader from '../components/ScenarioHeader.vue';
 import { useBenchmarkRank } from '../composables/useBenchmarkRank';
 import { useDb } from '../composables/useDb';
+import { useHasRuns } from '../composables/useHasRuns';
 import { useScenario } from '../composables/useScenario';
 import { rankOf } from '../lib/benchmarks/rank';
 import { shortHash } from '../lib/scenario/link';
@@ -30,6 +32,7 @@ const hash = computed(() => {
 });
 
 const { state, error, data, botState, botError, bots, loadBots, retry } = useScenario(hash);
+const hasRuns = useHasRuns();
 
 /** The best completed run; a tie goes to the earlier one. */
 const pb = computed<HistoryRun | null>(() => {
@@ -104,6 +107,8 @@ watch(
 			<p>{{ error }}</p>
 			<button type="button" @click="retry()">Try again</button>
 		</section>
+
+		<EmptyState v-else-if="state === 'missing' && hasRuns === false" />
 
 		<section v-else-if="state === 'missing'" class="notice" role="alert">
 			<h1>That scenario is not in this browser</h1>
