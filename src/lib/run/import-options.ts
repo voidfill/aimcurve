@@ -7,7 +7,21 @@
  * Files. Everything folder-shaped needs `showDirectoryPicker`, so it is gated
  * on `canPick`.
  */
-import type { Connection } from './import-controller';
+import { canPickDirectory, type Connection } from './import-controller';
+
+/**
+ * Live folder connection is switched off for now: in Program Files it needs a
+ * link made from an admin terminal, and asking users to paste a command into
+ * one is too much. Flip this back on to restore Connect, Reconnect and the
+ * link setup. Disconnect stays offered either way, so a folder connected
+ * before the switch can still be dropped.
+ */
+export const LIVE_FOLDER_ENABLED = false;
+
+/** Whether this browser can connect a folder and the feature is switched on. */
+export function canConnectFolder(): boolean {
+	return LIVE_FOLDER_ENABLED && canPickDirectory();
+}
 
 export interface ImportOptions {
 	/** A folder is being watched; importing once would stop that. */

@@ -12,8 +12,8 @@
  */
 import { computed } from 'vue';
 import LinkSetup from './LinkSetup.vue';
-import { canPickDirectory, type Connection } from '../lib/run/import-controller';
-import { importOptions } from '../lib/run/import-options';
+import type { Connection } from '../lib/run/import-controller';
+import { canConnectFolder, importOptions, LIVE_FOLDER_ENABLED } from '../lib/run/import-options';
 
 const props = defineProps<{
 	connection: Connection;
@@ -27,7 +27,7 @@ const emit = defineEmits<{
 	(event: 'import-files', files: File[]): void;
 }>();
 
-const canConnect = canPickDirectory();
+const canConnect = canConnectFolder();
 
 /** Shared with the header's import control, so the two offer the same things. */
 const options = computed(() => importOptions(props.connection, canConnect));
@@ -56,7 +56,11 @@ function onFiles(event: Event): void {
 		</div>
 
 		<div class="options">
-			<article class="option" :class="{ active: connection === 'connected' }">
+			<article
+				class="option"
+				:class="{ active: connection === 'connected', unavailable: !LIVE_FOLDER_ENABLED }"
+				:aria-disabled="!LIVE_FOLDER_ENABLED || undefined"
+			>
 				<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
 					<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 				</svg>
@@ -64,6 +68,7 @@ function onFiles(event: Event): void {
 				<p>New attempts show up on their own while this page is open.</p>
 
 				<div class="actions">
+					<button v-if="!LIVE_FOLDER_ENABLED && !options.disconnect" type="button" disabled>Connect folder</button>
 					<button v-if="options.reconnect" type="button" :disabled="disabled" @click="emit('reconnect')">
 						Reconnect
 					</button>
@@ -90,7 +95,8 @@ function onFiles(event: Event): void {
 					</button>
 				</div>
 
-				<p v-if="!canConnect" class="note">Not supported in this browser — import files instead.</p>
+				<p v-if="!LIVE_FOLDER_ENABLED" class="note">Coming later — import files for now.</p>
+				<p v-else-if="!canConnect" class="note">Not supported in this browser — import files instead.</p>
 
 				<LinkSetup v-if="canConnect" />
 			</article>
@@ -158,6 +164,14 @@ h2 {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 	background: var(--color-surface);
+}
+
+.option.unavailable {
+	opacity: 0.6;
+}
+
+.option.unavailable .icon {
+	stroke: var(--color-text-muted);
 }
 
 .option.active {
