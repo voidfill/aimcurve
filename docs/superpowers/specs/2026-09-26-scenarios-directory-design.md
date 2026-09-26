@@ -13,7 +13,8 @@ identity, `run_complete`).
 
 Out of scope: per-row sparklines (unreadable at row height for the work they
 cost), race results shown as times, a trend indicator, filters beyond name
-search, Sessions and Benchmarks pages.
+search and the benchmark select (L8), unplayed benchmark scenarios as rows
+(the Benchmarks page's scorecard), Sessions and Benchmarks pages.
 
 ## Summary of decisions
 
@@ -26,6 +27,7 @@ search, Sessions and Benchmarks pages.
 | L5 | Scores are shown as recorded, for every scenario kind |
 | L6 | Name search and column sort, both kept in the URL |
 | L7 | One aggregate query, pure row functions, one composable |
+| L8 | A benchmark select filters to that benchmark and ranks every row on its ladder |
 
 ---
 
@@ -66,8 +68,9 @@ middle-click and copy-link work.
 
 Rank uses the same snapshot, the same `pick` and the same stored picks
 (`aimcurve.benchmark-pick`, keyed by trimmed name) as Run and the scenario page,
-and `rankOf` on the selected candidate's thresholds. The directory has no
-benchmark select; the pick is changed on Run or the scenario page. Until the
+and `rankOf` on the selected candidate's thresholds. The pick itself is changed
+on Run or the scenario page; the directory's benchmark select (L8) overrides it
+for display without changing it. Until the
 snapshot has loaded, or if it fails to load, the Rank column is blank and the
 rest of the table is unaffected.
 
@@ -102,13 +105,14 @@ scenario page still shows times for races.
   column on first click: Scenario ascending, everything else descending.
   - Scenario: by name, locale-aware, case-insensitive; ties by hash.
   - Rank: by rank index; unranked below the lowest rank, blank (no benchmark)
-    always last in either direction.
+    always last in either direction. Without a benchmark selected (L8), rows
+    can be on different ladders, so this order is only approximate.
   - Recent form: by gap; rows without a gap always last.
   - PB, Runs, Last played: by value; blanks always last.
   - Every sort breaks ties by last played, newest first.
 - **Default:** last played, newest first.
-- **URL:** `?q=<search>&sort=<key>&dir=asc|desc`, keys `name`, `rank`, `pb`,
-  `form`, `runs`, `played`. Defaults are omitted from the URL. Typing replaces
+- **URL:** `?q=<search>&sort=<key>&dir=asc|desc&bench=<id>`, keys `name`,
+  `rank`, `pb`, `form`, `runs`, `played`; `bench` as in L8. Defaults are omitted from the URL. Typing replaces
   the history entry rather than pushing one. Unknown keys fall back to the
   default.
 
@@ -135,9 +139,12 @@ States:
   - `filterRows(rows, q)` and `sortRows(rows, key, dir, rankIndex)`.
   - `parseDirectoryQuery(query)` and `directoryQuery(state)`: URL ↔ state, with
     defaults omitted.
-- **Ranks** `usePbRanks(rows)`: loads the shared snapshot once (the same
-  loader as `useBenchmarkRank`, moved to a shared helper) and maps each row to
-  its selected candidate and `RankResult`, from the same stored picks.
+  - `benchmarkOptions(snapshot, rows)` and `inBenchmark(rows, snapshot, id)`:
+    the L8 select's options and filter.
+- **Ranks** `usePbRanks(rows, bench)`: loads the shared snapshot once (the
+  loader exported by `useBenchmarkRank`) and maps each row to its candidate and
+  `RankResult`: the stored pick's, or the selected benchmark's (L8). It exposes
+  the snapshot for the select's options.
 - **Composable** `useScenarioDirectory()`: runs the query and reruns it when
   the import `revision` changes, as `useScenario` does; exposes state, error,
   rows and retry.
@@ -146,7 +153,33 @@ States:
   `rememberedRunRoute` is for Run.
 
 Testing: vitest for the pure functions (collisions, medians under and at 10
-runs, zero PB, every sort's blank ordering, URL round trips) and for
+runs, zero PB, every sort's blank ordering, URL round trips, benchmark options,
+filter and forced rank) and for
 `listScenarios` against PGlite like the existing query tests (versions kept
 apart, resets and partials excluded, only the last 10 scores). The page is
 checked by eye in the dev server.
+
+### L8. A benchmark select
+
+Rank across scenarios compares positions on different ladders (a Seal on one
+benchmark above a Master on another), so the directory offers one ladder at a
+time.
+
+- **Select:** in the panel header beside the search. The first option is
+  *All scenarios*, the default. Then every benchmark that contains at least one
+  scenario with a row here, as an `optgroup` per benchmark name with one option
+  per difficulty, in snapshot order. Until the snapshot has loaded only *All
+  scenarios* is offered.
+- **Filter:** with a benchmark selected, only rows whose trimmed name is one of
+  its scenarios are shown (the B3 lookup); every version of such a name
+  appears. Search applies within it. Scenarios of the benchmark with no rows are
+  not shown: the gaps are the Benchmarks page's scorecard.
+- **Rank:** every row's Rank is its PB on the selected benchmark's ladder,
+  ignoring the stored picks. The picks are never written from here, so going
+  back to *All scenarios* shows them again. The Rank header's title names the
+  benchmark, and the rank sort compares positions on one ladder.
+- **URL:** `bench=<KovaaK's benchmark ID>`, omitted for *All scenarios*. An ID
+  not in the snapshot, or not a number, is treated as *All scenarios*. While
+  the snapshot loads, a URL with `bench` shows "Loading benchmarks…" instead of
+  the table, so it never flashes unfiltered rows; if the snapshot fails to load,
+  it is treated as *All scenarios*.
