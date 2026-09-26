@@ -13,9 +13,20 @@ import type { Snapshot } from '../lib/benchmarks/snapshot';
 
 let shared: Promise<Snapshot> | null = null;
 
-function loadSnapshot(): Promise<Snapshot> {
+/** The snapshot, loaded once and shared by every user of it. */
+export function loadSnapshot(): Promise<Snapshot> {
 	shared ??= import('../data/benchmarks.json').then((module) => module.default as unknown as Snapshot);
 	return shared;
+}
+
+/** Trimmed scenario name → picked KovaaK's benchmark ID, or null for none. */
+export function usePicks(): Ref<Record<string, number | null>> {
+	return useStorage<Record<string, number | null>>('aimcurve.benchmark-pick', {}, localStorage);
+}
+
+/** The stored picks, or none when storage holds something else. */
+export function storedPicks(picks: Record<string, number | null>): Record<string, number | null> {
+	return typeof picks === 'object' && picks !== null ? picks : {};
 }
 
 export interface BenchmarkRankApi {
@@ -41,7 +52,7 @@ export function useBenchmarkRank(
 	options: BenchmarkRankOptions = {},
 ): BenchmarkRankApi {
 	const snapshot = shallowRef<Snapshot | null>(null);
-	const picks = options.picks ?? useStorage<Record<string, number | null>>('aimcurve.benchmark-pick', {}, localStorage);
+	const picks = options.picks ?? usePicks();
 
 	(options.load ?? loadSnapshot)().then(
 		(loaded) => (snapshot.value = loaded),
@@ -50,7 +61,7 @@ export function useBenchmarkRank(
 
 	const candidates = computed(() => (snapshot.value && name.value !== null ? candidatesOf(snapshot.value, name.value) : []));
 	/** The stored picks, or none when storage holds something else. */
-	const stored = computed(() => (typeof picks.value === 'object' && picks.value !== null ? picks.value : {}));
+	const stored = computed(() => storedPicks(picks.value));
 	const selected = computed(() => {
 		if (name.value === null) return null;
 		const id = stored.value[name.value.trim()];

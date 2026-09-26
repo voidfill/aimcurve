@@ -108,3 +108,69 @@ export async function listHistory(pg: PGliteInterface, scenarioId: number): Prom
 		},
 	}));
 }
+
+/** One scenario version with completed runs, as the Scenarios directory needs it. */
+export interface ScenarioSummary {
+	id: number;
+	name: string;
+	hash: string;
+	/** Completed runs, scored or not. */
+	runs: number;
+	/** The highest completed score; null when no completed run has one. */
+	pb: number | null;
+	/** Normalized ISO timestamp of the latest completed run. */
+	lastPlayed: string;
+	/** The scores of the last 10 (the window) scored completed runs, newest first. */
+	recent: number[];
+}
+
+/** How many of the latest scored runs make up recent form (L4). */
+export const RECENT_WINDOW = 10;
+
+/**
+ * Every scenario version with completed runs (L7 of the scenarios directory
+ * design). `run_complete` is read whole, so the window over it is one pass;
+ * the last scores are aggregated per scenario and joined, never looked up
+ * row by row.
+ */
+export async function listScenarios(pg: PGliteInterface, window = RECENT_WINDOW): Promise<ScenarioSummary[]> {
+	const result = await pg.query<{
+		id: number;
+		name: string;
+		hash: string;
+		runs: number;
+		pb: number | null;
+		last_played: string;
+		recent: number[] | null;
+	}>(
+		`
+		with ranked as (
+			select scenario_id, score,
+			       row_number() over (partition by scenario_id order by started_at desc, id desc) as n
+			from run_complete
+			where score is not null
+		), recent as (
+			select scenario_id, array_agg(score order by n) as recent
+			from ranked
+			where n <= $1::integer
+			group by scenario_id
+		)
+		select r.scenario_id as id, r.scenario_name as name, r.scenario_hash as hash,
+		       count(*)::integer as runs, max(r.score) as pb, max(r.started_at) as last_played,
+		       x.recent
+		from run_complete r
+		left join recent x on x.scenario_id = r.scenario_id
+		group by r.scenario_id, r.scenario_name, r.scenario_hash, x.recent
+		`,
+		[window],
+	);
+	return result.rows.map((row) => ({
+		id: row.id,
+		name: row.name,
+		hash: row.hash,
+		runs: row.runs,
+		pb: row.pb,
+		lastPlayed: new Date(row.last_played).toISOString(),
+		recent: row.recent ?? [],
+	}));
+}

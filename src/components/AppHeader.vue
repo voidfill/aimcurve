@@ -10,19 +10,24 @@
  * pill there. It is selection state, never connection state; connection state
  * is the import control's, and that control is also the way to the Data page.
  *
- * Only Run exists as a destination here. Scenario pages are reached from Run,
- * with no tab of their own; Sessions, a Scenarios directory and Benchmarks
- * are later slices and are deliberately absent rather than present and dead.
+ * The Scenarios link likewise points at the last directory location, so the
+ * search and sort survive a trip into a scenario. It is also the active tab on
+ * scenario pages, which sit under the directory (L1 of its design). Sessions
+ * and Benchmarks are later slices and are deliberately absent rather than
+ * present and dead.
  */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import ImportButton from './ImportButton.vue';
+import { useDirectoryRoute } from '../composables/useScenarioDirectory';
 import { useSelection } from '../composables/useSelection';
 
 const route = useRoute();
 const { rememberedRunRoute } = useSelection();
+const { rememberedRoute: rememberedScenariosRoute } = useDirectoryRoute();
 
 const onRun = computed(() => route.name === 'run');
+const onScenarios = computed(() => route.name === 'scenarios' || route.name === 'scenario');
 </script>
 
 <template>
@@ -39,6 +44,16 @@ const onRun = computed(() => route.name === 'run');
 					:aria-current="onRun ? 'page' : undefined"
 					@click="navigate"
 					><span>Run</span></a
+				>
+			</RouterLink>
+			<RouterLink v-slot="{ href, navigate }" :to="rememberedScenariosRoute" custom>
+				<a
+					:href="href"
+					class="tab"
+					:class="{ active: onScenarios }"
+					:aria-current="onScenarios ? 'page' : undefined"
+					@click="navigate"
+					><span>Scenarios</span></a
 				>
 			</RouterLink>
 		</nav>

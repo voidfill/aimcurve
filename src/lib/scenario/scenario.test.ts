@@ -11,7 +11,7 @@ import { curveFor, killTimes, type ScoringInput } from '../scoring';
 import { botSeries, botTabs } from './bots';
 import { CONFIG_COLORS, configGroups, configKey, type SensConfig } from './config';
 import { isNewestVersion, kovaaksLink, versionLabel } from './link';
-import { getScenario, type HistoryRun, listHistory, listVersions } from './queries';
+import { getScenario, type HistoryRun, listHistory, listScenarios, listVersions } from './queries';
 import { pbSteps, rollingMedian, sessionBreaks } from './series';
 
 const base: SensConfig = { sensScale: 'cm/360', horizSens: 30, vertSens: 30, dpi: 1600, fov: 103, fovScale: 'Overwatch' };
@@ -120,6 +120,24 @@ describe('on the curated fixtures', () => {
 		}
 		const versions = await listVersions(pg, 'VT Aether Novice S5 Hard Bot 1 90%');
 		expect(versions).toEqual([expect.objectContaining({ id, hash, runs: history.length })]);
+	});
+
+	it('summarize every scenario version from its completed runs only', async () => {
+		const summaries = await listScenarios(pg);
+		const expected = await pg.query<{ id: number }>(`select distinct scenario_id as id from run_complete`);
+		expect(summaries.map((s) => s.id).sort((a, b) => a - b)).toEqual(expected.rows.map((r) => r.id).sort((a, b) => a - b));
+		expect(new Set(summaries.map((s) => s.hash)).size).toBe(summaries.length);
+		for (const s of summaries) {
+			const history = await listHistory(pg, s.id);
+			const scored = history.filter((r) => r.score !== null);
+			expect(s.runs).toBe(history.length);
+			expect(s.pb).toBe(scored.length ? Math.max(...scored.map((r) => r.score!)) : null);
+			expect(s.lastPlayed).toBe(history[history.length - 1]!.startedAt);
+			expect(s.recent).toEqual(scored.slice(-10).reverse().map((r) => r.score));
+		}
+		const short = await listScenarios(pg, 1);
+		expect(short.some((s) => s.runs > 1)).toBe(true);
+		for (const s of short) expect(s.recent).toEqual(summaries.find((x) => x.id === s.id)!.recent.slice(0, 1));
 	});
 
 	it('give clock bot values equal to Run’s bot-table pace and points', async () => {
