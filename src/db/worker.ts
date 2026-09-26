@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
 import { OpfsAhpFS } from '@electric-sql/pglite/opfs-ahp';
 import { worker } from '@electric-sql/pglite/worker';
-import { OPFS_DIR } from './opfs';
+import { CLOSE_REQUEST, type CloseReply, OPFS_DIR } from './opfs';
 
 // PGlite is single-threaded WebAssembly: a bulk ingest is ~4 s of solid CPU,
 // which would freeze the UI thread outright.
@@ -50,14 +50,26 @@ import { OPFS_DIR } from './opfs';
 const FIRST_START = 2000;
 const INGEST_HEADROOM = 1000;
 
+/** Set once this worker has won the election and opened the database. */
+let db: PGlite | null = null;
+
+// The dev reset's close (see `CLOSE_REQUEST`). A worker that is not the leader
+// never opened the database, so it has nothing to release and says so.
+addEventListener('message', (event: MessageEvent<{ type?: unknown }>) => {
+	if (event.data?.type !== CLOSE_REQUEST) return;
+	const held = db !== null;
+	void (db?.close() ?? Promise.resolve()).finally(() => postMessage({ type: 'aimcurve:closed', held } satisfies CloseReply));
+});
+
 void worker({
 	async init() {
-		return await PGlite.create({
+		db = await PGlite.create({
 			fs: new OpfsAhpFS(OPFS_DIR, {
 				initialPoolSize: FIRST_START,
 				maintainedPoolSize: INGEST_HEADROOM,
 			}),
 			extensions: { live },
 		});
+		return db;
 	},
 });

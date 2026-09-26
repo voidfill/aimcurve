@@ -4,6 +4,7 @@ import { PGliteWorker } from '@electric-sql/pglite/worker';
 import { drizzle } from 'drizzle-orm/pglite';
 import { applyMigrations, type MigrateResult } from './migrate';
 import { migrations } from './migrations';
+import { CLOSE_REQUEST, type CloseReply } from './opfs';
 import * as schema from './schema';
 
 export type Db = ReturnType<typeof drizzle<typeof schema>>;
@@ -11,6 +12,7 @@ export type Db = ReturnType<typeof drizzle<typeof schema>>;
 interface Handles {
 	pg: PGliteInterface;
 	db: Db;
+	worker: Worker;
 }
 
 let handles: Promise<Handles> | undefined;
@@ -28,15 +30,13 @@ function init(): Promise<Handles> {
 	handles ??= (async () => {
 		let pg: PGliteInterface | undefined;
 		try {
-			pg = await PGliteWorker.create(
-				new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
-				{ extensions: { live } },
-			);
+			const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+			pg = await PGliteWorker.create(worker, { extensions: { live } });
 			lastMigration = await applyMigrations(pg, migrations);
 			// PGliteWorker implements PGliteInterface but does not extend PGlite,
 			// which is the concrete class drizzle's pglite driver is typed against.
 			const db = drizzle(pg as unknown as PGlite, { schema });
-			return { pg, db };
+			return { pg, db, worker };
 		} catch (err) {
 			// Worker construction, wasm loading, and IndexedDB access can all
 			// fail transiently (private browsing, blocked site data, a full
@@ -70,15 +70,42 @@ export function getLastMigration(): MigrateResult | undefined {
 	return lastMigration;
 }
 
+/** How long the worker gets to close PGlite before it is terminated regardless. */
+const CLOSE_TIMEOUT_MS = 5000;
+
+/**
+ * Asks the worker to close PGlite and waits for it. Resolves with whether this
+ * tab's worker held the database; rejects on a timeout.
+ */
+function closeInWorker(worker: Worker): Promise<boolean> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			worker.removeEventListener('message', onMessage);
+			reject(new Error('the database worker did not close in time'));
+		}, CLOSE_TIMEOUT_MS);
+		function onMessage(event: MessageEvent<Partial<CloseReply>>): void {
+			if (event.data?.type !== 'aimcurve:closed') return;
+			clearTimeout(timer);
+			worker.removeEventListener('message', onMessage);
+			resolve(event.data.held === true);
+		}
+		worker.addEventListener('message', onMessage);
+		worker.postMessage({ type: CLOSE_REQUEST });
+	});
+}
+
 /**
  * Closes the connection and drops the cache, so the next `getDb()` starts a
  * fresh worker.
  *
  * Only the dev reset calls this. The pool holds sync access handles on roughly
- * a thousand OPFS files, and removing that directory underneath a live pool
+ * two thousand OPFS files, and removing that directory underneath a live pool
  * leaves a half-deleted data directory that the next start cannot resume from.
  * The cache is cleared before the close is awaited: a close that hangs must
  * not leave a handle behind that callers can still reach.
+ *
+ * Rejects when the handles may still be held: the worker did not answer in
+ * time, or another tab's worker is the one holding the database.
  */
 export async function closePg(): Promise<void> {
 	const pending = handles;
@@ -88,5 +115,14 @@ export async function closePg(): Promise<void> {
 	// A cached initialization that already failed has nothing to close, and its
 	// rejection is not this caller's to report.
 	const settled = await pending.catch(() => undefined);
-	if (settled !== undefined) await settled.pg.close().catch(() => {});
+	if (settled === undefined) return;
+	// PGlite is closed inside the worker first: `pg.close()` only terminates
+	// the worker, and the browser releases the pool's handles some time after.
+	let held: boolean;
+	try {
+		held = await closeInWorker(settled.worker);
+	} finally {
+		await settled.pg.close().catch(() => {});
+	}
+	if (!held) throw new Error('another aimcurve tab has the database open; close it and try again');
 }
