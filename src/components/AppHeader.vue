@@ -17,13 +17,15 @@
  * present and dead.
  *
  * About is a quiet text link beside the data control, not a tab: it is where
- * first-time visitors land, not a place regulars work in.
+ * first-time visitors land, not a place regulars work in. The GitHub mark
+ * beside it is just as quiet, and leaves the app in a new tab.
  */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import ImportButton from './ImportButton.vue';
 import { useDirectoryRoute } from '../composables/useScenarioDirectory';
 import { useSelection } from '../composables/useSelection';
+import { GITHUB_MARK_PATH, REPO_URL } from '../lib/links';
 
 const route = useRoute();
 const { rememberedRunRoute } = useSelection();
@@ -70,6 +72,9 @@ const onAbout = computed(() => route.name === 'about');
 			:aria-current="onAbout ? 'page' : undefined"
 			>About</RouterLink
 		>
+		<a class="github" :href="REPO_URL" target="_blank" rel="noopener" aria-label="aimcurve on GitHub" title="aimcurve on GitHub">
+			<svg viewBox="0 0 16 16" aria-hidden="true"><path :d="GITHUB_MARK_PATH" /></svg>
+		</a>
 		<ImportButton />
 	</header>
 </template>
@@ -184,5 +189,21 @@ nav {
 .about:hover,
 .about.active {
 	color: var(--color-text);
+}
+
+.github {
+	display: flex;
+	color: var(--color-text-faint);
+	transition: color 120ms ease;
+}
+
+.github:hover {
+	color: var(--color-text);
+}
+
+.github svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
 }
 </style>
