@@ -54,8 +54,8 @@ PGlite ──► src/lib/{run,scenario}/queries.ts ──► pure lib ──► 
 Components (`UnifiedChart`, `BotTable`, `ProgressChart`) are already pure: props
 in, pixels out. The pure lib (`curveFor`, `resolveBaseline`, bot tables, series)
 is already database-free. Only the query functions touch PGlite, and they return
-plain JSON-safe data (`ScoringInput` is plain `number[]` arrays, dates are
-strings). Two things block reuse from About:
+plain data: ISO date strings, `number[]` ticks, and two `Map`s (see D1). Two
+things block reuse from About:
 
 1. Composables reach the database through `useDb().pg` directly.
 2. `RunDetail.vue` and `ProgressPanel.vue` assemble chart props inline, so the
@@ -65,34 +65,44 @@ The design adds one seam at each point.
 
 ### D1. `DataSource`: queries without `pg`
 
-`src/lib/source.ts` defines an interface whose methods are the existing query
-functions with the `pg` argument removed, same arguments and return types:
+`src/lib/source.ts` defines an interface holding **only the queries About
+needs**, each the existing query function with the `pg` argument removed, same
+arguments and return types:
 
 | method | wraps |
 | --- | --- |
-| `listAttempts`, `getAttempt`, `getLatestAttempt`, `listScenarioOptions` | `lib/run/queries.ts` (`listScenarios` there is renamed in the interface to avoid the clash below) |
-| `getScoringInputs`, `listScenarioRuns`, `getSlotStats`, `getKillDetail` | `lib/run/queries.ts` |
-| `getScenario`, `listVersions`, `listHistory`, `listScenarioSummaries` | `lib/scenario/queries.ts` |
+| `getAttempt`, `listScenarioRuns`, `getSlotStats`, `getScoringInputs`, `getKillDetail` | `lib/run/queries.ts` |
+| `getScenario`, `listVersions`, `listHistory` | `lib/scenario/queries.ts` |
 
-Plus any query currently issued inline by a composable the About page uses
-(audit `useHasRuns` and `useBenchmarkRank`; lift inline SQL into
-`queries.ts` first if About needs it, otherwise leave it).
+Everything else (`listAttempts` and its cursor, `getLatestAttempt`, the two
+`listScenarios`, `useHasRuns`'s inline count) stays `pg`-only. Widening the
+interface is a later decision, made when a second consumer needs it.
 
 Two implementations:
 
 - **`pgSource(pg)`** — `src/lib/source-pg.ts`, binds each method to its query
   function. No behaviour change for the app.
 - **`snapshotSource(snapshot)`** — `src/lib/source-snapshot.ts`, answers from a
-  `DemoSnapshot` holding **complete tables**, not recorded calls: every
-  `Attempt`, every `ScenarioRun`, `ScoringInput` and `KillDetail` keyed by run
-  id, slot stats and history per scenario, scenario rows and versions. Each
-  method filters by its arguments (id subsets, scenario id, pagination and
-  filters as the SQL does). This matters because `useRunAnalysis` fetches in
-  data-dependent batches; replaying recorded calls would break whenever that
-  walk changes. Methods whose answer the snapshot does not hold throw a clear
-  `DemoUnsupported` error rather than returning empty data.
+  `DemoSnapshot` of **precomputed answers keyed by the query's natural key**,
+  not recorded calls and not re-implemented SQL:
+  - `attempts: Record<fileStem, Attempt>`
+  - `scoringInputs`, `killDetail: Record<runId, …>` — the methods take an id
+    list and rebuild a `Map` of the ids present, exactly like the SQL `WHERE id
+    = ANY(…)`. This is the only "filtering" the source does, and it is why
+    `useRunAnalysis`'s data-dependent batching works unchanged.
+  - `scenarioRuns`, `slotStats`, `history: Record<scenarioId, …[]>`
+  - `scenarios: Record<hash, Scenario>`, `versions: Record<name, …[]>`
 
-`snapshotSource` must not import anything under `src/db/`.
+  A key the snapshot does not hold returns what the SQL would return for an
+  unknown key (`null`, `[]`, or a `Map` without it). The snapshot holds every
+  run of the demo set in full; nothing is trimmed, because a missing input would
+  make baseline and recent selection differ from the real app.
+
+Query results are JSON-safe apart from the two `Map`s: dates are already ISO
+strings and ticks are plain `number[]`. The snapshot stores those as records
+and `snapshotSource` rebuilds the `Map`s.
+
+`source-snapshot.ts` must not import anything under `src/db/`.
 
 ### D2. Injecting the source
 
@@ -110,59 +120,80 @@ useSource(): SourceApi
 - `App.vue` provides the pg-backed source: `source` follows `useDb().pg`,
   `revision` is `useImport().revision`. Every view renders under `App.vue`, so
   existing components need no provider change.
-- Composables used by About — `useRunAnalysis`, `useScenario` and anything
-  they call — switch from `useDb()`/`useImport()` to `useSource()`. Their watch
-  lists change from `[pg, revision]` to `[source, revision]`. Other composables
-  may migrate too but are not required to.
-- The About view provides a snapshot source whose `revision` never changes.
+- `useRunAnalysis` and `useScenario` switch from `useDb()`/`useImport()` to
+  `useSource()`. Their watch lists change from `[pg, revision]` to
+  `[source, revision]`. No other composable migrates in this work.
+- **Vue's `inject` never sees the calling component's own `provide`.** So
+  `AboutView.vue` provides the snapshot source and renders the charts through a
+  child, `AboutDemo.vue`, which is where `useRunAnalysis`, `useScenario` and
+  the chart composables are called. A test mounts `AboutView` with a pg source
+  that throws on any call and asserts it is never called.
 
-`useSource.ts` must not import `useDb` or `db/client`, so About's chunk stays
-free of them. There is no default: `useSource()` without a provider throws.
-`App.vue` always provides the pg source; About provides its own, which
-overrides `App.vue`'s for its subtree. (The app shell still opens the database
-in the background on About, as it does today; About simply never waits on it.)
+`useSource.ts` must not import `useDb` or `db/client`. There is no default:
+`useSource()` without a provider throws.
 
-### D3. Chart assembly as composables
+### D3. Chart assembly as composables, and settings out of the loaders
 
-- **`useRunCharts(analysis, baseline, options)`** — extracted from
-  `RunDetail.vue`: `chart` (`chartData`), `readoutAt`, `timeAt`, encounters and
-  `spans`, bot `colors`, bot `table`, `chartBaseline`, `chartRanks`, `layers`.
-  `options` carries the layer toggles and pace window as refs, so the Run view
-  passes its persisted `settings` and About passes fixed values.
-  `RunDetail.vue` keeps its template, loading/stale handling and settings
-  controls, and calls `useRunCharts` for everything it passes to the chart and
-  table. Behaviour is unchanged.
-- **Progression props** — the parts of `ProgressPanel.vue` that turn
-  `ScenarioData` into `ProgressChart` props for the Overall tab (x, y, best,
-  median, `medianFull`, breaks, colours, `tipFor`, `formatY`, ranks) move to
-  `useProgressChart(data, options)`. `ProgressPanel` keeps tabs, axis toggle,
-  legend and bot tabs.
+**`useRunAnalysis` stops owning chart settings.** Today it creates
+`aimcurve.run-chart` via `useStorage`, which writes defaults on first read, and
+reads `settings.option` for the baseline. It instead takes
+`option: Ref<BaselineOption>` as a parameter and no longer returns `settings`.
+`RunDetail.vue` owns the `useStorage` call and passes `option` in.
 
-About must not read or write the user's persisted chart settings
-(`aimcurve.run-chart`) or axis choice (`aimcurve.scenario-axis`). It may read
-`aimcurve.benchmark-pick` through `useBenchmarkRank` but must not write it; if
-`useBenchmarkRank` writes on read, About passes a fixed benchmark instead.
+**`useBenchmarkRank` takes its picks store.** Today `usePicks()` calls
+`useStorage('aimcurve.benchmark-pick', {})`, which also writes on read. It gains
+an optional `picks: Ref<Record<string, number | null>>` parameter; the app
+passes nothing (persisted, as today), About always passes `ref({})` so the
+default benchmark is used and nothing is written.
+
+- **`useRunCharts(analysis, baseline, bench, options)`** — extracted from
+  `RunDetail.vue`: `chart` (`chartData`), `readoutAt`, `timeAt`, engagements,
+  encounters and `spans`, bot `colors`, bot `table`, `chartBaseline`,
+  `chartRanks`, `layers`, **and the bot hover/pin highlight state** (`active`,
+  `pinned`, the highlighted encounters, and the hover/toggle handlers Beat 2
+  needs). `bench` is a `useBenchmarkRank` result passed in. `options` carries
+  layer toggles and pace window as refs: the Run view passes its persisted
+  settings, About passes constants. `RunDetail.vue` keeps its template,
+  loading/stale handling and settings controls. Behaviour is unchanged.
+- **`useProgressChart(data, { activeTab, bots, bench, dateAxis })`** — the
+  prop assembly from `ProgressPanel.vue` (`series`, `lines`, `top`, `ranks`,
+  x, breaks, colours, `tipFor`, `formatY`), which branches on the active tab
+  and bot series, so those are inputs, not assumptions. `ProgressPanel` keeps
+  the tabs, its persisted `aimcurve.scenario-axis` toggle, legend and bot
+  loading. About passes the Overall tab, `bots: null` and
+  `dateAxis: ref(true)` (two weeks of dates read better than attempt numbers).
+
+Net rule, tested: rendering About writes no `localStorage` key except
+`aimcurve.seen-about`.
 
 ### D4. The demo snapshot
 
 - **Source files:** the 39 completed Air Spectral Easy runs (2026-09-03 to
-  2026-09-18, all with `.perf`) move from the gitignored raw dump into
-  `test/fixtures/demo/{stats,performances}/`, committed through the existing
-  Git LFS rules (extend `.gitattributes` to cover `demo/`). About 300 KB.
-  A `test/fixtures/demo/README.md` states what the set is for.
-- **Generation:** `scripts/gen-demo.ts` creates an in-memory PGlite (as
-  `test/helpers/db.ts` does), applies migrations, runs the real ingest
-  (`buildChunk` → `applyChunk`) over the demo files, then calls the real query
-  functions to fill a `DemoSnapshot`, and writes
-  `src/data/demo-snapshot.json` (gitignored, generated).
-- **When:** `pnpm build` and `pnpm dev` run it first when the output is missing
-  or older than any demo file or `src/db/sql/*` (a `predev`/`prebuild` script,
-  or a small Vite plugin — implementer's choice). CI builds regenerate it, so
-  the snapshot cannot drift from the ingest and query code.
-- **Loading:** the About view imports the JSON dynamically, so it is its own
-  chunk and loads only on About. Target under 300 KB gzipped; if the raw JSON
-  is far larger, trim per-tick arrays to the runs About actually charts plus
-  what their baseline/recent walk needs, and document the trim.
+  2026-09-18, all with `.perf`) are copied from the gitignored raw dump into
+  `test/fixtures/demo/{stats,performances}/`, committed through Git LFS
+  (extend `.gitattributes` to cover `demo/`). About 300 KB. A
+  `test/fixtures/demo/README.md` states what the set is for.
+- **Generation is a vitest file snapshot.** `src/lib/demo/snapshot.test.ts`
+  makes a test PGlite (`makeTestDb`), runs the real ingest (`buildChunk` →
+  `applyChunk`) over the demo files, fills a `DemoSnapshot` by calling the real
+  query functions, and asserts
+  `expect(json).toMatchFileSnapshot('../../data/demo-snapshot.json')`.
+  Running inside vitest is required: migrations use `import.meta.glob` and
+  ingest imports `?raw` SQL, both Vite-only.
+- **Committed, drift-checked.** `src/data/demo-snapshot.json` is committed
+  (not LFS, so the deploy checkout needs no LFS), marked
+  `linguist-generated -diff` in `.gitattributes`. `pnpm gen:demo` is
+  `vitest run -u src/lib/demo/snapshot.test.ts`. Any change to ingest,
+  migrations, queries or the demo files that alters the data fails `pnpm test`
+  in CI until the snapshot is regenerated and committed. A fresh clone
+  typechecks, tests and builds with no generation step.
+- **Loud failure.** The test asserts the files are real (not LFS pointer
+  files) and that exactly 39 completed runs were ingested, before comparing.
+- **Loading:** the demo view imports the JSON dynamically, so it is its own
+  chunk and loads only on About. The JSON is written compactly (no
+  indentation) with numbers as the queries return them. Expect roughly
+  1–2 MB raw, a few hundred KB gzipped; if it lands far above 500 KB gzipped,
+  that is a finding to raise, not a reason to trim silently.
 
 ### D5. The About page
 
@@ -198,19 +229,31 @@ mistakes it for their own runs. The pinned run is a named constant
 clearest early-lead/late-loss shape.
 
 Loading: the page shell and copy render immediately; charts show a
-chart-shaped placeholder until the snapshot chunk arrives. A failed chunk load
+chart-shaped placeholder until **both** the snapshot chunk and the benchmark
+data have arrived, so rank bands never pop in after the chart. A failed load
 shows a one-line error with a retry, and the CTAs still work.
+
+Bandwidth: `index.html` loads `src/db/preload.ts`, which starts the PGlite wasm
+download (~16 MB) on every page. When the landing URL is `#/about` or
+`shouldShowAbout` would redirect, `preload.ts` skips its prefetch so the
+snapshot chunk is not competing with it. `App.vue` still opens the database
+after mount as it does today; if About's charts visibly wait on bandwidth in
+the manual check, deferring that open until leaving About is a follow-up, not
+part of this work.
 
 Narrow screens: beats stack; charts take full width; the bot table scrolls
 horizontally, per the existing responsive rules.
 
 App bar: an **About** link at the right, beside the import control, styled as
 a quiet text link rather than a primary tab. `document.title` is
-`About — aimcurve`.
+`About — aimcurve`, set by a new `about` branch in `App.vue`'s `afterEach`
+(which otherwise falls through to "Run — aimcurve").
 
 ### D6. First-visit redirect
 
-A `router.beforeEach` guard, on the **initial** navigation only:
+A `router.beforeEach` guard registered at module scope beside `App.vue`'s
+`afterEach`, acting only on the **initial** navigation
+(`from === START_LOCATION`):
 
 - If the target is the root run route with no query, and the visitor has not
   been marked as having seen About, redirect to `#/about`.
@@ -221,10 +264,15 @@ A `router.beforeEach` guard, on the **initial** navigation only:
   there.
 - Deep links (`#/scenario/…`, `#/?run=…`, `#/data`) are never redirected.
 - All storage access is wrapped in try/catch; if storage throws, no redirect.
+- Unknown paths hit the catch-all redirect to `run` first, so a first-time
+  visitor on `#/garbage` also lands on About. That is intended.
+- No interaction with `useSelection`'s remembered Run route: it records only
+  visits to the `run` route, and a redirected visit never reaches it.
 
 The guard is synchronous and runs before any database access, so a first-time
-visitor sees About with no wait. The pure decision lives in a function
-`shouldShowAbout(target, keys)` for testing.
+visitor sees About with no wait. The pure decision lives in
+`shouldShowAbout(target, keys)` in `src/lib/about.ts` (no Vue, no storage), so
+both the guard and `preload.ts` can call it and tests can cover it.
 
 ### D7. Link-preview card
 
@@ -241,17 +289,21 @@ In `index.html`:
 - `theme-color` — the app's accent, used by Discord for the embed stripe.
 - `<link rel="canonical">`.
 
-Absolute URLs come from a `%SITE_URL%` placeholder replaced by a small inline
-plugin in `vite.config.ts` (`transformIndexHtml`), reading
-`process.env.SITE_URL` with default `https://voidfill.github.io/aimcurve/`.
-A custom domain later means setting one variable in the deploy workflow.
+Absolute URLs use Vite's built-in `%VITE_SITE_URL%` HTML replacement. A
+committed `.env` cannot hold the default (`.env` is gitignored), so
+`vite.config.ts` sets
+`process.env.VITE_SITE_URL ??= 'https://voidfill.github.io/aimcurve/'` before
+config resolution. The value always ends in `/`, and tags join paths without a
+leading slash: `%VITE_SITE_URL%og.png`. A custom domain later means setting
+`VITE_SITE_URL` in the deploy workflow.
 
 **`public/og.png`** — 1200×630, committed. Composition: the Beat 1 pace chart
 cropped to its most dramatic stretch (rank bands, both accumulated lines, the
 gap fill) on the app background, with the wordmark and the pitch line. Made by
-rendering a card-sized layout of the About chart and screenshotting it (a
-`?card` query on `#/about` that hides everything but the composition, or a
-one-off dev-only route — implementer's choice), then committing the PNG.
+screenshotting a **dev-only** route (`#/dev/card`, registered only when
+`import.meta.env.DEV`) that renders just that composition at 1200×630, then
+committing the PNG. A dev-only route rather than a query on `#/about`, so
+making the card never sets `aimcurve.seen-about` or ships to users.
 Regenerated by hand when the chart look changes materially. Under 300 KB.
 
 ### D8. README
@@ -272,20 +324,25 @@ Rewritten product-first:
 
 ## Testing
 
-- **Source parity:** a vitest suite ingests the demo files into a test PGlite,
-  builds a snapshot with the generator's code, and asserts
-  `snapshotSource(snapshot).m(args)` deep-equals `pgSource(pg).m(args)` for
-  each method over representative arguments (all ids, a subset, an unknown id,
-  pagination edges, filters).
-- **Snapshot generator:** runs in the same suite; asserts the snapshot holds 39
-  runs and the pinned `DEMO_RUN_STEM` exists and has a curve.
+- **Snapshot and drift:** `src/lib/demo/snapshot.test.ts` (D4) regenerates the
+  snapshot and matches the committed file; it also asserts real files, 39
+  runs, and that `DEMO_RUN_STEM` exists and has a curve.
+- **Source parity:** in the same suite, `snapshotSource(snapshot).m(args)`
+  deep-equals `pgSource(pg).m(args)` for each of the eight methods, including
+  the rebuilt `Map`s, over all ids, a subset, and an unknown id or key.
+- **Analysis parity:** `useRunAnalysis` driven by each source for
+  `DEMO_RUN_STEM` yields the same `current`, baseline and `recent` curves.
 - **Redirect:** unit tests for `shouldShowAbout` — fresh visitor, flag set,
   legacy key present, deep link, query present, storage throwing.
 - **Extraction:** existing `RunDetail`/`ProgressPanel`-adjacent tests stay
   green; `useRunCharts` gets a test that its output for the demo run matches
   what `chartData` etc. produce directly.
-- **Import graph:** a test (or build assertion) that the About chunk's module
-  graph contains neither `src/db/client.ts` nor `@electric-sql/pglite`.
+- **About isolation:** mounting `AboutView` under a provider whose pg source
+  throws on every call renders the charts without calling it (D2), and writes
+  no `localStorage` key but `aimcurve.seen-about` (D3).
+- **Import graph:** a build assertion that the modules bundled into About's
+  own lazy chunks (excluding the shared entry, which legitimately holds
+  `useDb`) include neither `src/db/client.ts` nor `@electric-sql/pglite`.
 - **Manual:** About renders with no network wait for the database (check with
   OPFS empty and throttled CPU); Discord and X card validators show the image
   and text for the deployed URL.
@@ -293,9 +350,11 @@ Rewritten product-first:
 ## Delivery order
 
 1. `DataSource`, `pgSource`, `useSource`; migrate `useRunAnalysis` and
-   `useScenario`. App unchanged in behaviour.
+   `useScenario`; move settings out of `useRunAnalysis` and the picks store
+   into a `useBenchmarkRank` parameter. App unchanged in behaviour.
 2. Extract `useRunCharts` and `useProgressChart`.
-3. Demo fixtures, generator, `snapshotSource`, parity tests.
+3. Demo fixtures, snapshot test and committed JSON, `snapshotSource`, parity
+   tests, `gen:demo` script.
 4. `AboutView`, route, app-bar link, first-visit redirect.
 5. `index.html` meta, `SITE_URL` plugin, `og.png`.
 6. README and screenshots.
