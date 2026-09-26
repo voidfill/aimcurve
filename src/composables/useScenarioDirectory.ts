@@ -71,6 +71,7 @@ export interface DirectoryRouteApi {
 	/** Typing replaces the history entry rather than pushing one. */
 	setQ: (q: string) => void;
 	setSort: (key: SortKey) => void;
+	setBench: (bench: number | null) => void;
 }
 
 function create(): DirectoryRouteApi {
@@ -96,6 +97,7 @@ function create(): DirectoryRouteApi {
 		rememberedRoute: computed(() => remembered.value),
 		setQ: (q) => go({ ...current.value, q }, true),
 		setSort: (key) => go({ ...current.value, ...nextSort(current.value, key) }, true),
+		setBench: (bench) => go({ ...current.value, bench }, true),
 	};
 }
 

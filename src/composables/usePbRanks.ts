@@ -1,46 +1,50 @@
 /**
- * Each directory row's PB rank (L3 of the scenarios directory design), from
- * the same snapshot, picks and lookup as Run and the scenario page. Every row
- * is unranked-blank until the snapshot has loaded, and stays so if it fails.
+ * Each directory row's PB rank (L3, L8 of the scenarios directory design),
+ * from the same snapshot, picks and lookup as Run and the scenario page, or
+ * from the selected benchmark. Every row is blank until the snapshot has
+ * loaded, and stays so if it fails.
  */
-import { computed, shallowRef, type ComputedRef, type Ref } from 'vue';
-import { candidates, pick } from '../lib/benchmarks/pick';
-import { rankOf } from '../lib/benchmarks/rank';
+import { computed, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
-import type { DirectoryRow } from '../lib/scenario/directory';
+import { type DirectoryRow, hasBenchmark, type PbRank, pbRanks } from '../lib/scenario/directory';
 import { loadSnapshot, storedPicks, usePicks } from './useBenchmarkRank';
 
-export interface PbRank {
-	/** The rank index; −1 below the first threshold. */
-	k: number;
-	name: string;
-	color: string | null;
+export interface PbRanksApi {
+	/** Null until loaded, and after a failed load. */
+	snapshot: ShallowRef<Snapshot | null>;
+	/** Whether the load has settled, either way. */
+	settled: Ref<boolean>;
+	/** The requested benchmark when the snapshot has it; otherwise null, for all scenarios. */
+	bench: ComputedRef<number | null>;
+	/** Hash → the PB's rank; absent without a benchmark or a PB. */
+	ranks: ComputedRef<Map<string, PbRank>>;
 }
 
-/** Hash → the PB's rank; absent without a picked benchmark or a PB. */
-export function usePbRanks(rows: Ref<readonly DirectoryRow[]>): ComputedRef<Map<string, PbRank>> {
+/** `requested` is the URL's benchmark ID, which may be unknown to the snapshot. */
+export function usePbRanks(rows: Ref<readonly DirectoryRow[]>, requested: Ref<number | null>): PbRanksApi {
 	const snapshot = shallowRef<Snapshot | null>(null);
+	const settled = ref(false);
 	const picks = usePicks();
 
 	loadSnapshot().then(
-		(loaded) => (snapshot.value = loaded),
-		(err: unknown) => console.error('The benchmark snapshot could not be loaded', err),
+		(loaded) => {
+			snapshot.value = loaded;
+			settled.value = true;
+		},
+		(err: unknown) => {
+			console.error('The benchmark snapshot could not be loaded', err);
+			settled.value = true;
+		},
 	);
 
-	return computed(() => {
-		const ranks = new Map<string, PbRank>();
-		const snap = snapshot.value;
-		if (snap === null) return ranks;
-		const stored = storedPicks(picks.value);
-		for (const row of rows.value) {
-			if (row.pb === null) continue;
-			const id = stored[row.name.trim()];
-			const c = pick(candidates(snap, row.name), typeof id === 'number' || id === null ? id : undefined);
-			if (c === null) continue;
-			const { k } = rankOf(c.thresholds, row.pb);
-			const rank = c.benchmark.ranks[k];
-			ranks.set(row.hash, k < 0 || rank === undefined ? { k: -1, name: 'Unranked', color: null } : { k, name: rank.name, color: rank.color });
-		}
-		return ranks;
+	const bench = computed(() => {
+		const id = requested.value;
+		return id !== null && snapshot.value !== null && hasBenchmark(snapshot.value, id) ? id : null;
 	});
+
+	const ranks = computed(() =>
+		snapshot.value === null ? new Map<string, PbRank>() : pbRanks(rows.value, snapshot.value, storedPicks(picks.value), bench.value),
+	);
+
+	return { snapshot, settled, bench, ranks };
 }

@@ -6,9 +6,8 @@
  * copy-link, but it is out of the tab order so each row is one stop.
  */
 import { useRouter } from 'vue-router';
-import type { PbRank } from '../composables/usePbRanks';
 import { formatScore, formatSigned, formatValue, timeFormat } from '../lib/run/format';
-import type { DirectoryRow, SortDir, SortKey } from '../lib/scenario/directory';
+import type { DirectoryRow, PbRank, SortDir, SortKey } from '../lib/scenario/directory';
 import { formatSince } from '../lib/scenario/format';
 
 defineProps<{
@@ -16,6 +15,8 @@ defineProps<{
 	ranks: ReadonlyMap<string, PbRank>;
 	sort: SortKey;
 	dir: SortDir;
+	/** The selected benchmark's label, when one overrides the picks (L8). */
+	benchLabel: string | null;
 }>();
 
 const emit = defineEmits<{ sort: [key: SortKey] }>();
@@ -69,6 +70,7 @@ function ariaSort(key: SortKey, sort: SortKey, dir: SortDir) {
 						scope="col"
 						:class="{ left: col.left }"
 						:aria-sort="ariaSort(col.key, sort, dir)"
+						:title="col.key === 'rank' ? (benchLabel ? `Ranks on ${benchLabel}` : 'Ranks on each scenario’s picked benchmark') : undefined"
 					>
 						<button type="button" :class="{ active: col.key === sort }" @click="emit('sort', col.key)">
 							{{ col.label }}<span class="arrow" aria-hidden="true">{{
