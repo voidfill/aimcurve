@@ -23,7 +23,7 @@ const { state } = useImport();
 			<h1 id="empty-heading">No runs yet</h1>
 			<p>aimcurve reads the stats Kovaak's writes after every run. Import them to see your progress.</p>
 			<RouterLink class="cta" :to="{ name: 'data' }">Import your stats</RouterLink>
-			<p class="fine">Everything stays in this browser. Nothing is uploaded.</p>
+			<p class="fine">Fully local: your stats stay in this browser. No server, no account, no tracking.</p>
 		</template>
 	</section>
 </template>

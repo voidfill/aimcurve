@@ -51,7 +51,7 @@ function onFiles(event: Event): void {
 			<h2 id="controls-heading">Import your stats</h2>
 			<p>
 				Point aimcurve at the Kovaak's folder holding <code>stats</code> and
-				<code>performances</code>. Everything stays in this browser — nothing is uploaded.
+				<code>performances</code>. Fully local: your stats stay in this browser. No server, no account, no tracking.
 			</p>
 		</div>
 

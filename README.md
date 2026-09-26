@@ -1,27 +1,71 @@
 # aimcurve
 
-Static Vue 3 single-page application with a client-side Postgres (PGlite) and protobuf codegen.
+**See where your KovaaK's runs are won and lost.**
 
-## Setup
+aimcurve reads the stats KovaaK's already saves after every run and shows how each one
+unfolded: where you pulled ahead, which bot cost you, and whether you are actually
+getting better. It runs entirely in your browser.
+
+**[Open aimcurve →](https://voidfill.github.io/aimcurve/)**
+
+![aimcurve's pace chart: a run against its personal best over benchmark rank bands](public/og.png)
+
+## What it shows
+
+**Where the run slipped.** One chart per run: your projected final result as the run
+unfolds, against your previous best, over the benchmark's rank bands. Hover anywhere
+for the exact difference at that moment.
+
+![The pace chart of a run that led its personal best at halfway and finished behind](docs/images/pace.png)
+
+**The bot that costs you.** Every bot encounter, timed against the same baseline run,
+with the biggest losses marked. Hover a row to light its encounters up on the chart.
+
+![The per-bot splits table](docs/images/bots.png)
+
+**Whether you are improving.** Every run of a scenario over time: each run a dot, your
+best so far and the median of your last ten as lines, so one lucky run cannot fake
+progress.
+
+![Two weeks of runs on one scenario, with the best-so-far and median lines](docs/images/progress.png)
+
+## How to use it
+
+1. Open [aimcurve](https://voidfill.github.io/aimcurve/).
+2. Import the KovaaK's folder holding `stats` and `performances`.
+3. After a session, import again to add the new runs.
+
+## Privacy
+
+Fully local. Your files are read and stored in your browser; there is no backend, no
+account and no analytics. That also means your data does not sync between devices.
+
+## Development
+
+A static Vue 3 single-page application with a client-side Postgres (PGlite) and protobuf
+codegen.
+
+### Setup
 
 ```sh
 nix develop      # node 24 LTS + corepack; pnpm pinned by package.json
 pnpm install
 ```
 
-## Scripts
+### Scripts
 
 | script             | what                                                   |
 | ------------------ | ------------------------------------------------------ |
 | `pnpm dev`         | vite dev server (port 4321, strict)                      |
 | `pnpm build`       | static build to `dist/`                                 |
 | `pnpm check`       | `vue-tsc --noEmit` (needs TypeScript 6.x, see below)     |
-| `pnpm test`        | vitest, node environment                                |
+| `pnpm test`        | vitest, node environment (view suites opt into happy-dom) |
 | `pnpm gen:proto`   | buf + protoc-gen-es → `src/gen/`                        |
 | `pnpm gen:benchmarks` | refresh `src/data/benchmarks.json` from Evxl and KovaaK's |
+| `pnpm gen:demo`    | regenerate `src/data/demo-snapshot.json`, the About page's sample data |
 | `pnpm bench`       | vitest benchmarks (ingest throughput)                   |
 
-## Layout
+### Layout
 
 ```
 src/lib/     core calculation logic — pure, runs in the browser and in vitest
@@ -31,7 +75,7 @@ src/views/       top-level routed views
 src/components/  shared UI components
 src/composables/ shared reactive logic (Vue composables)
 test/helpers shared test helpers (node-only)
-test/fixtures  curated/ is committed (Git LFS), raw/ is the gitignored dump
+test/fixtures  curated/ and demo/ are committed (Git LFS), raw/ is the gitignored dump
 docs/        reverse-engineered format and ingest notes
 ```
 
@@ -45,7 +89,7 @@ browser).
 Tests sit next to their source (`src/**/*.test.ts`); `test/` holds only helpers and
 fixtures, plus their own tests.
 
-## Fixtures
+### Fixtures
 
 `test/fixtures/raw/` is the full KovaaK's dump — ~4600 files, gitignored. Copy an
 install's `performances/` and `stats/` into it to enable the sweep tests.
@@ -56,6 +100,12 @@ files and the suite fails. Everything that must pass on a fresh clone reads from
 there; see [`curated/README.md`](test/fixtures/curated/README.md) for what each file
 pins down and what earns a new one a place. Sweeps over the full dump guard on
 `raw.available`:
+
+`test/fixtures/demo/` holds the About page's 39 sample runs, also in LFS. The About
+page never opens the database: `pnpm test` ingests these into a test PGlite and
+checks the committed `src/data/demo-snapshot.json` still matches what the real
+ingest and queries produce. After changing ingest, migrations or queries, run
+`pnpm gen:demo` and commit the result.
 
 ```ts
 import { curated, raw } from '../../test/helpers/fixtures';
@@ -71,7 +121,7 @@ Pairing the two is not as simple as it looks: a run can produce a CSV with no `.
 the two filenames can disagree by a second, and `Challenge Start` is not a unique key.
 [`docs/ingest.md`](docs/ingest.md) covers all of it.
 
-## Database
+### Database
 
 No server. `src/db/client.ts` runs PGlite in a dedicated worker (`src/db/worker.ts`) on
 an OPFS access-handle pool in the browser; tests open an in-memory instance. Both apply
@@ -107,12 +157,12 @@ means discarding all imported run history. Five conditions trigger this:
 Hashing normalizes line endings and trims trailing whitespace first, so a CRLF
 checkout does not itself trip rule 2.
 
-## Protobuf
+### Protobuf
 
 `proto/*.proto` → `pnpm gen:proto` → `src/gen/*_pb.ts` (committed, so a fresh clone needs
 no codegen). Uses `@bufbuild/protobuf`'s schema API: `create`, `toBinary`, `fromBinary`.
 
-## Notes
+### Notes
 
 - `typescript` is pinned to 6.x: `vue-tsc`'s own `peerDependencies` accept
   `typescript >=5.0.0` with no upper bound, so nothing in `vue-tsc` itself forces this
