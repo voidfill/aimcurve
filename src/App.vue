@@ -30,14 +30,20 @@ router.afterEach((to, from) => {
 </script>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppHeader from './components/AppHeader.vue';
 import DropImport from './components/DropImport.vue';
 import { useDb } from './composables/useDb';
 import { useImport } from './composables/useImport';
+import { provideSource } from './composables/useSource';
+import { pgSource } from './lib/data-source';
 
-const { error: dbError } = useDb();
-const { state } = useImport();
+const { pg, error: dbError } = useDb();
+const { state, revision } = useImport();
+
+// Every view reads the analysis data from the database; About overrides this
+// with its snapshot for its own subtree.
+provideSource({ source: computed(() => (pg.value ? pgSource(pg.value) : null)), revision });
 
 /**
  * One polite live region, for things worth interrupting nothing to say: an

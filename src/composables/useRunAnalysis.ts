@@ -3,13 +3,14 @@
  * recent set, and the bot detail. See docs/superpowers/specs/2026-09-24-run-view-design.md (R8).
  *
  * Loading settles every baseline option at once, so switching the option in the
- * chart header re-resolves synchronously and never refetches. Curves are
+ * chart header re-resolves synchronously and never refetches. The option and
+ * the other chart settings belong to the caller: the Run view persists them,
+ * the About page fixes them. Curves are
  * memoised by file stem in the scoring model; inputs and kill detail are cached
  * per load, so an import or a different run reads them afresh.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import { useStorage } from '@vueuse/core';
-import type { PGliteInterface } from '@electric-sql/pglite';
 import {
 	type Baseline,
 	type BaselineOption,
@@ -21,11 +22,11 @@ import {
 	walkOrder,
 } from '../lib/run/baseline';
 import { fixedWindow, type KillDetail } from '../lib/run/bots';
-import { type Attempt, getKillDetail, getScoringInputs, getSlotStats, listScenarioRuns } from '../lib/run/queries';
+import type { DataSource } from '../lib/data-source';
+import type { Attempt } from '../lib/run/queries';
 import { classify, comparable, curveFor, type RunCurve, type ScoringInput } from '../lib/scoring';
 import { errorText } from '../lib/error';
-import { useDb } from './useDb';
-import { useImport } from './useImport';
+import { useSource } from './useSource';
 
 export interface ChartSettings {
 	local: boolean;
@@ -55,7 +56,7 @@ const DEFAULTS: ChartSettings = {
  * One key for every chart display choice, persisted per browser. Storage is
  * left to VueUse's default, which survives blocked site data (see `usePicks`).
  */
-function useChartSettings(): Ref<ChartSettings> {
+export function useChartSettings(): Ref<ChartSettings> {
 	return useStorage<ChartSettings>('aimcurve.run-chart', { ...DEFAULTS }, undefined, { mergeDefaults: true });
 }
 
@@ -85,7 +86,6 @@ export interface RunAnalysisApi {
 	error: Ref<string | null>;
 	analysis: Ref<Analysis | null>;
 	baseline: ComputedRef<Baseline | null>;
-	settings: Ref<ChartSettings>;
 	retry: () => void;
 }
 
@@ -105,7 +105,7 @@ class Loader {
 	readonly kills = new Map<string, KillDetail | null>();
 
 	constructor(
-		private readonly pg: PGliteInterface,
+		private readonly source: DataSource,
 		private readonly runs: readonly ScenarioRun[],
 	) {}
 
@@ -114,7 +114,7 @@ class Loader {
 		const missing = runs.filter((run) => run.hasPerf && !this.inputs.has(run.fileStem));
 		if (missing.length === 0) return;
 		const ids = missing.map((run) => run.id);
-		const [inputs, kills] = await Promise.all([getScoringInputs(this.pg, ids), getKillDetail(this.pg, ids)]);
+		const [inputs, kills] = await Promise.all([this.source.getScoringInputs(ids), this.source.getKillDetail(ids)]);
 		for (const run of missing) {
 			this.inputs.set(run.fileStem, inputs.get(run.id) ?? null);
 			this.kills.set(run.fileStem, kills.get(run.id) ?? null);
@@ -137,10 +137,8 @@ class Loader {
 	}
 }
 
-export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
-	const { pg } = useDb();
-	const { revision } = useImport();
-	const settings = useChartSettings();
+export function useRunAnalysis(selected: Ref<Attempt | null>, option: Ref<BaselineOption>): RunAnalysisApi {
+	const { source, revision } = useSource();
 
 	const state = ref<AnalysisState>('idle');
 	const error = ref<string | null>(null);
@@ -148,7 +146,7 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 	let gen = 0;
 
 	async function run(attempt: Attempt | null): Promise<void> {
-		const handle = pg.value;
+		const handle = source.value;
 		const mine = ++gen;
 		if (attempt === null || handle === null) {
 			analysis.value = null;
@@ -161,8 +159,8 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 		if (analysis.value?.inspected.fileStem !== attempt.fileStem) state.value = 'loading';
 		try {
 			const [runs, slots] = await Promise.all([
-				listScenarioRuns(handle, attempt.scenarioId),
-				getSlotStats(handle, attempt.scenarioId),
+				handle.listScenarioRuns(attempt.scenarioId),
+				handle.getSlotStats(attempt.scenarioId),
 			]);
 			if (mine !== gen) return;
 			const inspected = runs.find((r) => r.fileStem === attempt.fileStem) ?? {
@@ -235,13 +233,13 @@ export function useRunAnalysis(selected: Ref<Attempt | null>): RunAnalysisApi {
 		}
 	}
 
-	watch([selected, pg, revision], () => void run(selected.value), { immediate: true });
+	watch([selected, source, revision], () => void run(selected.value), { immediate: true });
 
 	const baseline = computed<Baseline | null>(() => {
 		const a = analysis.value;
 		if (a === null) return null;
-		return resolveBaseline(settings.value.option, a.inspected, a.runs, a.current, a.curveOf);
+		return resolveBaseline(option.value, a.inspected, a.runs, a.current, a.curveOf);
 	});
 
-	return { state, error, analysis, baseline, settings, retry: () => void run(selected.value) };
+	return { state, error, analysis, baseline, retry: () => void run(selected.value) };
 }

@@ -14,7 +14,7 @@ import RunHeader from './RunHeader.vue';
 import StatsStrip from './StatsStrip.vue';
 import UnifiedChart, { type ChartLayers, type ChartRanks } from './UnifiedChart.vue';
 import { useBenchmarkRank } from '../composables/useBenchmarkRank';
-import { useRunAnalysis, type ChartSettings } from '../composables/useRunAnalysis';
+import { type ChartSettings, useChartSettings, useRunAnalysis } from '../composables/useRunAnalysis';
 import { flatReadout } from '../lib/run/baseline';
 import {
 	bestSplits,
@@ -42,14 +42,17 @@ const props = defineProps<{
 	fill?: boolean;
 }>();
 
+const settings = useChartSettings();
 const {
 	state,
 	error,
 	analysis: latest,
 	baseline: latestBaseline,
-	settings,
 	retry,
-} = useRunAnalysis(toRef(props, 'attempt'));
+} = useRunAnalysis(
+	toRef(props, 'attempt'),
+	computed(() => settings.value.option),
+);
 
 /**
  * The attempt on screen. Switching runs keeps the previous one, header, chart
