@@ -6,6 +6,13 @@ handle (IndexedDB) survive restarts.
 
     pnpm dev
 
+## Preview assets
+
+The About page, the link-preview card (`public/og.png`) and the README
+screenshots come from bundled sample runs. To refresh any of them, follow
+[docs/preview-assets.md](docs/preview-assets.md): `pnpm gen:demo-fixtures`,
+`pnpm gen:demo`, then `pnpm shots` against the dev server.
+
 ## Documentation
 
 Consult these guides before working on related tasks:

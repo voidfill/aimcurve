@@ -38,7 +38,7 @@ export interface SelectionApi {
 	 * survive the Run view unmounting on a trip to Data.
 	 */
 	latestSeen: Ref<AttemptCursor | null>;
-	/** The last Run location visited, for the header and Return to Run. */
+	/** The last Run location visited, for the header and the Data page's Back to Run. */
 	rememberedRunRoute: ComputedRef<RouteLocationRaw>;
 	/** The link an attempt row points at: selection plus the current filter. */
 	linkTo: (stem: string) => RouteLocationRaw;

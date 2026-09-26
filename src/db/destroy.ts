@@ -1,11 +1,14 @@
 /**
- * Putting this browser back to its first-visit state. Development only.
+ * Putting this browser back to its first-visit state: the Data page's
+ * "Delete local data". Only aimcurve's own stores; the user's KovaaK's files
+ * are never touched, and neither is anything else on the origin.
  *
  * Three stores persist independently and none of them knows about the others:
  * the OPFS data directory PGlite runs on, the IndexedDB database holding the
- * picked folder handle, and the localStorage record of the last import. A
- * reset that clears two of the three is worse than none at all — the app comes
- * back claiming a connection or an import that no longer has data behind it.
+ * picked folder handle, and aimcurve's localStorage keys (the import record,
+ * display settings, and whether About was seen). A reset that clears two of the
+ * three is worse than none at all — the app comes back claiming a connection or
+ * an import that no longer has data behind it.
  *
  * So every step runs even when an earlier one throws, and what failed is
  * returned rather than thrown: the caller reloads the page afterwards, and an
@@ -15,7 +18,7 @@ import { closePg } from './client';
 import { OPFS_DIR } from './opfs';
 import { HANDLE_DB_NAME } from '../lib/ingest/handle-store';
 import { errorText } from '../lib/error';
-import { STORAGE_KEY } from '../lib/run/import-controller';
+import { clearOwnKeys } from '../lib/storage';
 
 /** Empty when everything is gone. Each entry names one store that survived. */
 export type DestroyResult = string[];
@@ -69,9 +72,9 @@ export async function destroyLocalData(): Promise<DestroyResult> {
 	}
 
 	try {
-		localStorage.removeItem(STORAGE_KEY);
+		clearOwnKeys(localStorage);
 	} catch (err) {
-		failed.push(`import record: ${errorText(err)}`);
+		failed.push(`settings: ${errorText(err)}`);
 	}
 
 	return failed;

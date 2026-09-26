@@ -7,22 +7,15 @@
  * page is open updates it in place. Nothing here navigates on a commit: the
  * route is the user's, not the importer's.
  */
-import { computed, defineAsyncComponent } from 'vue';
+import { computed } from 'vue';
 import ConnectionStatus from '../components/ConnectionStatus.vue';
+import DeleteLocalData from '../components/DeleteLocalData.vue';
 import ImportControls from '../components/ImportControls.vue';
 import ImportReport from '../components/ImportReport.vue';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
 import { timeFormat } from '../lib/run/format';
-
-/**
- * Statically false in a production build, so Rollup drops the import and the
- * wipe never ships. A `v-if` alone would still bundle the component.
- */
-const DevReset = import.meta.env.DEV
-	? defineAsyncComponent(() => import('../components/DevReset.vue'))
-	: null;
 
 const { ready, error: dbError, retry: retryDb } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
@@ -43,10 +36,15 @@ function onImportFiles(files: File[]): void {
 
 <template>
 	<div class="data">
-		<div class="head">
-			<h1>Data</h1>
-			<RouterLink :to="rememberedRunRoute">Return to Run</RouterLink>
-		</div>
+		<header class="head">
+			<RouterLink class="back" :to="rememberedRunRoute">← Back to Run</RouterLink>
+			<p class="eyebrow">Your data</p>
+			<h1>Import your stats</h1>
+			<p class="lede">
+				Point aimcurve at the KovaaK's folder holding <code>stats</code> and <code>performances</code>.
+			</p>
+			<p class="fine">Fully local: your stats stay in this browser. No server, no account, no tracking.</p>
+		</header>
 
 		<ConnectionStatus
 			:connection="state.connection"
@@ -69,33 +67,63 @@ function onImportFiles(files: File[]): void {
 			@import-files="onImportFiles"
 		/>
 
-		<component :is="DevReset" v-if="DevReset !== null" />
+		<DeleteLocalData />
 	</div>
 </template>
 
 <style scoped>
+/* The About page's column and type, so the two read as one site. */
 .data {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-6);
-	padding: var(--space-4);
-	max-width: 70rem;
+	max-width: 1080px;
+	margin: 0 auto;
+	padding: clamp(1.5rem, 1rem + 3vw, 3.5rem) clamp(1rem, 0.5rem + 2vw, 2rem) 4rem;
 }
 
 .head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: var(--space-3);
+	max-width: 44rem;
+}
+
+.back {
+	display: inline-block;
+	margin-bottom: var(--space-6);
+	font-size: 0.8125rem;
+	color: var(--color-text-faint);
+	text-decoration: none;
+	transition: color 120ms ease;
+}
+
+.back:hover {
+	color: var(--color-text);
+}
+
+.eyebrow {
+	font: 500 12px/1 var(--font-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--color-accent);
+	margin-bottom: var(--space-3);
 }
 
 h1 {
-	font-size: 1.5rem;
+	font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem);
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	color: var(--color-text-strong);
 }
 
-.muted {
+.lede {
+	margin-top: var(--space-3);
+	font-size: 1.0625rem;
 	color: var(--color-text-muted);
-	font-size: 0.9375rem;
+	max-width: 60ch;
+}
+
+.fine {
+	margin-top: var(--space-2);
+	font-size: 0.8125rem;
+	color: var(--color-text-faint);
 }
 </style>

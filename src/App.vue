@@ -4,6 +4,10 @@
  * document's lifetime, whatever happens to the component.
  */
 import { router } from './router';
+import { firstVisitRedirect, storageKeys } from './lib/about';
+
+// A first-time visitor on the bare root sees About first (D6 of the About design).
+router.beforeEach((to, from) => firstVisitRedirect(to, from, storageKeys()));
 
 router.afterEach((to, from) => {
 	// The page scroller is `main`, not the window, so the router's own scroll
@@ -12,6 +16,10 @@ router.afterEach((to, from) => {
 	if (to.path !== from.path) document.querySelector('#app > main')?.scrollTo(0, 0);
 	if (to.name === 'data') {
 		document.title = 'Data — aimcurve';
+		return;
+	}
+	if (to.name === 'about') {
+		document.title = 'About — aimcurve';
 		return;
 	}
 	if (to.name === 'scenarios') {
@@ -30,14 +38,20 @@ router.afterEach((to, from) => {
 </script>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppHeader from './components/AppHeader.vue';
 import DropImport from './components/DropImport.vue';
 import { useDb } from './composables/useDb';
 import { useImport } from './composables/useImport';
+import { provideSource } from './composables/useSource';
+import { pgSource } from './lib/data-source';
 
-const { error: dbError } = useDb();
-const { state } = useImport();
+const { pg, error: dbError } = useDb();
+const { state, revision } = useImport();
+
+// Every view reads the analysis data from the database; About overrides this
+// with its snapshot for its own subtree.
+provideSource({ source: computed(() => (pg.value ? pgSource(pg.value) : null)), revision });
 
 /**
  * One polite live region, for things worth interrupting nothing to say: an

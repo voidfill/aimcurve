@@ -34,6 +34,12 @@ const hash = computed(() => {
 const { state, error, data, botState, botError, bots, loadBots, retry } = useScenario(hash);
 const hasRuns = useHasRuns();
 
+/**
+ * A working database with no completed run at all: the page is only the empty
+ * state, rendered at the top level like every view's, so it sits where theirs do.
+ */
+const empty = computed(() => dbError.value === null && ready.value && state.value === 'missing' && hasRuns.value === false);
+
 /** The best completed run; a tie goes to the earlier one. */
 const pb = computed<HistoryRun | null>(() => {
 	let best: HistoryRun | null = null;
@@ -90,7 +96,8 @@ watch(
 </script>
 
 <template>
-	<div class="scenario">
+	<EmptyState v-if="empty" />
+	<div v-else class="scenario">
 		<section v-if="dbError !== null" class="notice danger" role="alert">
 			<h1>This scenario is unavailable</h1>
 			<p>The local database could not be opened, so no run can be read.</p>
@@ -107,8 +114,6 @@ watch(
 			<p>{{ error }}</p>
 			<button type="button" @click="retry()">Try again</button>
 		</section>
-
-		<EmptyState v-else-if="state === 'missing' && hasRuns === false" />
 
 		<section v-else-if="state === 'missing'" class="notice" role="alert">
 			<h1>That scenario is not in this browser</h1>

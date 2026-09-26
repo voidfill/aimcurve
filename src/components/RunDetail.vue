@@ -7,30 +7,17 @@
  * and the chart and table wait for the analysis. A later switch holds the
  * previous run until the next is analysed. A failure leaves the header in place.
  */
-import { computed, ref, shallowRef, toRef, watch } from 'vue';
+import { computed, shallowRef, toRef, watch } from 'vue';
 import ChartControls from './ChartControls.vue';
-import BotTable, { type BotTableData } from './BotTable.vue';
+import BotTable from './BotTable.vue';
 import RunHeader from './RunHeader.vue';
 import StatsStrip from './StatsStrip.vue';
-import UnifiedChart, { type ChartLayers, type ChartRanks } from './UnifiedChart.vue';
+import UnifiedChart, { type ChartLayers } from './UnifiedChart.vue';
 import { useBenchmarkRank } from '../composables/useBenchmarkRank';
-import { useRunAnalysis, type ChartSettings } from '../composables/useRunAnalysis';
-import { flatReadout } from '../lib/run/baseline';
-import {
-	bestSplits,
-	botColors,
-	clockRows,
-	type Encounter,
-	type Engagement,
-	encounters,
-	engagements,
-	isClicking,
-	raceRows,
-} from '../lib/run/bots';
-import { type ChartBaseline, chartData } from '../lib/run/chart-data';
+import { type ChartSettings, useChartSettings, useRunAnalysis } from '../composables/useRunAnalysis';
+import { useRunCharts } from '../composables/useRunCharts';
 import { formatScore, formatSigned, formatValue } from '../lib/run/format';
 import type { Attempt } from '../lib/run/queries';
-import { atX, killTimes, paceFor, readout, recentRange, type RunCurve } from '../lib/scoring';
 
 const props = defineProps<{
 	attempt: Attempt;
@@ -42,14 +29,17 @@ const props = defineProps<{
 	fill?: boolean;
 }>();
 
+const settings = useChartSettings();
 const {
 	state,
 	error,
 	analysis: latest,
 	baseline: latestBaseline,
-	settings,
 	retry,
-} = useRunAnalysis(toRef(props, 'attempt'));
+} = useRunAnalysis(
+	toRef(props, 'attempt'),
+	computed(() => settings.value.option),
+);
 
 /**
  * The attempt on screen. Switching runs keeps the previous one, header, chart
@@ -74,14 +64,6 @@ const bench = useBenchmarkRank(
 	computed(() => shown.value.score),
 );
 
-/** The selected ladder and the run's next rank, for the chart's rank layer (B7). */
-const chartRanks = computed<ChartRanks | null>(() => {
-	const c = bench.selected.value;
-	const r = bench.rank.value;
-	if (c === null) return null;
-	return { ranks: c.benchmark.ranks, thresholds: c.thresholds, next: r?.next ?? null };
-});
-
 const ranksDisabled = computed(() =>
 	bench.candidates.value.length === 0
 		? 'This scenario is in no known benchmark'
@@ -90,112 +72,41 @@ const ranksDisabled = computed(() =>
 			: null,
 );
 
-const current = computed(() => analysis.value?.current ?? null);
-const race = computed(() => current.value?.params.kind === 'race');
-const budget = computed(() => (current.value?.params.kind === 'race' ? current.value.params.budget : null));
-
 function update(patch: Partial<ChartSettings>): void {
 	settings.value = { ...settings.value, ...patch };
 }
 
-/** The baseline's curve when it is charted, for everything drawn against it. */
-const baseCurve = computed<RunCurve | null>(() => (baseline.value?.kind === 'charted' ? baseline.value.curve : null));
-
-const chart = computed(() => {
-	const cur = current.value;
-	const a = analysis.value;
-	const b = baseline.value;
-	if (!cur || !a || !b) return null;
-	const w = settings.value.window;
-	const base: ChartBaseline =
-		b.kind === 'charted'
-			? { kind: 'charted', curve: b.curve, pace: paceFor(b.curve, w) }
-			: b.kind === 'flat'
-				? { kind: 'flat', score: b.score }
-				: { kind: 'none' };
-	const recent = a.recent.length > 0 ? recentRange(cur, a.recent) : null;
-	return chartData(cur, paceFor(cur, w), base, recent);
+const {
+	current,
+	race,
+	budget,
+	chart,
+	layers,
+	chartBaseline,
+	chartRanks,
+	readoutAt,
+	timeAt,
+	spans,
+	colors,
+	table,
+	hovered,
+	pinned,
+	highlight,
+	toggle,
+} = useRunCharts(analysis, baseline, bench, {
+	layers: computed<ChartLayers>(() => ({
+		local: settings.value.local,
+		accumulated: settings.value.accumulated,
+		baseline: settings.value.baseline,
+		baseLocal: settings.value.baseLocal,
+		recent: settings.value.recent,
+		ranks: settings.value.ranks,
+	})),
+	window: computed(() => settings.value.window),
 });
 
-/**
- * When each killed bot of a loaded run was engaged, from its kill times and
- * TTK. None in a click scenario: there, the time between kills is aiming at no
- * bot in particular, so neither the chart spans nor the table are drawn.
- */
-function engagedOf(stem: string): Engagement[] {
-	const a = analysis.value;
-	const kills = a?.killsOf(stem);
-	const input = a?.inputOf(stem);
-	if (!kills || !input || isClicking(kills)) return [];
-	return engagements(kills, killTimes(input), a!.window);
-}
-
-const engaged = computed<Engagement[]>(() => (current.value ? engagedOf(current.value.fileStem) : []));
-const spans = computed<Encounter[]>(() => (current.value ? encounters(current.value, engaged.value) : []));
-const colors = computed(() => botColors(spans.value.map((e) => e.bot)));
-
-const table = computed<BotTableData | null>(() => {
-	const cur = current.value;
-	const a = analysis.value;
-	if (!cur || !a || spans.value.length === 0) return null;
-	const base = baseCurve.value;
-	if (cur.params.kind === 'race') {
-		const runs = [...a.raceCandidates, cur].map((c) => engagedOf(c.fileStem));
-		const best = bestSplits(runs, cur.params.bots);
-		return { kind: 'race', table: raceRows(engaged.value, base ? engagedOf(base.fileStem) : null, best) };
-	}
-	const kills = a.killsOf(cur.fileStem)!;
-	const baseEngaged = base ? { curve: base, engaged: engagedOf(base.fileStem) } : null;
-	return { kind: 'clock', table: clockRows(cur, engaged.value, kills, baseEngaged) };
-});
-
-const chartBaseline = computed(() => {
-	const b = baseline.value;
-	return b && b.kind !== 'none' ? { kind: b.kind, label: b.label, score: b.score } : null;
-});
-
-const readoutAt = computed<((x: number) => number) | null>(() => {
-	const cur = current.value;
-	const b = baseline.value;
-	if (!cur || !b || b.kind === 'none') return null;
-	if (b.kind === 'flat') return (x) => flatReadout(cur, b.score, x);
-	return (x) => readout(cur, b.curve, x).value;
-});
-
-/** This run's elapsed time at progress `x`, for the tooltip. */
-const timeAt = computed(() => {
-	const cur = current.value;
-	return (x: number) => (cur ? atX(cur, x).t : 0);
-});
-
-const layers = computed<ChartLayers>(() => ({
-	local: settings.value.local,
-	accumulated: settings.value.accumulated,
-	baseline: settings.value.baseline,
-	baseLocal: settings.value.baseLocal,
-	recent: settings.value.recent,
-	ranks: settings.value.ranks,
-}));
-
-/* Bot highlight: hover wins over the pinned row. */
-const hovered = ref<string | null>(null);
-const pinned = ref<string | null>(null);
-watch(
-	() => shown.value.fileStem,
-	() => {
-		hovered.value = null;
-		pinned.value = null;
-	},
-);
-
-const highlight = computed<Encounter[] | null>(() => {
-	const key = hovered.value ?? pinned.value;
-	if (key === null) return null;
-	return race.value ? spans.value.filter((e) => String(e.index) === key) : spans.value.filter((e) => e.bot === key);
-});
-
-function toggle(key: string): void {
-	pinned.value = pinned.value === key ? null : key;
+function hover(key: string | null): void {
+	hovered.value = key;
 }
 
 /** R7 at rest: the final accumulated values and the exact difference. */
@@ -295,7 +206,7 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 			:baseline-flat="baseline.kind === 'flat'"
 			:active="hovered"
 			:pinned="pinned"
-			@hover="hovered = $event"
+			@hover="hover"
 			@toggle="toggle"
 		/>
 		<p v-else-if="noKills" class="note">No kills were recorded, so this run has no bot encounters.</p>

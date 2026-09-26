@@ -55,3 +55,10 @@ export const curated = fixtureSet(join(fixturesDir, 'curated'));
  * file we have; always guard on `raw.available`.
  */
 export const raw = fixtureSet(join(fixturesDir, 'raw'));
+
+/**
+ * The About page's sample runs: every completed run of the demo scenarios,
+ * committed like `curated`. The demo snapshot is generated from these; see
+ * docs/preview-assets.md.
+ */
+export const demo = fixtureSet(join(fixturesDir, 'demo'));

@@ -10,16 +10,14 @@
  */
 import { ref, shallowRef, watch, type Ref } from 'vue';
 import { fixedWindow, type KillDetail } from '../lib/run/bots';
-import { getKillDetail, getScoringInputs, getSlotStats } from '../lib/run/queries';
 import { type BotSeries, type BotTabs, botSeries, botTabs } from '../lib/scenario/bots';
 import { type ConfigGroup, configGroups } from '../lib/scenario/config';
 import type { ResultKind } from '../lib/scenario/format';
 import type { ScenarioVersion } from '../lib/scenario/link';
-import { getScenario, type HistoryRun, listHistory, listVersions, type Scenario } from '../lib/scenario/queries';
+import type { HistoryRun, Scenario } from '../lib/scenario/queries';
 import { curveFor, type ScoringInput } from '../lib/scoring';
 import { errorText } from '../lib/error';
-import { useDb } from './useDb';
-import { useImport } from './useImport';
+import { useSource } from './useSource';
 
 export type ScenarioState = 'loading' | 'ready' | 'missing' | 'error';
 export type BotState = 'idle' | 'loading' | 'ready' | 'error';
@@ -53,8 +51,7 @@ export interface ScenarioApi {
 const REFERENCE_LOOKBACK = 5;
 
 export function useScenario(hash: Ref<string>): ScenarioApi {
-	const { pg } = useDb();
-	const { revision } = useImport();
+	const { source, revision } = useSource();
 
 	const state = ref<ScenarioState>('loading');
 	const error = ref<string | null>(null);
@@ -70,7 +67,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 	let botsWanted = false;
 
 	async function load(): Promise<void> {
-		const handle = pg.value;
+		const handle = source.value;
 		const mine = ++gen;
 		if (handle === null) return;
 		// A different scenario starts from a clean slate; an import keeps showing
@@ -83,7 +80,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 			botsWanted = false;
 		}
 		try {
-			const scenario = await getScenario(handle, hash.value);
+			const scenario = await handle.getScenario(hash.value);
 			if (mine !== gen) return;
 			if (scenario === null) {
 				data.value = null;
@@ -91,9 +88,9 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 				return;
 			}
 			const [runs, versions, slots] = await Promise.all([
-				listHistory(handle, scenario.id),
-				listVersions(handle, scenario.name),
-				getSlotStats(handle, scenario.id),
+				handle.listHistory(scenario.id),
+				handle.listVersions(scenario.name),
+				handle.getSlotStats(scenario.id),
 			]);
 			if (mine !== gen) return;
 			if (runs.length === 0) {
@@ -106,7 +103,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 			const latest = runs.filter((r) => r.hasPerf).slice(-REFERENCE_LOOKBACK).reverse();
 			const ids = latest.map((r) => r.id);
 			const [inputs, kills] = ids.length
-				? await Promise.all([getScoringInputs(handle, ids), getKillDetail(handle, ids)])
+				? await Promise.all([handle.getScoringInputs(ids), handle.getKillDetail(ids)])
 				: [new Map<number, ScoringInput>(), new Map<number, KillDetail>()];
 			if (mine !== gen) return;
 
@@ -135,14 +132,14 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 	}
 
 	async function computeBots(): Promise<void> {
-		const handle = pg.value;
+		const handle = source.value;
 		const d = data.value;
 		const mine = ++botGen;
 		if (handle === null || d === null || d.tabs === null) return;
 		if (bots.value === null) botState.value = 'loading';
 		try {
 			const ids = d.runs.filter((r) => r.hasPerf).map((r) => r.id);
-			const [inputs, kills] = await Promise.all([getScoringInputs(handle, ids), getKillDetail(handle, ids)]);
+			const [inputs, kills] = await Promise.all([handle.getScoringInputs(ids), handle.getKillDetail(ids)]);
 			if (mine !== botGen || data.value !== d) return;
 			const idOf = new Map(d.runs.map((r) => [r.fileStem, r.id]));
 			bots.value = botSeries(
@@ -166,7 +163,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 		if (botState.value === 'idle' || botState.value === 'error') void computeBots();
 	}
 
-	watch([hash, pg, revision], () => void load(), { immediate: true });
+	watch([hash, source, revision], () => void load(), { immediate: true });
 
 	return {
 		state,

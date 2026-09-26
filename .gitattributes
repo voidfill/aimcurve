@@ -6,6 +6,13 @@
 # `raw/` is gitignored and never reaches LFS.
 test/fixtures/curated/**/*.perf filter=lfs diff=lfs merge=lfs -text
 test/fixtures/curated/**/*.csv  filter=lfs diff=lfs merge=lfs -text
+# The About page's sample runs, same treatment (see test/fixtures/demo/README.md).
+test/fixtures/demo/**/*.perf filter=lfs diff=lfs merge=lfs -text
+test/fixtures/demo/**/*.csv  filter=lfs diff=lfs merge=lfs -text
+
+# Generated from the demo fixtures by `pnpm gen:demo`; the snapshot test fails
+# when it drifts. Not LFS, so the Pages deploy needs no LFS checkout.
+src/data/demo-snapshot.json linguist-generated -diff
 
 # Sourced by bash through direnv; a CR would break it.
 .envrc eol=lf

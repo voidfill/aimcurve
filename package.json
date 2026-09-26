@@ -15,7 +15,10 @@
     "test:watch": "vitest",
     "bench": "vitest bench --reporter=verbose",
     "gen:proto": "buf generate",
-    "gen:benchmarks": "node --experimental-strip-types scripts/gen-benchmarks.ts"
+    "gen:benchmarks": "node --experimental-strip-types scripts/gen-benchmarks.ts",
+    "gen:demo": "vitest run src/lib/demo/snapshot.test.ts --update",
+    "gen:demo-fixtures": "vitest run src/lib/demo/fixtures.gen.test.ts --mode gen-demo-fixtures",
+    "shots": "node --experimental-strip-types scripts/shots.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.15.0",
@@ -30,6 +33,7 @@
     "@bufbuild/protoc-gen-es": "^2.15.0",
     "@types/node": "^24.19.0",
     "@vitejs/plugin-vue": "^6.0.9",
+    "happy-dom": "^20.14.5",
     "typescript": "^6.0.3",
     "vite": "^8.3.0",
     "vitest": "^5.0.1",

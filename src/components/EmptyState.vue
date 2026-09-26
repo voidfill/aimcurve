@@ -23,7 +23,7 @@ const { state } = useImport();
 			<h1 id="empty-heading">No runs yet</h1>
 			<p>aimcurve reads the stats Kovaak's writes after every run. Import them to see your progress.</p>
 			<RouterLink class="cta" :to="{ name: 'data' }">Import your stats</RouterLink>
-			<p class="fine">Everything stays in this browser. Nothing is uploaded.</p>
+			<p class="fine">Fully local: your stats stay in this browser. No server, no account, no tracking.</p>
 		</template>
 	</section>
 </template>
@@ -35,8 +35,12 @@ const { state } = useImport();
 	align-items: center;
 	justify-content: center;
 	gap: var(--space-3);
-	/* The viewport below the application bar, less the page's own padding. */
-	min-height: calc(100dvh - var(--app-bar-height) - 3rem);
+	/*
+		Exactly the viewport below the application bar: every view renders this
+		as its own top-level branch, never inside a padded wrapper, so it sits in
+		the same place on every page.
+	*/
+	min-height: calc(100dvh - var(--app-bar-height));
 	padding: var(--space-8) var(--space-4);
 	text-align: center;
 }

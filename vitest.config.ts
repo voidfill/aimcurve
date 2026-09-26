@@ -1,3 +1,4 @@
+import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vitest/config';
 
 // KovaaK's stamps filenames in the recording machine's local time, and the
@@ -7,6 +8,8 @@ import { defineConfig } from 'vitest/config';
 process.env.TZ = 'Europe/Berlin';
 
 export default defineConfig({
+	// For the few suites that mount a view (they opt into happy-dom per file).
+	plugins: [vue()],
 	test: {
 		environment: 'node',
 		// Tests sit next to their source; `test/` holds shared helpers and fixtures.
