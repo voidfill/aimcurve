@@ -8,12 +8,11 @@
  */
 
 import { START_LOCATION } from 'vue-router';
+import { KEY_PREFIX } from './storage';
 
 /** Set once About has been shown. */
 export const SEEN_ABOUT_KEY = 'aimcurve.seen-about';
 
-/** Every aimcurve setting shares it, so any of them marks a returning user. */
-const KEY_PREFIX = 'aimcurve.';
 
 export interface LandingTarget {
 	path: string;
@@ -27,6 +26,7 @@ export interface LandingTarget {
 export function shouldShowAbout(target: LandingTarget, keys: readonly string[] | null): boolean {
 	if (keys === null) return false;
 	if (target.path !== '/' || target.hasQuery) return false;
+	// Any aimcurve key marks a returning user.
 	return !keys.some((key) => key.startsWith(KEY_PREFIX));
 }
 

@@ -38,7 +38,9 @@ progress.
 ## Privacy
 
 Fully local. Your files are read and stored in your browser; there is no backend, no
-account and no analytics. That also means your data does not sync between devices.
+account and no analytics. That also means your data does not sync between devices. To remove
+everything aimcurve stored, use **Delete local data** on the Data page; your KovaaK's
+files are never touched.
 
 ## Development
 

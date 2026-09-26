@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * The development-only wipe. Never reaches a production bundle: `DataView`
- * imports it behind a statically false condition, so the chunk is dropped.
+ * "Delete local data" on the Data page: puts this browser back to a first
+ * visit (see `destroyLocalData` for exactly what that removes). It only ever
+ * touches what aimcurve stored here; the user's KovaaK's files stay as they are.
  *
  * Two clicks, because the thing it destroys takes a real ingest to rebuild.
  * The second click is the same button rather than a dialog — a confirm dialog
- * would block the page, and this is a button pressed dozens of times a day.
+ * would block the page.
  */
 import { onUnmounted, ref } from 'vue';
 import { destroyLocalData } from '../db/destroy';
@@ -32,9 +33,10 @@ async function click(): Promise<void> {
 	armed.value = false;
 	busy.value = true;
 	failures.value = await destroyLocalData();
-	// A clean wipe reloads into a first-visit app. A partial one stays put:
-	// the page still holds the only report of what survived.
-	if (failures.value.length === 0) location.reload();
+	// A clean wipe loads the bare root, which a first visit sends on to About:
+	// the browser is back where a new visitor starts. A partial one stays put,
+	// as the page holds the only report of what survived.
+	if (failures.value.length === 0) location.replace(location.pathname);
 	else busy.value = false;
 }
 
@@ -42,38 +44,37 @@ onUnmounted(() => clearTimeout(disarm));
 </script>
 
 <template>
-	<section class="dev">
-		<span class="tag">dev</span>
+	<section class="reset" aria-labelledby="reset-heading">
+		<h2 id="reset-heading">Delete local data</h2>
+		<p class="what">
+			Removes your imported runs, the saved folder link and your aimcurve settings from this browser, then starts
+			over from the About page.
+			Your KovaaK's files are not touched, so you can import them again at any time.
+		</p>
 		<button type="button" :class="{ armed }" :disabled="busy" @click="click()">
-			{{ busy ? 'Destroying…' : armed ? 'Really? This deletes everything' : 'Destroy local data' }}
+			{{ busy ? 'Deleting…' : armed ? 'Click again to delete everything' : 'Delete local data' }}
 		</button>
-		<p class="what">Database, saved folder and import record, then a reload.</p>
 
 		<p v-if="failures.length > 0" class="failed" role="alert">
-			Still there — {{ failures.join('; ') }}
+			Some of it could not be deleted: {{ failures.join('; ') }}
 		</p>
 	</section>
 </template>
 
 <style scoped>
-.dev {
+.reset {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--space-3);
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--space-2);
 	margin-top: var(--space-8);
 	padding-top: var(--space-4);
-	border-top: 1px dashed var(--color-border);
+	border-top: 1px solid var(--color-border);
 }
 
-.tag {
-	padding: 0 var(--space-2);
-	border: 1px solid var(--color-border);
-	border-radius: 999px;
-	color: var(--color-text-muted);
-	font-size: 0.6875rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+h2 {
+	font-size: 0.9375rem;
+	color: var(--color-text);
 }
 
 button {
@@ -103,11 +104,11 @@ button:disabled {
 }
 
 .what {
+	max-width: 70ch;
 	color: var(--color-text-muted);
 }
 
 .failed {
-	flex-basis: 100%;
 	color: var(--color-danger);
 }
 </style>

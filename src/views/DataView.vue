@@ -7,22 +7,15 @@
  * page is open updates it in place. Nothing here navigates on a commit: the
  * route is the user's, not the importer's.
  */
-import { computed, defineAsyncComponent } from 'vue';
+import { computed } from 'vue';
 import ConnectionStatus from '../components/ConnectionStatus.vue';
+import DeleteLocalData from '../components/DeleteLocalData.vue';
 import ImportControls from '../components/ImportControls.vue';
 import ImportReport from '../components/ImportReport.vue';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
 import { timeFormat } from '../lib/run/format';
-
-/**
- * Statically false in a production build, so Rollup drops the import and the
- * wipe never ships. A `v-if` alone would still bundle the component.
- */
-const DevReset = import.meta.env.DEV
-	? defineAsyncComponent(() => import('../components/DevReset.vue'))
-	: null;
 
 const { ready, error: dbError, retry: retryDb } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
@@ -69,7 +62,7 @@ function onImportFiles(files: File[]): void {
 			@import-files="onImportFiles"
 		/>
 
-		<component :is="DevReset" v-if="DevReset !== null" />
+		<DeleteLocalData />
 	</div>
 </template>
 
