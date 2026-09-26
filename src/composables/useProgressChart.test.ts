@@ -9,6 +9,9 @@ import { useProgressChart } from './useProgressChart';
 import { type ScenarioData, useScenario } from './useScenario';
 import { SOURCE_KEY } from './useSource';
 
+/** Loads can outlast vi.waitFor's 1 s default while the whole suite runs. */
+const WAIT = { timeout: 10_000 };
+
 const demo = snapshotJson as unknown as DemoSnapshot;
 
 describe('useProgressChart', () => {
@@ -18,7 +21,7 @@ describe('useProgressChart', () => {
 		const app = createApp({});
 		app.provide(SOURCE_KEY, { source: shallowRef(snapshotSource(demo)), revision: ref(0) });
 		const api = app.runWithContext(() => effectScope().run(() => useScenario(ref(DEMO_SCENARIO_HASH)))!);
-		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+		await vi.waitFor(() => expect(api.state.value).toBe('ready'), WAIT);
 		data = ref(api.data.value!) as Ref<ScenarioData>;
 	});
 
@@ -42,7 +45,7 @@ describe('useProgressChart', () => {
 		expect(c.series.value!.y).toEqual(scores);
 		expect(c.x.value).toEqual(scores.map((_, i) => i + 1));
 		const best = c.lines.value!.best.filter((v): v is number => v !== null);
-		expect(best).toHaveLength(39);
+		expect(best).toHaveLength(scores.length);
 		for (let i = 1; i < best.length; i++) expect(best[i]).toBeGreaterThanOrEqual(best[i - 1]!);
 		expect(c.ranks.value?.ranks.length).toBeGreaterThan(0);
 		expect(c.breaks.value.length).toBeGreaterThan(0);

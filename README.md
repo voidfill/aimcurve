@@ -27,7 +27,7 @@ with the biggest losses marked. Hover a row to light its encounters up on the ch
 best so far and the median of your last ten as lines, so one lucky run cannot fake
 progress.
 
-![Two weeks of runs on one scenario, with the best-so-far and median lines](docs/images/progress.png)
+![66 runs of one scenario over three months, the median climbing from about 2000 to 2800](docs/images/progress.png)
 
 ## How to use it
 
@@ -63,6 +63,8 @@ pnpm install
 | `pnpm gen:proto`   | buf + protoc-gen-es → `src/gen/`                        |
 | `pnpm gen:benchmarks` | refresh `src/data/benchmarks.json` from Evxl and KovaaK's |
 | `pnpm gen:demo`    | regenerate `src/data/demo-snapshot.json`, the About page's sample data |
+| `pnpm gen:demo-fixtures` | refresh `test/fixtures/demo/` from `raw/` ([preview assets](docs/preview-assets.md)) |
+| `pnpm shots`       | recapture `public/og.png` and the README screenshots (needs `pnpm dev`) |
 | `pnpm bench`       | vitest benchmarks (ingest throughput)                   |
 
 ### Layout
@@ -101,11 +103,12 @@ there; see [`curated/README.md`](test/fixtures/curated/README.md) for what each 
 pins down and what earns a new one a place. Sweeps over the full dump guard on
 `raw.available`:
 
-`test/fixtures/demo/` holds the About page's 39 sample runs, also in LFS. The About
-page never opens the database: `pnpm test` ingests these into a test PGlite and
-checks the committed `src/data/demo-snapshot.json` still matches what the real
-ingest and queries produce. After changing ingest, migrations or queries, run
-`pnpm gen:demo` and commit the result.
+`test/fixtures/demo/` holds the About page's sample runs, also in LFS. About never
+reads the database: `pnpm test` ingests these into a test PGlite and checks the
+committed `src/data/demo-snapshot.json` still matches what the real ingest and
+queries produce. After changing ingest, migrations or queries, run `pnpm gen:demo`
+and commit the result. Refreshing the sample runs, the link-preview card or the
+screenshots is in [`docs/preview-assets.md`](docs/preview-assets.md).
 
 ```ts
 import { curated, raw } from '../../test/helpers/fixtures';

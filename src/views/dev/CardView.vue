@@ -1,13 +1,10 @@
 <script setup lang="ts">
 /**
  * Dev only (D7 of the About design): the 1200×630 link-preview image, drawn
- * from the demo run, to be screenshotted into `public/og.png`:
- *
- *     chrome --headless --window-size=1200,630 --screenshot=public/og.png http://localhost:4321/#/dev/card
- *
- * It covers the app shell, so the viewport is exactly the card. A route of
- * its own rather than a mode of About, so making the image never marks About
- * as seen and never ships.
+ * from the demo run. `pnpm shots` captures it into `public/og.png` (see
+ * docs/preview-assets.md). It covers the app shell, so the viewport is exactly
+ * the card. A route of its own rather than a mode of About, so making the
+ * image never marks About as seen and never ships.
  */
 import CardChart from '../../components/about/CardChart.vue';
 import { provideDemo } from '../../components/about/provideDemo';
@@ -16,7 +13,7 @@ const { state, attempt } = provideDemo();
 </script>
 
 <template>
-	<div class="card" :data-ready="state === 'ready' ? '' : undefined">
+	<div class="card" data-shot="og">
 		<header>
 			<p class="brand">
 				<img src="/favicon.svg" alt="" />

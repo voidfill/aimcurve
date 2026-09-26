@@ -10,6 +10,9 @@ import { useRunAnalysis } from './useRunAnalysis';
 import { useRunCharts } from './useRunCharts';
 import { SOURCE_KEY } from './useSource';
 
+/** Loads can outlast vi.waitFor's 1 s default while the whole suite runs. */
+const WAIT = { timeout: 10_000 };
+
 const snapshot = snapshotJson as unknown as DemoSnapshot;
 const attempt = snapshot.attempts[DEMO_RUN_STEM]!;
 const LAYERS: ChartLayers = { local: true, accumulated: true, baseline: true, baseLocal: false, recent: false, ranks: true };
@@ -22,8 +25,8 @@ async function setup() {
 		const { analysis, baseline, state } = scope.run(() => useRunAnalysis(ref<Attempt | null>(attempt), ref('pb-before')))!;
 		const bench = scope.run(() => useBenchmarkRank(ref(attempt.scenarioName), ref(attempt.score), { picks: ref({}) }))!;
 		const charts = scope.run(() => useRunCharts(analysis, baseline, bench, { layers: ref(LAYERS), window: ref(5) }))!;
-		await vi.waitFor(() => expect(state.value).toBe('ready'));
-		await vi.waitFor(() => expect(bench.selected.value).not.toBeNull());
+		await vi.waitFor(() => expect(state.value).toBe('ready'), WAIT);
+		await vi.waitFor(() => expect(bench.selected.value).not.toBeNull(), WAIT);
 		return { charts, baseline };
 	});
 }

@@ -18,14 +18,26 @@ import type { ScenarioVersion } from '../scenario/link';
 import type { HistoryRun, Scenario } from '../scenario/queries';
 import type { ScoringInput } from '../scoring';
 
-/** Air Spectral Easy, the scenario the demo fixtures are all of. */
+/** Air Spectral Easy: the run About charts is one of its 39. */
 export const DEMO_SCENARIO_HASH = '28c12fc03478e987f910709ce18a5cfa';
+
+/**
+ * VT Aether Intermediate S5, About's progression chart: 51 runs over three
+ * months, the median climbing from about 2000 to 2750.
+ */
+export const DEMO_PROGRESS_HASH = 'c4c11bf8a727b6e6c836138535bd0879';
 
 /**
  * The run About charts: it led its PB-before by 2.2 points at the halfway mark
  * and finished 3.3 behind, the clearest "where did it slip" of the set.
  */
 export const DEMO_RUN_STEM = 'Air Spectral Easy - Challenge - 2026.09.09-18.46.26';
+
+/** The scenarios `test/fixtures/demo/` holds every completed run of. */
+export const DEMO_SCENARIOS = [
+	{ name: 'Air Spectral Easy', hash: DEMO_SCENARIO_HASH },
+	{ name: 'VT Aether Intermediate S5', hash: DEMO_PROGRESS_HASH },
+] as const;
 
 /** JSON-shaped: object keys are strings, so ids are too. */
 export interface DemoSnapshot {

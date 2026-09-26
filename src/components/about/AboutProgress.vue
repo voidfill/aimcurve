@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
- * About beat 3 (D5 of the About design): every run of the demo scenario on
- * the scenario page's progression chart, Overall tab, on dates.
+ * About beat 3 (D5 of the About design): every run of the progression demo
+ * scenario on the scenario page's progression chart, Overall tab. By attempt,
+ * not date: its runs cluster into a few stretches months apart, and on dates
+ * the climb would be squeezed between long empty gaps.
  *
  * Reads the snapshot source its parent provides.
  */
@@ -24,13 +26,13 @@ const { x, breaks, colors, highlight, series, lines, ranks, formatY, tipFor, cha
 	bots: ref(null),
 	bench: bench.selected,
 	group: ref(null),
-	dateAxis: ref(true),
+	dateAxis: ref(false),
 });
 
-const days = computed(() => {
+const months = computed(() => {
 	const runs = props.data.runs;
 	const ms = new Date(runs[runs.length - 1]!.startedAt).getTime() - new Date(runs[0]!.startedAt).getTime();
-	return Math.round(ms / 86_400_000) + 1;
+	return Math.max(1, Math.round(ms / (30.44 * 86_400_000)));
 });
 </script>
 
@@ -40,16 +42,17 @@ const days = computed(() => {
 			<p class="step">03</p>
 			<h2 id="beat-progress">Watch the curve bend.</h2>
 			<p>
-				All {{ data.runs.length }} runs of {{ data.scenario.name }} over {{ days }} days. Each dot is a run, the amber
-				line is your best so far and the white one the median of your last ten, so one lucky run cannot fake progress.
+				All {{ data.runs.length }} runs of {{ data.scenario.name }} over {{ months === 1 ? 'a month' : `${months} months` }}.
+				Each dot is a run, the amber line is your best so far and the white one the median of your last ten, so one
+				lucky run cannot fake progress.
 			</p>
 		</div>
-		<div class="panel chart-panel">
+		<div class="panel chart-panel" data-shot="progress">
 			<p class="sample">Sample history · {{ data.scenario.name }}</p>
 			<ProgressChart
 				v-if="series && lines"
 				:x="x"
-				:date-axis="true"
+				:date-axis="false"
 				:y="series.y"
 				:best="lines.best"
 				:median="lines.median"

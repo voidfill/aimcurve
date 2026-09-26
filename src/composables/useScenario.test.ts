@@ -15,15 +15,18 @@ import { buildChunk } from '../lib/ingest/chunk';
 import { type ScenarioApi, useScenario } from './useScenario';
 import { SOURCE_KEY } from './useSource';
 
+/** Loads can outlast vi.waitFor's 1 s default while the whole suite runs. */
+const WAIT = { timeout: 10_000 };
+
 const snapshot = snapshotJson as unknown as DemoSnapshot;
 
 async function load(source: DataSource): Promise<ScenarioApi> {
 	const app = createApp({});
 	app.provide(SOURCE_KEY, { source: shallowRef(source), revision: ref(0) });
 	const api = app.runWithContext(() => effectScope().run(() => useScenario(ref(DEMO_SCENARIO_HASH)))!);
-	await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+	await vi.waitFor(() => expect(api.state.value).toBe('ready'), WAIT);
 	api.loadBots();
-	await vi.waitFor(() => expect(api.botState.value).toBe('ready'));
+	await vi.waitFor(() => expect(api.botState.value).toBe('ready'), WAIT);
 	return api;
 }
 
@@ -43,6 +46,6 @@ describe('useScenario', () => {
 		const fromSnapshot = await load(snapshotSource(snapshot));
 		expect(fromSnapshot.data.value).toEqual(fromDb.data.value);
 		expect(fromSnapshot.bots.value).toEqual(fromDb.bots.value);
-		expect(fromSnapshot.data.value!.runs).toHaveLength(39);
+		expect(fromSnapshot.data.value!.runs).toHaveLength(snapshot.history[fromSnapshot.data.value!.scenario.id]!.length);
 	});
 });

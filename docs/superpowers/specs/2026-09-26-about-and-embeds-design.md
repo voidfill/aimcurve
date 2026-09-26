@@ -161,18 +161,18 @@ default benchmark is used and nothing is written.
   and bot series, so those are inputs, not assumptions. `ProgressPanel` keeps
   the tabs, its persisted `aimcurve.scenario-axis` toggle, legend and bot
   loading. About passes the Overall tab, `bots: null` and
-  `dateAxis: ref(true)` (two weeks of dates read better than attempt numbers).
+  `dateAxis: ref(false)` (see D5, beat 3).
 
 Net rule, tested: rendering About writes no `localStorage` key except
 `aimcurve.seen-about`.
 
 ### D4. The demo snapshot
 
-- **Source files:** the 39 completed Air Spectral Easy runs (2026-09-03 to
-  2026-09-18, all with `.perf`) are copied from the gitignored raw dump into
-  `test/fixtures/demo/{stats,performances}/`, committed through Git LFS
-  (extend `.gitattributes` to cover `demo/`). About 300 KB. A
-  `test/fixtures/demo/README.md` states what the set is for.
+- **Source files:** every completed run of the demo scenarios (Air Spectral
+  Easy for the run, VT Aether Intermediate S5 for progression), each CSV with
+  its `.perf`, in `test/fixtures/demo/{stats,performances}/`, committed through
+  Git LFS. `pnpm gen:demo-fixtures` writes the set from the raw dump; the
+  refresh procedure is in `docs/preview-assets.md`.
 - **Generation is a vitest file snapshot.** `src/lib/demo/snapshot.test.ts`
   makes a test PGlite (`makeTestDb`), runs the real ingest (`buildChunk` →
   `applyChunk`) over the demo files, fills a `DemoSnapshot` by calling the real
@@ -188,7 +188,8 @@ Net rule, tested: rendering About writes no `localStorage` key except
   in CI until the snapshot is regenerated and committed. A fresh clone
   typechecks, tests and builds with no generation step.
 - **Loud failure.** The test asserts the files are real (not LFS pointer
-  files) and that exactly 39 completed runs were ingested, before comparing.
+  files) and that every fixture became a completed, charted run, before
+  comparing.
 - **Loading:** the demo view imports the JSON dynamically, so it is its own
   chunk and loads only on About. The JSON is written compactly (no
   indentation) with numbers as the queries return them. Expect roughly
@@ -216,9 +217,11 @@ existing dark style:
    or under the same chart instance; hovering or pinning a row highlights its
    encounters, as in the Run view. Prefer sharing the Beat 1 chart over a
    second chart if the layout reads well; otherwise a second instance.
-4. **Beat 3 — "Watch the curve bend."** The Overall progression chart for Air
-   Spectral Easy across all 39 runs: dots, PB step line, rolling median, rank
-   bands, session breaks.
+4. **Beat 3 — "Watch the curve bend."** The Overall progression chart for VT
+   Aether Intermediate S5 across all its runs, by attempt: dots, PB step line,
+   rolling median, rank bands, session breaks. A different scenario from beats
+   1–2, chosen for its steady three-month climb; by attempt because its runs
+   cluster into stretches months apart, which a date axis would leave as gaps.
 5. **Closing CTA.** Repeat **Import your stats**, the privacy line (see
    *Privacy copy* below), and a short "what you need": KovaaK's with stats
    output on (the default).
@@ -332,8 +335,9 @@ Rewritten product-first:
 ## Testing
 
 - **Snapshot and drift:** `src/lib/demo/snapshot.test.ts` (D4) regenerates the
-  snapshot and matches the committed file; it also asserts real files, 39
-  runs, and that `DEMO_RUN_STEM` exists and has a curve.
+  snapshot and matches the committed file; it also asserts real files, that
+  every fixture is a charted run, and that `DEMO_RUN_STEM` exists and has a
+  curve.
 - **Source parity:** in the same suite, `snapshotSource(snapshot).m(args)`
   deep-equals `pgSource(pg).m(args)` for each of the eight methods, including
   the rebuilt `Map`s, over all ids, a subset, and an unknown id or key.

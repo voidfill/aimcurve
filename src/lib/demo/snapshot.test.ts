@@ -12,7 +12,7 @@ import { applyChunk } from '../ingest/batch';
 import { buildChunk } from '../ingest/chunk';
 import { curveFor } from '../scoring';
 import { buildSnapshot } from './build';
-import { DEMO_RUN_STEM, DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from './snapshot';
+import { DEMO_PROGRESS_HASH, DEMO_RUN_STEM, DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from './snapshot';
 
 const LFS_POINTER = 'version https://git-lfs';
 
@@ -43,10 +43,16 @@ describe('demo snapshot', () => {
 		snap = snapshotSource(snapshot);
 	});
 
-	it('holds all 39 completed runs', () => {
-		expect(demo.list('stats')).toHaveLength(39);
-		expect(Object.keys(snapshot.attempts)).toHaveLength(39);
-		expect(Object.keys(snapshot.scoringInputs)).toHaveLength(39);
+	it('holds every demo fixture as a completed, charted run of a demo scenario', () => {
+		// The fixtures are completed runs only (see test/fixtures/demo/README.md),
+		// so every CSV is an attempt and every attempt has a curve.
+		const n = demo.list('stats').length;
+		expect(Object.keys(snapshot.attempts)).toHaveLength(n);
+		expect(Object.keys(snapshot.scoringInputs)).toHaveLength(n);
+		const runs = (hash: string) => snapshot.history[snapshot.scenarios[hash]!.id]!.length;
+		expect(runs(DEMO_SCENARIO_HASH) + runs(DEMO_PROGRESS_HASH)).toBe(n);
+		// Enough history for the progression chart's median of ten to mean something.
+		expect(runs(DEMO_PROGRESS_HASH)).toBeGreaterThanOrEqual(30);
 	});
 
 	it('has a curve for the run About charts', () => {

@@ -72,7 +72,7 @@ const benchName = computed(() => bench.selected.value?.benchmark.name ?? null);
 				</p>
 			</div>
 		</div>
-		<div class="panel chart-panel">
+		<div class="panel chart-panel" data-shot="pace">
 			<p class="sample">Sample run · {{ attempt.scenarioName }}</p>
 			<p v-if="state === 'error'" class="message" role="alert">This sample could not be drawn.</p>
 			<UnifiedChart
@@ -95,6 +95,7 @@ const benchName = computed(() => bench.selected.value?.benchmark.name ?? null);
 		<BotTable
 			v-if="table && chartBaseline"
 			class="bots"
+			data-shot="bots"
 			aria-labelledby="beat-bots"
 			:data="table"
 			:colors="colors"

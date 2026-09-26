@@ -13,6 +13,10 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import type { DataSource } from '../lib/data-source';
 import { SEEN_ABOUT_KEY } from '../lib/about';
 import { SOURCE_KEY } from '../composables/useSource';
+import snapshotJson from '../data/demo-snapshot.json';
+import { DEMO_PROGRESS_HASH, type DemoSnapshot } from '../lib/demo/snapshot';
+
+const snapshot = snapshotJson as unknown as DemoSnapshot;
 
 const received: Record<string, Record<string, unknown>> = {};
 
@@ -75,7 +79,9 @@ describe('AboutView', () => {
 		expect(calls).toEqual([]);
 		expect(received.UnifiedChart?.data).toBeTruthy();
 		expect(received.BotTable?.data).toBeTruthy();
-		expect((received.ProgressChart?.y as unknown[]).length).toBe(39);
+		const progress = snapshot.history[snapshot.scenarios[DEMO_PROGRESS_HASH]!.id]!;
+		expect(received.ProgressChart?.y).toEqual(progress.map((r) => r.score));
+		expect(received.ProgressChart?.['date-axis']).toBe(false);
 		app.unmount();
 	});
 

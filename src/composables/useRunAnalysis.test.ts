@@ -17,6 +17,9 @@ import type { Attempt } from '../lib/run/queries';
 import { type RunAnalysisApi, useRunAnalysis } from './useRunAnalysis';
 import { SOURCE_KEY } from './useSource';
 
+/** Loads can outlast vi.waitFor's 1 s default while the whole suite runs. */
+const WAIT = { timeout: 10_000 };
+
 const snapshot = snapshotJson as unknown as DemoSnapshot;
 
 async function analyse(source: DataSource, option: BaselineOption): Promise<RunAnalysisApi> {
@@ -24,7 +27,7 @@ async function analyse(source: DataSource, option: BaselineOption): Promise<RunA
 	app.provide(SOURCE_KEY, { source: shallowRef(source), revision: ref(0) });
 	const attempt = ref<Attempt | null>(snapshot.attempts[DEMO_RUN_STEM]!);
 	const api = app.runWithContext(() => effectScope().run(() => useRunAnalysis(attempt, ref(option)))!);
-	await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+	await vi.waitFor(() => expect(api.state.value).toBe('ready'), WAIT);
 	return api;
 }
 
