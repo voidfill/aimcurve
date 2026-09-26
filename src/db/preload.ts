@@ -9,15 +9,10 @@
  *
  * Deliberately not imported from `main.ts`: ES modules all resolve before any
  * body runs, so an import there would still wait on the whole app graph.
- *
- * Skipped when the visitor lands on About, which needs no database: there the
- * wasm would only compete with About's own charts for bandwidth. The app still
- * opens the database once mounted.
  */
-import { landsOnAbout, storageKeys } from '../lib/about';
 import { getPg } from './client';
 
 // `useDb()` joins this same cached promise and owns reporting failures to the
 // UI, so a rejection here is not this module's to report. `init()` drops its
 // cache on failure, which leaves the retry path intact.
-if (!landsOnAbout(location.hash, storageKeys())) void getPg().catch(() => {});
+void getPg().catch(() => {});

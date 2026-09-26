@@ -240,13 +240,10 @@ chart-shaped placeholder until **both** the snapshot chunk and the benchmark
 data have arrived, so rank bands never pop in after the chart. A failed load
 shows a one-line error with a retry, and the CTAs still work.
 
-Bandwidth: `index.html` loads `src/db/preload.ts`, which starts the PGlite wasm
-download (~16 MB) on every page. When the landing URL is `#/about` or
-`shouldShowAbout` would redirect, `preload.ts` skips its prefetch so the
-snapshot chunk is not competing with it. `App.vue` still opens the database
-after mount as it does today; if About's charts visibly wait on bandwidth in
-the manual check, deferring that open until leaving About is a follow-up, not
-part of this work.
+Database: About never reads it, but the app shell still starts and migrates it
+in the background, including `preload.ts`'s early prefetch, so it is ready by
+the time the visitor clicks Import. The snapshot is ~31 KB gzipped, too small
+for the wasm download to delay it meaningfully.
 
 Narrow screens: beats stack; charts take full width; the bot table scrolls
 horizontally, per the existing responsive rules.
@@ -279,7 +276,7 @@ A `router.beforeEach` guard registered at module scope beside `App.vue`'s
 The guard is synchronous and runs before any database access, so a first-time
 visitor sees About with no wait. The pure decision lives in
 `shouldShowAbout(target, keys)` in `src/lib/about.ts` (no Vue, no storage), so
-both the guard and `preload.ts` can call it and tests can cover it.
+tests can cover it.
 
 ### D7. Link-preview card
 

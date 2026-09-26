@@ -1,7 +1,6 @@
 /**
  * Whether a visitor lands on About first (D6 of the About design). Pure, so
- * the router guard and the database preload can share it and tests can
- * cover it; reading storage is the caller's.
+ * tests can cover it; reading storage is the caller's.
  *
  * A first-time visitor on the bare root sees About, decided before the
  * database opens, so they never wait for it just to be redirected. Deep links
@@ -27,14 +26,6 @@ export function shouldShowAbout(target: LandingTarget, keys: readonly string[] |
 	if (keys === null) return false;
 	if (target.path !== '/' || target.hasQuery) return false;
 	return !keys.some((key) => key.startsWith(KEY_PREFIX));
-}
-
-/** Whether the page loaded at `hash` ends up on About, from the URL alone. */
-export function landsOnAbout(hash: string, keys: readonly string[] | null): boolean {
-	const route = hash.replace(/^#/, '') || '/';
-	const [path = '/', query] = route.split('?');
-	if (path === '/about') return true;
-	return shouldShowAbout({ path, hasQuery: query !== undefined && query !== '' }, keys);
 }
 
 /** The storage keys present, or null when storage is blocked. */

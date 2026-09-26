@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { landsOnAbout, SEEN_ABOUT_KEY, shouldShowAbout } from './about';
+import { SEEN_ABOUT_KEY, shouldShowAbout } from './about';
 
 const root = { path: '/', hasQuery: false };
 
@@ -25,19 +25,5 @@ describe('shouldShowAbout', () => {
 
 	it('does not redirect when storage cannot be read', () => {
 		expect(shouldShowAbout(root, null)).toBe(false);
-	});
-});
-
-describe('landsOnAbout', () => {
-	it('is true on About itself and on a root that will redirect there', () => {
-		expect(landsOnAbout('#/about', [SEEN_ABOUT_KEY])).toBe(true);
-		expect(landsOnAbout('', [])).toBe(true);
-		expect(landsOnAbout('#/', [])).toBe(true);
-	});
-
-	it('is false anywhere else', () => {
-		expect(landsOnAbout('', [SEEN_ABOUT_KEY])).toBe(false);
-		expect(landsOnAbout('#/?run=x', [])).toBe(false);
-		expect(landsOnAbout('#/data', [])).toBe(false);
 	});
 });
