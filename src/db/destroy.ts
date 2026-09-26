@@ -14,14 +14,11 @@
 import { closePg } from './client';
 import { OPFS_DIR } from './opfs';
 import { HANDLE_DB_NAME } from '../lib/ingest/handle-store';
+import { errorText } from '../lib/error';
 import { STORAGE_KEY } from '../lib/run/import-controller';
 
 /** Empty when everything is gone. Each entry names one store that survived. */
 export type DestroyResult = string[];
-
-function reason(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
 
 /** A missing directory is the state we are trying to reach, not a failure. */
 async function removeDataDir(): Promise<void> {
@@ -56,25 +53,25 @@ export async function destroyLocalData(): Promise<DestroyResult> {
 	try {
 		await closePg();
 	} catch (err) {
-		failed.push(`connection: ${reason(err)}`);
+		failed.push(`connection: ${errorText(err)}`);
 	}
 
 	try {
 		await removeDataDir();
 	} catch (err) {
-		failed.push(`database: ${reason(err)}`);
+		failed.push(`database: ${errorText(err)}`);
 	}
 
 	try {
 		await deleteHandleDb();
 	} catch (err) {
-		failed.push(`folder handle: ${reason(err)}`);
+		failed.push(`folder handle: ${errorText(err)}`);
 	}
 
 	try {
 		localStorage.removeItem(STORAGE_KEY);
 	} catch (err) {
-		failed.push(`import record: ${reason(err)}`);
+		failed.push(`import record: ${errorText(err)}`);
 	}
 
 	return failed;

@@ -21,7 +21,7 @@ import { useDb } from './useDb';
 
 export interface ImportApi {
 	state: ImportState;
-	/** Increments after every settled pass, including a partly committed failed one. */
+	/** Increments after every pass that wrote rows, including a partly committed failed one. */
 	revision: Ref<number>;
 	connect: () => Promise<void>;
 	reconnect: () => Promise<void>;

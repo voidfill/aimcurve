@@ -29,11 +29,11 @@ import {
 	requestReadPermission,
 	saveDirectoryHandle,
 } from '../ingest/handle-store';
-import { ingest } from '../ingest/index';
+import { type ChunkBuilder, ingest } from '../ingest/index';
 import type { IngestReport } from '../ingest/report';
 import type { FileSource } from '../ingest/source';
 import { workerBuilder } from '../ingest/worker';
-import type { ChunkBuilder } from '../ingest/index';
+import { errorText } from '../error';
 
 /**
  * - `none`: nothing is connected. Connect and Import files are both offered.
@@ -185,11 +185,6 @@ function isAbort(err: unknown): boolean {
 	return err instanceof DOMException && err.name === 'AbortError';
 }
 
-function errorText(err: unknown): string {
-	if (err instanceof Error) return err.message;
-	return String(err);
-}
-
 /* -------------------------------------------------------------------------- */
 /* Messages                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -217,6 +212,17 @@ function didWork(report: IngestReport): boolean {
 		report.ambiguousPerfs.length > 0 ||
 		report.hashMismatches.length > 0
 	);
+}
+
+/**
+ * Whether a settled pass may have changed the database. Only these counts are
+ * backed by written rows; failures, orphans, ambiguities and hash mismatches
+ * are reported, not stored. A pass that threw may have committed chunks before
+ * it did, so it counts as a write too.
+ */
+function wroteRows(report: IngestReport | null, failure: unknown): boolean {
+	if (failure !== null || report === null) return true;
+	return report.runs > 0 || report.aborts > 0 || report.perfsMatched > 0;
 }
 
 /** A truthful one-liner about what the pass could not do. Null when it did it all. */
@@ -351,10 +357,12 @@ export function createImportController(
 			failure = err;
 		}
 
-		// After *every* settled pass, including one that threw partway through:
+		// After every pass that wrote, including one that threw partway through:
 		// the chunks that committed before the throw are in the database, and a
-		// view that does not reload them is showing stale data.
-		await onCommitted();
+		// view that does not reload them is showing stale data. A pass that found
+		// nothing new — every ten seconds under the polling fallback — is not
+		// announced, or every open view would requery everything on each poll.
+		if (wroteRows(report, failure)) await onCommitted();
 
 		// A superseded pass has already done the only thing that still matters.
 		if (gen !== generation || disposed) return;
@@ -637,27 +645,30 @@ export function createImportController(
 	async function disconnect(): Promise<void> {
 		if (disposed || switching) return;
 		switching = true;
-		generation += 1;
-		stopActive();
-		if (inFlight !== null) await inFlight.catch(() => {});
-
-		savedHandle = null;
 		try {
-			await clearDirectoryHandle();
-		} catch {
-			// Nothing is watched either way; the handle simply outlives the
-			// session. `mode: 'disconnected'` below is what keeps the next load
-			// from resuming it: an explicit disconnect has to survive a storage
-			// failure, or the app silently reconnects a folder the user revoked.
+			generation += 1;
+			stopActive();
+			if (inFlight !== null) await inFlight.catch(() => {});
+
+			savedHandle = null;
+			try {
+				await clearDirectoryHandle();
+			} catch {
+				// Nothing is watched either way; the handle simply outlives the
+				// session. `mode: 'disconnected'` below is what keeps the next load
+				// from resuming it: an explicit disconnect has to survive a storage
+				// failure, or the app silently reconnects a folder the user revoked.
+			}
+			persist('disconnected', state.lastImportAt);
+			patch({
+				connection: 'none',
+				busy: false,
+				progress: null,
+				message: 'Disconnected. Your imported attempts are unaffected.',
+			});
+		} finally {
+			switching = false;
 		}
-		persist('disconnected', state.lastImportAt);
-		patch({
-			connection: 'none',
-			busy: false,
-			progress: null,
-			message: 'Disconnected. Your imported attempts are unaffected.',
-		});
-		switching = false;
 	}
 
 	async function retryScan(): Promise<void> {

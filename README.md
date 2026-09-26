@@ -1,6 +1,6 @@
 # aimcurve
 
-Static Vue 3 single-page application with a client-side Postgres (PGlite + Drizzle) and protobuf codegen.
+Static Vue 3 single-page application with a client-side Postgres (PGlite) and protobuf codegen.
 
 ## Setup
 
@@ -18,12 +18,14 @@ pnpm install
 | `pnpm check`       | `vue-tsc --noEmit` (needs TypeScript 6.x, see below)     |
 | `pnpm test`        | vitest, node environment                                |
 | `pnpm gen:proto`   | buf + protoc-gen-es → `src/gen/`                        |
+| `pnpm gen:benchmarks` | refresh `src/data/benchmarks.json` from Evxl and KovaaK's |
+| `pnpm bench`       | vitest benchmarks (ingest throughput)                   |
 
 ## Layout
 
 ```
 src/lib/     core calculation logic — pure, runs in the browser and in vitest
-src/db/      schema, migrations, and the browser PGlite client
+src/db/      migrations and the browser PGlite client
 src/gen/     generated protobuf code
 src/views/       top-level routed views
 src/components/  shared UI components
@@ -34,7 +36,8 @@ docs/        reverse-engineered format and ingest notes
 ```
 
 **The core takes bytes, not paths.** Parsers accept `string` / `Uint8Array`, and
-anything touching a database accepts a `Db` rather than importing `src/db/client.ts`.
+anything touching a database accepts a `PGliteInterface` rather than importing
+`src/db/client.ts`.
 That is what lets the same code run under vitest and in the browser — the only part
 that differs is where the bytes come from (node `fs` in tests, a file picker in the
 browser).
@@ -70,19 +73,18 @@ the two filenames can disagree by a second, and `Challenge Start` is not a uniqu
 
 ## Database
 
-No server. `src/db/client.ts` opens PGlite against IndexedDB (`idb://aimcurve`) in the
-browser; tests open an in-memory instance. Both apply the same hand-written SQL.
+No server. `src/db/client.ts` runs PGlite in a dedicated worker (`src/db/worker.ts`) on
+an OPFS access-handle pool in the browser; tests open an in-memory instance. Both apply
+the same hand-written SQL.
 
 Migrations are hand-written, numbered SQL files in `src/db/sql/`, named
 `NNNN_<topic>.sql` — the filename is the migration's identity. They are loaded through
 `import.meta.glob('./sql/*.sql', { query: '?raw' })` in `src/db/migrations.ts` and applied,
 in ascending filename order, by `src/db/migrate.ts`, which tracks what has run in a
 `_migrations` table — the browser database persists, so migration runs must be
-idempotent. There is no `drizzle-kit`: the schema leans on views, generated columns,
-exclusion constraints, partial and covering indexes, triggers, and arrays with
-alignment checks, almost none of which drizzle-kit models. Drizzle stays on as a typed
-client only (`src/db/schema.ts` is deliberately empty — `export {}` — until a query
-layer needs typed access to a specific table).
+idempotent. There is no ORM or schema generator: the schema leans on views, generated
+columns, exclusion constraints, partial and covering indexes, triggers, and arrays with
+alignment checks, and queries are hand-written SQL against `PGliteInterface`.
 
 Adding a table: add a new `src/db/sql/NNNN_topic.sql`. Never edit an already-applied
 one — see the reset rules below.

@@ -5,7 +5,7 @@
  * Loading settles every baseline option at once, so switching the option in the
  * chart header re-resolves synchronously and never refetches. Curves are
  * memoised by file stem in the scoring model; inputs and kill detail are cached
- * here for the lifetime of the view.
+ * per load, so an import or a different run reads them afresh.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import { useStorage } from '@vueuse/core';
@@ -23,6 +23,7 @@ import {
 import { fixedWindow, type KillDetail } from '../lib/run/bots';
 import { type Attempt, getKillDetail, getScoringInputs, getSlotStats, listScenarioRuns } from '../lib/run/queries';
 import { classify, comparable, curveFor, type RunCurve, type ScoringInput } from '../lib/scoring';
+import { errorText } from '../lib/error';
 import { useDb } from './useDb';
 import { useImport } from './useImport';
 
@@ -50,9 +51,12 @@ const DEFAULTS: ChartSettings = {
 	window: 5,
 };
 
-/** One key for every chart display choice, persisted per browser. */
-export function useChartSettings(): Ref<ChartSettings> {
-	return useStorage<ChartSettings>('aimcurve.run-chart', { ...DEFAULTS }, localStorage, { mergeDefaults: true });
+/**
+ * One key for every chart display choice, persisted per browser. Storage is
+ * left to VueUse's default, which survives blocked site data (see `usePicks`).
+ */
+function useChartSettings(): Ref<ChartSettings> {
+	return useStorage<ChartSettings>('aimcurve.run-chart', { ...DEFAULTS }, undefined, { mergeDefaults: true });
 }
 
 export type AnalysisState = 'idle' | 'loading' | 'ready' | 'error';
@@ -95,10 +99,6 @@ const UNSUPPORTED: Record<string, string> = {
 	'no-race-pool': 'it looks like a race but has no damage pool',
 	'bad-kill-times': 'its kill times are out of order',
 };
-
-function errorText(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
 
 class Loader {
 	readonly inputs = new Map<string, ScoringInput | null>();

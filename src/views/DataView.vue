@@ -7,13 +7,14 @@
  * page is open updates it in place. Nothing here navigates on a commit: the
  * route is the user's, not the importer's.
  */
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, defineAsyncComponent } from 'vue';
 import ConnectionStatus from '../components/ConnectionStatus.vue';
 import ImportControls from '../components/ImportControls.vue';
 import ImportReport from '../components/ImportReport.vue';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
 import { useSelection } from '../composables/useSelection';
+import { timeFormat } from '../lib/run/format';
 
 /**
  * Statically false in a production build, so Rollup drops the import and the
@@ -33,15 +34,7 @@ const importDisabled = computed(() => !ready.value || dbError.value !== null);
 // did work — a no-op background poll leaves both alone — so this page renders
 // them directly. Guarding here instead would only hold while the page stayed
 // mounted, and a trip to Run and back would lose the guard with it.
-const lastImport = ref<string | null>(null);
-const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-watch(
-	() => state.lastImportAt,
-	(value) => {
-		lastImport.value = value === null ? null : timeFormat.format(new Date(value));
-	},
-	{ immediate: true },
-);
+const lastImport = computed(() => (state.lastImportAt === null ? null : timeFormat.format(new Date(state.lastImportAt))));
 
 function onImportFiles(files: File[]): void {
 	void importFiles(files);

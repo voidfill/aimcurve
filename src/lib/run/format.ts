@@ -1,7 +1,6 @@
 /** Shared number and time formatting for the Run view. */
 
 export const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-export const clockFormat = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 
 const formats = new Map<number, Intl.NumberFormat>();
 

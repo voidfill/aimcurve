@@ -17,6 +17,7 @@ import type { ResultKind } from '../lib/scenario/format';
 import type { ScenarioVersion } from '../lib/scenario/link';
 import { getScenario, type HistoryRun, listHistory, listVersions, type Scenario } from '../lib/scenario/queries';
 import { curveFor, type ScoringInput } from '../lib/scoring';
+import { errorText } from '../lib/error';
 import { useDb } from './useDb';
 import { useImport } from './useImport';
 
@@ -51,10 +52,6 @@ export interface ScenarioApi {
 /** How many of the latest perf-backed runs are read to find the reference run. */
 const REFERENCE_LOOKBACK = 5;
 
-function errorText(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
-
 export function useScenario(hash: Ref<string>): ScenarioApi {
 	const { pg } = useDb();
 	const { revision } = useImport();
@@ -66,7 +63,8 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 	const botError = ref<string | null>(null);
 	const bots = shallowRef<BotSeries | null>(null);
 
-	let window: number | null = null;
+	/** The scenario's fixed live window in seconds, else null. */
+	let liveWindow: number | null = null;
 	let gen = 0;
 	let botGen = 0;
 	let botsWanted = false;
@@ -103,7 +101,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 				state.value = 'missing';
 				return;
 			}
-			window = fixedWindow(slots);
+			liveWindow = fixedWindow(slots);
 
 			const latest = runs.filter((r) => r.hasPerf).slice(-REFERENCE_LOOKBACK).reverse();
 			const ids = latest.map((r) => r.id);
@@ -122,7 +120,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 				}
 			}
 			const reference = latest.find((r) => inputs.has(r.id) && kills.has(r.id));
-			const tabs = reference ? botTabs(inputs.get(reference.id)!, kills.get(reference.id)!, window) : null;
+			const tabs = reference ? botTabs(inputs.get(reference.id)!, kills.get(reference.id)!, liveWindow) : null;
 
 			const { groups, groupOf } = configGroups(runs);
 			data.value = { scenario, versions, runs, groups, groupOf, kind, tabs };
@@ -152,7 +150,7 @@ export function useScenario(hash: Ref<string>): ScenarioApi {
 				d.tabs,
 				(stem) => inputs.get(idOf.get(stem)!),
 				(stem) => kills.get(idOf.get(stem)!),
-				window,
+				liveWindow,
 			);
 			botState.value = 'ready';
 			botError.value = null;

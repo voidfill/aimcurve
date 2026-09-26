@@ -1,17 +1,12 @@
-import type { PGlite, PGliteInterface } from '@electric-sql/pglite';
+import type { PGliteInterface } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
 import { PGliteWorker } from '@electric-sql/pglite/worker';
-import { drizzle } from 'drizzle-orm/pglite';
 import { applyMigrations, type MigrateResult } from './migrate';
 import { migrations } from './migrations';
 import { CLOSE_REQUEST, type CloseReply } from './opfs';
-import * as schema from './schema';
-
-export type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 interface Handles {
 	pg: PGliteInterface;
-	db: Db;
 	worker: Worker;
 }
 
@@ -23,8 +18,8 @@ let lastMigration: MigrateResult | undefined;
 
 /**
  * Browser-only: one PGlite worker, backed by OPFS, migrated on first use.
- * `getDb()` and `getPg()` both await this single initialization so the app
- * never opens a second connection to the same opfs-ahp:// database.
+ * Every `getPg()` awaits this single initialization so the app never opens a
+ * second connection to the same database.
  */
 function init(): Promise<Handles> {
 	handles ??= (async () => {
@@ -33,10 +28,7 @@ function init(): Promise<Handles> {
 			const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 			pg = await PGliteWorker.create(worker, { extensions: { live } });
 			lastMigration = await applyMigrations(pg, migrations);
-			// PGliteWorker implements PGliteInterface but does not extend PGlite,
-			// which is the concrete class drizzle's pglite driver is typed against.
-			const db = drizzle(pg as unknown as PGlite, { schema });
-			return { pg, db, worker };
+			return { pg, worker };
 		} catch (err) {
 			// Worker construction, wasm loading, and IndexedDB access can all
 			// fail transiently (private browsing, blocked site data, a full
@@ -51,18 +43,13 @@ function init(): Promise<Handles> {
 	return handles;
 }
 
-/** The Drizzle wrapper over the shared PGlite connection. */
-export function getDb(): Promise<Db> {
-	return init().then((h) => h.db);
-}
-
-/** The raw PGlite interface behind `getDb()`, for hand-written SQL. */
+/** The shared PGlite connection. */
 export function getPg(): Promise<PGliteInterface> {
 	return init().then((h) => h.pg);
 }
 
 /**
- * The most recent migration result, once `getDb()` has resolved. The ingest
+ * The most recent migration result, once `getPg()` has resolved. The ingest
  * layer needs this: a reset means its previously-imported data is gone, and
  * this is the only signal that tells it so.
  */
@@ -95,7 +82,7 @@ function closeInWorker(worker: Worker): Promise<boolean> {
 }
 
 /**
- * Closes the connection and drops the cache, so the next `getDb()` starts a
+ * Closes the connection and drops the cache, so the next `getPg()` starts a
  * fresh worker.
  *
  * Only the dev reset calls this. The pool holds sync access handles on roughly

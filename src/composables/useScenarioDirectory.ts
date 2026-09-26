@@ -19,6 +19,7 @@ import {
 	type SortKey,
 } from '../lib/scenario/directory';
 import { listScenarios } from '../lib/scenario/queries';
+import { errorText } from '../lib/error';
 import { useDb } from './useDb';
 import { useImport } from './useImport';
 
@@ -53,7 +54,7 @@ export function useScenarioDirectory(): ScenarioDirectoryApi {
 			error.value = null;
 		} catch (err) {
 			if (mine !== gen) return;
-			error.value = err instanceof Error ? err.message : String(err);
+			error.value = errorText(err);
 			state.value = 'error';
 		}
 	}

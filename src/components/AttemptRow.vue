@@ -15,6 +15,7 @@
  */
 import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
+import { formatScore } from '../lib/run/format';
 import type { Attempt } from '../lib/run/queries';
 
 const props = defineProps<{
@@ -35,7 +36,6 @@ const timeFormat = new Intl.DateTimeFormat(undefined, {
 	dateStyle: 'short',
 	timeStyle: 'short',
 });
-const scoreFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 
 // Computed, not called from the template: a settled pass replaces the whole
 // rail array, so every row re-renders, and a method would re-run both `Intl`
@@ -44,7 +44,7 @@ const startedAt = computed(() => timeFormat.format(new Date(props.attempt.starte
 
 // Null is absent, not zero.
 const score = computed(() =>
-	props.attempt.score === null ? 'No score recorded' : scoreFormat.format(props.attempt.score),
+	props.attempt.score === null ? 'No score recorded' : formatScore(props.attempt.score),
 );
 </script>
 

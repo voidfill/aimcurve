@@ -7,6 +7,7 @@
  * split is an injection point rather than a structural commitment.
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
+import { errorText } from '../error';
 import { applyChunk } from './batch';
 import { buildChunk, type ChunkResult } from './chunk';
 import { fileStem, isPerf, isStats, parseFilenameTime } from './classify';
@@ -135,7 +136,7 @@ async function runChunk(
 		if (entries.length === 1) {
 			report.failures.push({
 				name: entries[0]!.name,
-				error: err instanceof Error ? err.message : String(err),
+				error: errorText(err),
 			});
 			return [];
 		}

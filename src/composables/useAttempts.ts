@@ -22,6 +22,7 @@ import {
 	type AttemptCursor,
 	type ScenarioOption,
 } from '../lib/run/queries';
+import { errorText } from '../lib/error';
 import { useDb } from './useDb';
 import { useImport } from './useImport';
 import { useSelection } from './useSelection';
@@ -69,10 +70,6 @@ function cursorOf(attempt: Attempt): AttemptCursor {
 function isAfter(a: AttemptCursor, b: AttemptCursor): boolean {
 	if (a.writtenAt !== b.writtenAt) return a.writtenAt > b.writtenAt;
 	return a.id > b.id;
-}
-
-function errorText(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
 }
 
 export function useAttempts(): AttemptsApi {
@@ -301,9 +298,8 @@ export function useAttempts(): AttemptsApi {
 	let resolvedStem: string | null = null;
 
 	/**
-	 * A settled import pass re-reads the selection, and under the ten-second
-	 * polling fallback that is every ten seconds. Flipping to `loading` each time
-	 * would blank the result the user is reading, so a refresh of the *same*
+	 * An import pass that wrote rows re-reads the selection. Flipping to
+	 * `loading` each time would blank the result the user is reading, so a refresh of the *same*
 	 * selection keeps the resolved summary on screen while it is in flight. A
 	 * different stem still shows the loading line: continuing to render the
 	 * previous attempt under a link that names another one would be showing the
@@ -404,7 +400,7 @@ export function useAttempts(): AttemptsApi {
 		{ immediate: true },
 	);
 
-	// Every settled import pass bumps `revision`, including a partly committed
+	// Every import pass that wrote rows bumps `revision`, including a partly committed
 	// failed one, so this is also how the available committed summaries come
 	// back after a partial failure. In inspection mode `loadSelection` re-reads
 	// the same stem, which refreshes `hasPerf` without moving the selection; in

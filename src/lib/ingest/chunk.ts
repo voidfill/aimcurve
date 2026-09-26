@@ -6,6 +6,7 @@
  * call is the column order in `src/db/sql/0006_stage.sql`; they have to be read
  * together.
  */
+import { errorText } from '../error';
 import { parsePerf, TICK_METRICS } from '../parse/perf';
 import { parseStatsCsv, type StatsCsv } from '../parse/stats-csv';
 import { classify, clockToMs, fileStem, isPerf, isStats } from './classify';
@@ -78,7 +79,7 @@ export function buildChunk(files: InputFile[]): ChunkResult {
 				perfStems.push(fileStem(file.name));
 			}
 		} catch (err) {
-			failures.push({ name: file.name, error: err instanceof Error ? err.message : String(err) });
+			failures.push({ name: file.name, error: errorText(err) });
 		}
 	}
 

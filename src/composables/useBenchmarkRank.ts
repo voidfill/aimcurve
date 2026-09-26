@@ -13,15 +13,28 @@ import type { Snapshot } from '../lib/benchmarks/snapshot';
 
 let shared: Promise<Snapshot> | null = null;
 
-/** The snapshot, loaded once and shared by every user of it. */
+/**
+ * The snapshot, loaded once and shared by every user of it. A failed load is
+ * not cached, so the next user tries again.
+ */
 export function loadSnapshot(): Promise<Snapshot> {
-	shared ??= import('../data/benchmarks.json').then((module) => module.default as unknown as Snapshot);
+	shared ??= import('../data/benchmarks.json').then(
+		(module) => module.default as unknown as Snapshot,
+		(err: unknown) => {
+			shared = null;
+			throw err;
+		},
+	);
 	return shared;
 }
 
-/** Trimmed scenario name → picked KovaaK's benchmark ID, or null for none. */
+/**
+ * Trimmed scenario name → picked KovaaK's benchmark ID, or null for none. No
+ * storage argument: VueUse resolves `localStorage` inside a try, where naming
+ * the global here would throw outright when site data is blocked.
+ */
 export function usePicks(): Ref<Record<string, number | null>> {
-	return useStorage<Record<string, number | null>>('aimcurve.benchmark-pick', {}, localStorage);
+	return useStorage<Record<string, number | null>>('aimcurve.benchmark-pick', {});
 }
 
 /** The stored picks, or none when storage holds something else. */

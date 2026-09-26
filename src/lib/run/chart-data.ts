@@ -138,11 +138,6 @@ export function chartData(
 	};
 }
 
-/** A projected score as the axis shows it: seconds (`B − y`) on a race. */
-export function axisValue(curve: RunCurve, y: number): number {
-	return curve.params.kind === 'race' ? curve.params.budget - y : y;
-}
-
 /**
  * The y range before padding (B7 of the benchmark ranks design). With the rank
  * layer on, it reaches up to the next rank's threshold when that is near: no
