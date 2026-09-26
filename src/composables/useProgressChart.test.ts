@@ -1,0 +1,64 @@
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { createApp, effectScope, ref, shallowRef, type Ref } from 'vue';
+import benchmarksJson from '../data/benchmarks.json';
+import snapshotJson from '../data/demo-snapshot.json';
+import { candidates } from '../lib/benchmarks/pick';
+import type { Snapshot } from '../lib/benchmarks/snapshot';
+import { DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from '../lib/demo/snapshot';
+import { useProgressChart } from './useProgressChart';
+import { type ScenarioData, useScenario } from './useScenario';
+import { SOURCE_KEY } from './useSource';
+
+const demo = snapshotJson as unknown as DemoSnapshot;
+
+describe('useProgressChart', () => {
+	let data: Ref<ScenarioData>;
+
+	beforeAll(async () => {
+		const app = createApp({});
+		app.provide(SOURCE_KEY, { source: shallowRef(snapshotSource(demo)), revision: ref(0) });
+		const api = app.runWithContext(() => effectScope().run(() => useScenario(ref(DEMO_SCENARIO_HASH)))!);
+		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+		data = ref(api.data.value!) as Ref<ScenarioData>;
+	});
+
+	function overall(dateAxis: boolean) {
+		const name = data.value.scenario.name;
+		const bench = candidates(benchmarksJson as unknown as Snapshot, name)[0]!;
+		return effectScope().run(() =>
+			useProgressChart(data, {
+				activeTab: ref(null),
+				bots: ref(null),
+				bench: ref(bench),
+				group: ref(null),
+				dateAxis: ref(dateAxis),
+			}),
+		)!;
+	}
+
+	it('plots every run on the Overall tab with the PB step line and median', () => {
+		const c = overall(false);
+		const scores = data.value.runs.map((r) => r.score);
+		expect(c.series.value!.y).toEqual(scores);
+		expect(c.x.value).toEqual(scores.map((_, i) => i + 1));
+		const best = c.lines.value!.best.filter((v): v is number => v !== null);
+		expect(best).toHaveLength(39);
+		for (let i = 1; i < best.length; i++) expect(best[i]).toBeGreaterThanOrEqual(best[i - 1]!);
+		expect(c.ranks.value?.ranks.length).toBeGreaterThan(0);
+		expect(c.breaks.value.length).toBeGreaterThan(0);
+	});
+
+	it('puts runs on their dates on the date axis', () => {
+		const c = overall(true);
+		expect(c.x.value[0]).toBe(new Date(data.value.runs[0]!.startedAt).getTime() / 1000);
+	});
+
+	it('explains a run in its tooltip', () => {
+		const c = overall(false);
+		const first = c.tipFor(0)!;
+		expect(first.head).toMatch(/^#1 · /);
+		expect(first.rows).toContainEqual({ label: 'vs PB before', value: 'first run' });
+		const later = c.tipFor(5)!;
+		expect(later.rows.map((r) => r.label)).toEqual(expect.arrayContaining(['time', 'rank', 'vs PB before']));
+	});
+});
