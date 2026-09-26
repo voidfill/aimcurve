@@ -12,7 +12,8 @@ describe('workerBuilder', () => {
 		const first = build([]);
 		const second = build([]);
 
-		worker.dispatchEvent(new ErrorEvent('error', { message: 'worker failed' }));
+		// Node 24 has no global ErrorEvent; the handler only reads `message`.
+		worker.dispatchEvent(Object.assign(new Event('error'), { message: 'worker failed' }));
 
 		await expect(first).rejects.toThrow('worker failed');
 		await expect(second).rejects.toThrow('worker failed');

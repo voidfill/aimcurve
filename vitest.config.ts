@@ -1,5 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
+// KovaaK's stamps filenames in the recording machine's local time, and the
+// curated fixtures were recorded in Berlin. Pinned before any worker spawns
+// (they inherit it) so pairing runs to perfs does not depend on where the
+// suite runs — CI is UTC.
+process.env.TZ = 'Europe/Berlin';
+
 export default defineConfig({
 	test: {
 		environment: 'node',
