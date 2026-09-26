@@ -219,9 +219,16 @@ existing dark style:
 4. **Beat 3 — "Watch the curve bend."** The Overall progression chart for Air
    Spectral Easy across all 39 runs: dots, PB step line, rolling median, rank
    bands, session breaks.
-5. **Closing CTA.** Repeat **Import your stats**, the privacy line
-   (*"Everything stays in this browser. Nothing is uploaded."*), and a short
-   "what you need": KovaaK's with stats output on (the default).
+5. **Closing CTA.** Repeat **Import your stats**, the privacy line (see
+   *Privacy copy* below), and a short "what you need": KovaaK's with stats
+   output on (the default).
+
+**Privacy copy.** One line, used verbatim wherever the product states it:
+*"Fully local: your stats stay in this browser. No server, no account, no
+tracking."* It replaces "Nothing is uploaded", which reads wrong next to an
+import button that feels like uploading. The About closing CTA,
+`EmptyState.vue:26` and `ImportControls.vue:54` all use it; the last two are
+existing copy updated in this work.
 
 Each beat carries a small "Sample data: Air Spectral Easy" label so no one
 mistakes it for their own runs. The pinned run is a named constant
@@ -281,7 +288,7 @@ In `index.html`:
 - `<title>aimcurve — KovaaK's run analysis</title>`
 - `<meta name="description">` — draft: *"Free KovaaK's run analysis in your
   browser: see where each run gained or lost pace, which bots cost you, and how
-  you're improving. Nothing is uploaded."*
+  you're improving. Fully local, no account."*
 - `og:type` `website`, `og:site_name`, `og:title`, `og:description`,
   `og:url`, `og:image` (+ `og:image:width` 1200, `og:image:height` 630,
   `og:image:alt`).
@@ -318,8 +325,9 @@ Rewritten product-first:
    import again after a session to add new runs. (Live folder connection is
    switched off behind `LIVE_FOLDER_ENABLED`; neither the README nor About
    promises live updates while it is.)
-5. Privacy: processed in the browser, stored locally, nothing uploaded, no
-   sync across devices.
+5. Privacy: fully local. Files are read and stored in your browser; there is
+   no backend, no account and no analytics, so data also does not sync
+   across devices.
 6. **Development** — the current README content, unchanged except for the
    new `gen-demo` script in the scripts table and the demo fixtures in the
    layout section.
