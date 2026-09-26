@@ -81,7 +81,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 			@resume-latest="resumeLatest()"
 		/>
 	</Teleport>
-	<EmptyState v-if="onboarding" class="page" />
+	<EmptyState v-if="onboarding" />
 	<p v-else-if="dbError === null && (!ready || hasRuns === null)" class="muted starting pending">
 		{{ ready ? 'Loading attempts…' : 'Starting the local database…' }}
 	</p>
@@ -267,7 +267,6 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	color: var(--color-text-muted);
 }
 
-.page,
 .starting {
 	padding: 12px 18px 24px;
 }

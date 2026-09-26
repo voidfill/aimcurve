@@ -16,6 +16,14 @@ const { ready, error: dbError } = useDb();
 const { state, error, rows, retry } = useScenarioDirectory();
 const { current, setQ, setSort, setBench } = useDirectoryRoute();
 
+/**
+ * A working database with no completed run: the page is only the empty state,
+ * rendered at the top level like every view's, so it sits where theirs do.
+ */
+const empty = computed(
+	() => dbError.value === null && ready.value && state.value !== 'loading' && state.value !== 'error' && rows.value.length === 0,
+);
+
 const { snapshot, settled, bench, ranks } = usePbRanks(
 	rows,
 	computed(() => current.value.bench),
@@ -49,7 +57,8 @@ const stop = watch(search, (el) => {
 </script>
 
 <template>
-	<div class="scenarios" :class="{ fill: rows.length > 0 }">
+	<EmptyState v-if="empty" />
+	<div v-else class="scenarios" :class="{ fill: rows.length > 0 }">
 		<section v-if="dbError !== null" class="notice danger" role="alert">
 			<h1>Scenarios are unavailable</h1>
 			<p>The local database could not be opened, so no run can be read.</p>
@@ -66,8 +75,6 @@ const stop = watch(search, (el) => {
 			<p>{{ error }}</p>
 			<button type="button" @click="retry()">Try again</button>
 		</section>
-
-		<EmptyState v-else-if="rows.length === 0" />
 
 		<section v-else class="panel" aria-labelledby="scenarios-heading">
 			<header>

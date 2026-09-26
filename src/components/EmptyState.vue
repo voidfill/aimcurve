@@ -35,8 +35,12 @@ const { state } = useImport();
 	align-items: center;
 	justify-content: center;
 	gap: var(--space-3);
-	/* The viewport below the application bar, less the page's own padding. */
-	min-height: calc(100dvh - var(--app-bar-height) - 3rem);
+	/*
+		Exactly the viewport below the application bar: every view renders this
+		as its own top-level branch, never inside a padded wrapper, so it sits in
+		the same place on every page.
+	*/
+	min-height: calc(100dvh - var(--app-bar-height));
 	padding: var(--space-8) var(--space-4);
 	text-align: center;
 }
