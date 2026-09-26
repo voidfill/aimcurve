@@ -314,8 +314,10 @@ Rewritten product-first:
 2. **Open aimcurve →** link to the live site.
 3. What it shows: three short items mirroring the beats, each with a
    screenshot from About, in `docs/images/`.
-4. How to use: open the site, import your KovaaK's `stats` folder, play —
-   new runs appear as they land (where folder access is supported).
+4. How to use: open the site, import your KovaaK's `stats` folder, and
+   import again after a session to add new runs. (Live folder connection is
+   switched off behind `LIVE_FOLDER_ENABLED`; neither the README nor About
+   promises live updates while it is.)
 5. Privacy: processed in the browser, stored locally, nothing uploaded, no
    sync across devices.
 6. **Development** — the current README content, unchanged except for the
