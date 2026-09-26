@@ -5,7 +5,7 @@ Static Vue 3 single-page application with a client-side Postgres (PGlite) and pr
 ## Setup
 
 ```sh
-nix develop      # node 22 + corepack; pnpm pinned by package.json
+nix develop      # node 24 LTS + corepack; pnpm pinned by package.json
 pnpm install
 ```
 

@@ -17,7 +17,7 @@
         devShells.default = pkgs.mkShell {
           # pnpm comes from corepack, pinned by package.json's `packageManager`.
           packages = with pkgs; [
-            nodejs_22
+            nodejs_24
             corepack
           ];
 
