@@ -12,7 +12,8 @@
  * - nothing connected, or a snapshot: Import (the folder input);
  * - a live folder: a greyed "Live" status. Importing once would stop the
  *   watcher, so it is not one click away; the menu still offers it;
- * - lost permission: Reconnect, against the stored handle;
+ * - lost permission: Reconnect, against the stored handle (Import while live
+ *   folders are switched off);
  * - a failed scan: Retry;
  * - a pass running: its progress;
  * - no database: a greyed Import.
@@ -27,14 +28,13 @@ import { useRoute } from 'vue-router';
 import { onClickOutside, onKeyStroke } from '@vueuse/core';
 import { useDb } from '../composables/useDb';
 import { useImport } from '../composables/useImport';
-import { canPickDirectory } from '../lib/run/import-controller';
-import { importOptions } from '../lib/run/import-options';
+import { canConnectFolder, importOptions, LIVE_FOLDER_ENABLED } from '../lib/run/import-options';
 
 const route = useRoute();
 const { ready, error: dbError } = useDb();
 const { state, connect, reconnect, importFiles, disconnect, retryScan } = useImport();
 
-const canPick = canPickDirectory();
+const canPick = canConnectFolder();
 /** The control stands in for the Data tab, so it carries the "you are here" mark. */
 const onData = computed(() => route.name === 'data');
 const disabled = computed(() => !ready.value || dbError.value !== null);
@@ -47,7 +47,7 @@ const primary = computed<Primary>(() => {
 		case 'connected':
 			return 'live';
 		case 'reconnect':
-			return 'reconnect';
+			return canPick ? 'reconnect' : 'import';
 		case 'error':
 			return 'retry';
 		default:
@@ -149,7 +149,18 @@ function run(action: () => Promise<void>): void {
 				<input type="file" multiple accept=".csv,.perf" :disabled="disabled" @change="onFiles" />
 			</label>
 
-			<template v-if="canPick">
+			<template v-if="!LIVE_FOLDER_ENABLED">
+				<div class="rule" role="separator"></div>
+				<button type="button" class="item" disabled>
+					<span class="title">Connect folder</span>
+					<span class="sub">Live updates · coming later</span>
+				</button>
+				<button v-if="options.disconnect" type="button" class="item" :disabled="disabled" @click="run(disconnect)">
+					<span class="title">Disconnect</span>
+					<span class="sub">Stops watching; imported attempts stay</span>
+				</button>
+			</template>
+			<template v-else-if="canPick">
 				<div class="rule" role="separator"></div>
 				<button v-if="options.reconnect" type="button" class="item" :disabled="disabled" @click="run(reconnect)">
 					<span class="title">Reconnect</span>
