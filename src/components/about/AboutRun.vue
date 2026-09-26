@@ -8,31 +8,16 @@
  *
  * Reads the snapshot source its parent provides.
  */
-import { computed, ref } from 'vue';
+import { computed, toRef } from 'vue';
 import BotTable from '../BotTable.vue';
-import UnifiedChart, { type ChartLayers } from '../UnifiedChart.vue';
-import { useBenchmarkRank } from '../../composables/useBenchmarkRank';
-import { useRunAnalysis } from '../../composables/useRunAnalysis';
-import { useRunCharts } from '../../composables/useRunCharts';
-import type { BaselineOption } from '../../lib/run/baseline';
+import UnifiedChart from '../UnifiedChart.vue';
 import { formatValue } from '../../lib/run/format';
 import type { Attempt } from '../../lib/run/queries';
+import { useDemoRun } from './useDemoRun';
 
 const props = defineProps<{ attempt: Attempt }>();
 
-const LAYERS: ChartLayers = { local: true, accumulated: true, baseline: true, baseLocal: false, recent: false, ranks: true };
-
-const { state, analysis, baseline } = useRunAnalysis(
-	computed<Attempt | null>(() => props.attempt),
-	ref<BaselineOption>('pb-before'),
-);
-// Its own picks, never the visitor's stored ones: the default benchmark, and nothing written.
-const bench = useBenchmarkRank(
-	computed(() => props.attempt.scenarioName),
-	computed(() => props.attempt.score),
-	{ picks: ref({}) },
-);
-const charts = useRunCharts(analysis, baseline, bench, { layers: ref(LAYERS), window: ref(5) });
+const { state, bench, charts } = useDemoRun(toRef(props, 'attempt'));
 const { current, budget, chart, layers, chartBaseline, chartRanks, readoutAt, timeAt, spans, colors, table, hovered, pinned, highlight, toggle } =
 	charts;
 

@@ -3,50 +3,26 @@
  * The About page (D5 of the About design): a short walkthrough of the charts
  * on real sample runs, then one action, importing your own stats.
  *
- * It never opens the database. The charts read a bundled snapshot of the demo
+ * It never reads the database. The charts read a bundled snapshot of the demo
  * runs, provided here for the walkthrough below, so a first-time visitor sees
- * them at once instead of waiting for PGlite. The snapshot and the benchmark
- * ladder load together, so the rank bands never pop in after the chart.
+ * them at once instead of waiting for PGlite, which the app shell meanwhile
+ * warms up for their import.
  */
-import { onMounted, ref, shallowRef } from 'vue';
+import { onMounted, ref } from 'vue';
 import AboutDemo from '../components/about/AboutDemo.vue';
-import { loadSnapshot } from '../composables/useBenchmarkRank';
-import { provideSource } from '../composables/useSource';
+import { provideDemo } from '../components/about/provideDemo';
 import { markAboutSeen } from '../lib/about';
-import type { DataSource } from '../lib/data-source';
-import { DEMO_RUN_STEM, type DemoSnapshot, snapshotSource } from '../lib/demo/snapshot';
-import type { Attempt } from '../lib/run/queries';
 
 const PRIVACY = 'Fully local: your stats stay in this browser. No server, no account, no tracking.';
 
-const source = shallowRef<DataSource | null>(null);
-provideSource({ source, revision: ref(0) });
-
-const state = ref<'loading' | 'ready' | 'error'>('loading');
-const attempt = shallowRef<Attempt | null>(null);
-
-async function load(): Promise<void> {
-	state.value = 'loading';
-	try {
-		const [module] = await Promise.all([import('../data/demo-snapshot.json'), loadSnapshot()]);
-		const snapshot = module.default as unknown as DemoSnapshot;
-		attempt.value = snapshot.attempts[DEMO_RUN_STEM] ?? null;
-		source.value = snapshotSource(snapshot);
-		state.value = 'ready';
-	} catch {
-		state.value = 'error';
-	}
-}
+const { state, attempt, load } = provideDemo();
 
 const walkthrough = ref<HTMLElement | null>(null);
 function scrollToWalkthrough(): void {
 	walkthrough.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-onMounted(() => {
-	markAboutSeen();
-	void load();
-});
+onMounted(markAboutSeen);
 </script>
 
 <template>
