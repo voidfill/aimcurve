@@ -73,7 +73,7 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 			}
 		}
 
-		expect(counts).toEqual({ clock: 2011, race: 153, unsupported: 0, killCapped: 2 });
+		expect(counts).toEqual({ clock: 2110, race: 201, unsupported: 0, killCapped: 2 });
 		expect([...kindsByHash].filter(([, kinds]) => kinds.size > 1)).toEqual([]);
 		expect(endpointMisses).toEqual([]);
 		expect(nonMonotone).toEqual([]);
