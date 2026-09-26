@@ -12,6 +12,7 @@ import { onMounted, ref } from 'vue';
 import AboutDemo from '../components/about/AboutDemo.vue';
 import { provideDemo } from '../components/about/provideDemo';
 import { markAboutSeen } from '../lib/about';
+import { GITHUB_MARK_PATH, ISSUES_URL, REPO_URL } from '../lib/links';
 
 const PRIVACY = 'Fully local: your stats stay in this browser. No server, no account, no tracking.';
 
@@ -70,6 +71,21 @@ onMounted(markAboutSeen);
 				<RouterLink class="cta" :to="{ name: 'data' }">Import your stats</RouterLink>
 			</div>
 			<p class="fine">{{ PRIVACY }}</p>
+
+			<section class="project" aria-labelledby="project-heading">
+				<h3 id="project-heading">Free and open source</h3>
+				<p>
+					aimcurve is a side project, still early. If it helps your practice, a star on GitHub helps other players find
+					it. If something looks wrong or is missing, say so: every report makes it better.
+				</p>
+				<div class="actions">
+					<a class="ghost star" :href="REPO_URL" target="_blank" rel="noopener">
+						<svg viewBox="0 0 16 16" aria-hidden="true"><path :d="GITHUB_MARK_PATH" /></svg>
+						Star on GitHub
+					</a>
+					<a class="ghost" :href="ISSUES_URL" target="_blank" rel="noopener">Report a bug or suggest a feature</a>
+				</div>
+			</section>
 		</footer>
 	</article>
 </template>
@@ -188,6 +204,37 @@ h1 {
 	font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
 	color: var(--color-text-strong);
 	letter-spacing: -0.015em;
+}
+
+.project {
+	margin-top: clamp(2rem, 1.5rem + 2vw, 3rem);
+	padding-top: clamp(1.5rem, 1rem + 1.5vw, 2rem);
+	border-top: 1px solid var(--color-border);
+}
+
+.project h3 {
+	font-size: 1.0625rem;
+	color: var(--color-text-strong);
+}
+
+.project .actions {
+	margin-top: var(--space-4);
+}
+
+a.ghost {
+	text-decoration: none;
+}
+
+.star {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.star svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
 }
 
 .closing p:not(.fine) {
