@@ -62,7 +62,7 @@ const canRetryScan = computed(() => props.connection === 'error' && !props.busy)
 				label="Import progress"
 			/>
 
-			<p v-if="message !== null" class="muted">{{ message }}</p>
+			<p v-if="message !== null" class="muted selectable">{{ message }}</p>
 		</div>
 	</section>
 </template>
