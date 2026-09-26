@@ -1,5 +1,5 @@
 /**
- * The Command Prompt script that moves KovaaK's output folders somewhere a
+ * The PowerShell script that moves KovaaK's output folders somewhere a
  * browser may read, and links them back so the game notices nothing.
  *
  * Chromium refuses `Program Files`, `Windows`, `ProgramData` and every
@@ -8,26 +8,31 @@
  * only shape that works is this one: the real folders live under the user
  * profile, and the link sits inside the game's own tree.
  *
+ * PowerShell rather than cmd: the admin shell Windows offers today (right-click
+ * Start → Terminal (Admin)) is PowerShell, where `set`, `%VAR%` and `mklink`
+ * all quietly mean something else. `robocopy /MOVE` rather than `Move-Item`,
+ * because a Steam library often sits on another drive and neither `move` nor
+ * `Move-Item` will carry a folder across volumes.
+ *
  * The script is built here, away from the component, because it is a string
- * the user pastes into an elevated shell. The path is theirs, so it is checked
- * for anything `cmd` would read as syntax rather than as a path.
+ * the user pastes into an elevated shell. The path is theirs, so it goes in a
+ * single-quoted literal, where nothing but a quote means anything.
  */
 
 export const DEFAULT_KOVAAKS_PATH =
 	'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FPSAimTrainer\\FPSAimTrainer';
 
-/** Where the moved folders end up. `%USERPROFILE%` is never on the blocklist. */
-export const LINK_TARGET = '%USERPROFILE%\\aimcurve';
+/** Where the moved folders end up. The user profile is never on the blocklist. */
+export const LINK_TARGET = '$env:USERPROFILE\\aimcurve';
 
 export type ScriptResult = { ok: true; script: string } | { ok: false; reason: string };
 
 /**
- * `"` would close our quoting; `&`, `|`, `<`, `>` and `^` are separators and
- * escapes; `%` would expand a variable of the user's choosing; a newline would
- * append a command of its own. None of them belong in a Windows path, so
- * rejecting is honest rather than restrictive.
+ * A newline would end the command the path sits in, and `"` never occurs in a
+ * Windows path. PowerShell also closes a single-quoted string on typographic
+ * quotes, so those are refused rather than trusted to escape like `'` does.
  */
-const UNSAFE = /["&|<>^%\r\n]/;
+const UNSAFE = /["\r\n\u2018\u2019\u201a\u201b]/;
 
 /** A drive letter and a separator. Rules out relative paths and UNC shares. */
 const ABSOLUTE = /^[A-Za-z]:\\/;
@@ -42,8 +47,12 @@ function clean(input: string): string {
 }
 
 /**
- * `set K=` carries the path so it appears exactly once: the only line the user
+ * `$K` carries the path so it appears exactly once: the only line the user
  * has to read against their own machine is the one they just filled in.
+ *
+ * A folder already in place under the profile is skipped. Running the script
+ * twice would otherwise have robocopy move a junction's contents onto
+ * themselves and delete them as the source.
  */
 export function buildScript(input: string): ScriptResult {
 	const path = clean(input);
@@ -54,12 +63,14 @@ export function buildScript(input: string): ScriptResult {
 	return {
 		ok: true,
 		script: [
-			`set K=${path}`,
-			`md "${LINK_TARGET}"`,
-			`move "%K%\\stats" "${LINK_TARGET}\\stats"`,
-			`move "%K%\\performances" "${LINK_TARGET}\\performances"`,
-			`mklink /J "%K%\\stats" "${LINK_TARGET}\\stats"`,
-			`mklink /J "%K%\\performances" "${LINK_TARGET}\\performances"`,
+			`$K = '${path.replaceAll("'", "''")}'`,
+			`$A = "${LINK_TARGET}"`,
+			`foreach ($d in 'stats', 'performances') {`,
+			`  if (Test-Path "$A\\$d") { Write-Warning "$A\\$d already exists, skipping"; continue }`,
+			`  robocopy "$K\\$d" "$A\\$d" /E /MOVE /NFL /NDL /NJH /NP`,
+			`  if ($LASTEXITCODE -ge 8) { Write-Warning "Could not move $d"; continue }`,
+			`  New-Item -ItemType Junction -Path "$K\\$d" -Target "$A\\$d" | Out-Null`,
+			`}`,
 		].join('\n'),
 	};
 }

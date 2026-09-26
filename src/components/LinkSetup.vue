@@ -21,7 +21,9 @@ async function copy(): Promise<void> {
 	const current = result.value;
 	if (!current.ok) return;
 	try {
-		await navigator.clipboard.writeText(current.script);
+		// The trailing newline runs the closing `}` on paste instead of leaving
+		// the loop waiting at the prompt for an Enter nobody knows to press.
+		await navigator.clipboard.writeText(`${current.script}\n`);
 		copied.value = true;
 		clearTimeout(clear);
 		clear = setTimeout(() => (copied.value = false), 2000);
@@ -54,8 +56,8 @@ async function copy(): Promise<void> {
 			<p class="hint">In Steam: right-click KovaaK's → Manage → Browse local files, then open <code>FPSAimTrainer</code>.</p>
 
 			<p class="lede">
-				Close KovaaK's, then run this in Command Prompt <strong>as administrator</strong> — Windows
-				protects Program Files.
+				Close KovaaK's, then paste this into PowerShell <strong>as administrator</strong> (right-click
+				Start → Terminal (Admin)) — Windows protects Program Files.
 			</p>
 
 			<div class="script">
