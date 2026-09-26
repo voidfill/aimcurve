@@ -75,7 +75,7 @@ const failed = computed(() => issues.value.some((issue) => issue.bad));
 		<details v-if="issues.length > 0" class="issues" :class="{ failed }">
 			<summary>{{ issues.length }} {{ issues.length === 1 ? 'note' : 'notes' }} from this import</summary>
 			<p class="muted">Everything else was imported, and nothing already imported was affected.</p>
-			<ul>
+			<ul class="selectable">
 				<li v-for="issue in issues" :key="issue.text">{{ issue.text }}</li>
 			</ul>
 		</details>
