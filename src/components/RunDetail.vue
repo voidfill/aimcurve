@@ -92,6 +92,7 @@ const {
 	hovered,
 	pinned,
 	highlight,
+	pinnedSpans,
 	toggle,
 } = useRunCharts(analysis, baseline, bench, {
 	layers: computed<ChartLayers>(() => ({
@@ -181,14 +182,17 @@ const noKills = computed(() => current.value !== null && current.value.params.ki
 					:encounters="spans"
 					:colors="colors"
 					:highlight="highlight"
+					:pinned="pinnedSpans"
 					:readout-at="readoutAt"
 					:recent-count="analysis.recent.length"
 					:time-at="timeAt"
 					:ranks="chartRanks"
+					:fit="settings.fit"
 				/>
 				<footer class="legend">
 					<span>thin = local pace · thick = accumulated pace (projected final {{ race ? 'time' : 'score' }})</span>
 					<span>solid = this run · dashed = baseline<template v-if="baseline.kind === 'flat'"> · dotted = PB without a curve</template></span>
+					<span>drag to zoom · ctrl+scroll zooms · shift+drag or drag an axis pans · double-click resets</span>
 					<span v-if="baseline.kind === 'none'" class="final">
 						{{ baseline.reason === 'is-pb' ? 'this is the PB' : baseline.reason === 'first-run' ? 'first run of this scenario' : 'no comparable charted run' }}
 					</span>

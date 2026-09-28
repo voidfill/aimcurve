@@ -18,7 +18,7 @@ import { useDemoRun } from './useDemoRun';
 const props = defineProps<{ attempt: Attempt }>();
 
 const { state, retry, bench, charts } = useDemoRun(toRef(props, 'attempt'));
-const { current, budget, chart, layers, chartBaseline, chartRanks, readoutAt, timeAt, spans, colors, table, hovered, pinned, highlight, toggle } =
+const { current, budget, chart, layers, chartBaseline, chartRanks, readoutAt, timeAt, spans, colors, table, hovered, pinned, highlight, pinnedSpans, toggle } =
 	charts;
 
 function hover(key: string | null): void {
@@ -87,6 +87,7 @@ const benchName = computed(() => bench.selected.value?.benchmark.name ?? null);
 				:encounters="spans"
 				:colors="colors"
 				:highlight="highlight"
+				:pinned="pinnedSpans"
 				:readout-at="readoutAt"
 				:recent-count="0"
 				:time-at="timeAt"

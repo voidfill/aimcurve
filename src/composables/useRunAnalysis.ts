@@ -39,6 +39,8 @@ export interface ChartSettings {
 	option: BaselineOption;
 	/** Local-pace window, seconds. */
 	window: 1 | 3 | 5;
+	/** What the y axis fits: the accumulated lines, or every drawn line. */
+	fit: 'pace' | 'all';
 }
 
 const DEFAULTS: ChartSettings = {
@@ -50,6 +52,7 @@ const DEFAULTS: ChartSettings = {
 	ranks: true,
 	option: 'pb-before',
 	window: 5,
+	fit: 'pace',
 };
 
 /**

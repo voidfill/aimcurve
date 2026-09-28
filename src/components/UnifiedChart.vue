@@ -11,15 +11,22 @@
  * sign, which a uPlot band cannot do), bot boundaries, labels and highlights.
  * The tooltip is a Vue element teleported into uPlot's overlay, driven by its
  * cursor, and the keyboard moves the same cursor.
+ *
+ * The x axis zooms and pans (`useChartZoom`). The y axis fits the visible
+ * stretch: by default the accumulated lines alone, so local pace, several
+ * times as wide, runs off the plot instead of flattening them; where it does,
+ * a mark on the plot's edge says so.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { useChartZoom } from '../composables/useChartZoom';
 import { paintRanks } from '../lib/benchmarks/paint';
 import type { RankStep } from '../lib/benchmarks/snapshot';
+import { lowerIndex, upperIndex, type View } from '../lib/chart/view';
 import type { Encounter } from '../lib/run/bots';
-import { type ChartData, yBounds } from '../lib/run/chart-data';
+import { type ChartData, focusExtent, pinView, yBounds } from '../lib/run/chart-data';
 import { formatSigned, formatValue } from '../lib/run/format';
 
 export interface ChartLayers {
@@ -38,26 +45,36 @@ export interface ChartRanks {
 	next: number | null;
 }
 
-const props = defineProps<{
-	data: ChartData;
-	kind: 'clock' | 'race';
-	/** A race's budget: axis and tooltip values show `budget − y` seconds. */
-	budget: number | null;
-	layers: ChartLayers;
-	baseline: { kind: 'charted' | 'flat'; label: string; score: number } | null;
-	encounters: readonly Encounter[];
-	colors: Map<string, string>;
-	/** Encounters to highlight, or null for none. */
-	highlight: readonly Encounter[] | null;
-	/** The exact cumulative comparison at progress `x`, positive ahead; null without a baseline. */
-	readoutAt: ((x: number) => number) | null;
-	/** Recent runs contributing to the range. */
-	recentCount: number;
-	/** This run's elapsed seconds at progress `x`. */
-	timeAt: (x: number) => number;
-	/** Rank bands, or null when the scenario has no rank. */
-	ranks: ChartRanks | null;
-}>();
+/** What the y axis fits: the accumulated lines (`pace`), or every drawn line. */
+export type ChartFit = 'pace' | 'all';
+
+const props = withDefaults(
+	defineProps<{
+		data: ChartData;
+		kind: 'clock' | 'race';
+		/** A race's budget: axis and tooltip values show `budget − y` seconds. */
+		budget: number | null;
+		layers: ChartLayers;
+		baseline: { kind: 'charted' | 'flat'; label: string; score: number } | null;
+		encounters: readonly Encounter[];
+		colors: Map<string, string>;
+		/** Encounters to highlight, or null for none. */
+		highlight: readonly Encounter[] | null;
+		/** The pinned bot's encounters, which the x axis zooms to; null for none. */
+		pinned?: readonly Encounter[] | null;
+		/** The exact cumulative comparison at progress `x`, positive ahead; null without a baseline. */
+		readoutAt: ((x: number) => number) | null;
+		/** Recent runs contributing to the range. */
+		recentCount: number;
+		/** This run's elapsed seconds at progress `x`. */
+		timeAt: (x: number) => number;
+		/** Rank bands, or null when the scenario has no rank. */
+		ranks: ChartRanks | null;
+		/** What the y axis fits; `pace` unless given. */
+		fit?: ChartFit;
+	}>(),
+	{ fit: 'pace', pinned: null },
+);
 
 /** The plot's height unless the layout gives the element one (see `.chart`). */
 const HEIGHT = 340;
@@ -78,6 +95,27 @@ const idx = ref<number | null>(null);
 const cursorLeft = ref(0);
 
 const race = computed(() => props.kind === 'race');
+
+const zoom = useChartZoom(plot, {
+	bounds: () => [0, props.data.xMax],
+	// Half a percent of a race, a third of a second of a minute's clock.
+	minSpan: () => props.data.xMax / 200,
+	yAuto: (_u, min, max) => {
+		const [lo, hi] = props.fit === 'pace' ? (focus() ?? [min, max]) : [min, max];
+		const [a, b] = yBounds(lo!, hi!, props.ranks, props.layers.ranks);
+		return uPlot.rangeNum(a, b, 0.1, true);
+	},
+});
+
+/** The drawn accumulated lines' extent over the x view. */
+function focus(): [number, number] | null {
+	const d = props.data;
+	const [a, b] = zoom.x.value ?? [0, d.xMax];
+	const vis = visibility();
+	const lines = { accumulated: vis[S.acc], baseAccumulated: vis[S.baseAcc], recent: vis[S.recentMean] };
+	const extent = focusExtent(d, lines, lowerIndex(d.display, a), upperIndex(d.display, b));
+	return extent && [extent[0], extent[1]];
+}
 
 /** A projected score as shown: seconds on a race. */
 function shown(y: number): number {
@@ -241,16 +279,67 @@ function paintBots(u: uPlot): void {
 		if ((!next || px(u, next.x0) - x1 > ratio) && left + width - x1 > ratio) boundary(x1);
 		const pad = 6 * ratio;
 		const swatch = 6 * ratio;
-		if (x1 - x0 < textWidth(ctx, e.bot) + swatch + 3 * pad) return;
+		// Zoomed in, a span cut by the plot's left edge is labelled from that edge.
+		const start = Math.max(x0, left);
+		if (x1 - start < textWidth(ctx, e.bot) + swatch + 3 * pad) return;
 		ctx.fillStyle = props.colors.get(e.bot) ?? '#2f363d';
-		ctx.fillRect(x0 + pad, top + 5 * ratio, swatch, swatch);
+		ctx.fillRect(start + pad, top + 5 * ratio, swatch, swatch);
 		ctx.fillStyle = highlighted.has(e.index) ? '#9cc4ec' : '#8b9299';
-		ctx.fillText(e.bot, x0 + pad + swatch + 4 * ratio, top + 4 * ratio);
+		ctx.fillText(e.bot, start + pad + swatch + 4 * ratio, top + 4 * ratio);
 	});
 }
 
-/** Over the lines: dim everything outside the highlighted encounters (Run B). */
+/**
+ * Where a local line runs off the plot, a dashed rule just inside the edge it
+ * left by, in the line's colour: a clipped dip or spike still shows it
+ * happened, and the dash tells it apart from a line lying on the edge.
+ */
+function paintClipped(u: uPlot): void {
+	const vis = visibility();
+	const lines: [readonly (number | null)[], string][] = [];
+	if (vis[S.local]) lines.push([props.data.local, 'rgba(207,214,221,0.7)']);
+	if (vis[S.baseLocal]) lines.push([props.data.baseLocal, 'rgba(240,178,63,0.7)']);
+	const min = u.scales.y!.min!;
+	const max = u.scales.y!.max!;
+	const xs = props.data.display;
+	const i0 = Math.max(0, lowerIndex(xs, u.scales.x!.min!) - 1);
+	const i1 = Math.min(xs.length - 1, upperIndex(xs, u.scales.x!.max!) + 1);
+	const ctx = u.ctx;
+	const ratio = uPlot.pxRatio;
+	const { left, top, width, height } = u.bbox;
+	const inset = 3 * ratio;
+	ctx.save();
+	ctx.beginPath();
+	ctx.rect(left, top, width, height);
+	ctx.clip();
+	ctx.lineWidth = 2 * ratio;
+	ctx.setLineDash([3 * ratio, 3 * ratio]);
+	for (const [ys, color] of lines) {
+		ctx.strokeStyle = color;
+		ctx.beginPath();
+		// One path segment per run of steps past an edge, so the dash is continuous.
+		for (const [edge, y] of [[1, top + inset], [-1, top + height - inset]] as const) {
+			let from: number | null = null;
+			for (let i = i0; i <= i1; i++) {
+				const v = ys[i];
+				const out = v != null && (edge === 1 ? v > max : v < min);
+				const x = u.valToPos(xs[i]!, 'x', true);
+				if (out && from === null) from = x;
+				if ((!out || i === i1) && from !== null) {
+					ctx.moveTo(from, y);
+					ctx.lineTo(Math.max(x, from + ratio), y);
+					from = null;
+				}
+			}
+		}
+		ctx.stroke();
+	}
+	ctx.restore();
+}
+
+/** Over the lines: clipped local pace, and everything outside the highlighted encounters dimmed (Run B). */
 function paintOver(u: uPlot): void {
+	paintClipped(u);
 	if (!props.highlight || props.highlight.length === 0) return;
 	const ctx = u.ctx;
 	const { left, top, width, height } = u.bbox;
@@ -279,14 +368,13 @@ function line(show: boolean, style: Pick<uPlot.Series, 'stroke' | 'width' | 'das
 function options(width: number, height: number): uPlot.Options {
 	const flat = props.baseline?.kind === 'flat';
 	const vis = visibility();
-	const xMax = props.data.xMax;
 	return {
 		width,
 		height,
 		legend: { show: false },
 		padding: [18, 12, 0, 0],
 		cursor: {
-			drag: { x: false, y: false, setScale: false },
+			...zoom.cursor,
 			y: false,
 			points: {
 				size: (_u, i) => (i === S.acc || i === S.baseAcc ? 8 : i === S.local || i === S.baseLocal ? 5 : 0),
@@ -296,13 +384,8 @@ function options(width: number, height: number): uPlot.Options {
 			},
 		},
 		scales: {
-			x: { time: false, range: [0, xMax] },
-			y: {
-				range: (_u, min, max) => {
-					const [lo, hi] = yBounds(min, max, props.ranks, props.layers.ranks);
-					return uPlot.rangeNum(lo, hi, 0.1, true);
-				},
-			},
+			x: { time: false, ...zoom.scales.x },
+			y: zoom.scales.y,
 		},
 		axes: [
 			{
@@ -335,6 +418,7 @@ function options(width: number, height: number): uPlot.Options {
 		hooks: {
 			drawAxes: [paintUnder],
 			draw: [paintOver],
+			...zoom.hooks,
 			setCursor: [
 				(u) => {
 					idx.value = u.cursor.idx ?? null;
@@ -364,6 +448,7 @@ function build(): void {
 	const u = new uPlot(options(Math.max(200, el.clientWidth), plotHeight(inner)), aligned(), el);
 	plot.value = u;
 	over.value = u.over;
+	zoom.attach(u);
 	syncPoints(u);
 	idx.value = null;
 }
@@ -396,7 +481,7 @@ watch(
 		if (!u) return;
 		u.batch(() => {
 			u.setData(aligned(), false);
-			u.setScale('x', { min: 0, max: props.data.xMax });
+			zoom.refresh();
 		});
 		idx.value = null;
 	},
@@ -414,7 +499,8 @@ watch(
 			}
 		});
 		syncPoints(u);
-		u.redraw(false);
+		// The fit depends on which lines are drawn.
+		zoom.apply();
 	},
 	{ deep: true },
 );
@@ -424,11 +510,40 @@ watch(
 	() => plot.value?.redraw(false),
 );
 
-// The y range depends on the rank layer. Setting the x scale explicitly is what
-// makes uPlot rerun the auto y range, and so the range callback.
+// The y range depends on the rank layer and the fit. Setting the x scale
+// explicitly is what makes uPlot rerun the auto y range, and so the callback.
 watch(
-	() => [props.ranks, props.layers.ranks],
-	() => plot.value?.setScale('x', { min: 0, max: props.data.xMax }),
+	() => [props.ranks, props.layers.ranks, props.fit],
+	() => zoom.apply(),
+);
+
+/*
+ * Pinning a bot zooms to it (`pinView`), and pinning another moves there.
+ * Unpinning puts back the view from before the first pin, unless the view
+ * was moved meanwhile: then it stays where it was moved to.
+ */
+let beforePin: { x: View | null; y: View | null } | null = null;
+let pinnedView: View | null = null;
+
+function same(a: View | null, b: View | null): boolean {
+	return a === b || (a !== null && b !== null && a[0] === b[0] && a[1] === b[1]);
+}
+
+watch(
+	() => props.pinned,
+	(list) => {
+		const view = list ? pinView(list, props.data.xMax) : null;
+		const untouched = beforePin !== null && same(zoom.x.value, pinnedView) && zoom.y.value === null;
+		if (view) {
+			if (!untouched) beforePin = { x: zoom.x.value, y: zoom.y.value };
+			zoom.show(view);
+			pinnedView = zoom.x.value;
+			return;
+		}
+		if (untouched) zoom.show(beforePin!.x, beforePin!.y);
+		beforePin = null;
+		pinnedView = null;
+	},
 );
 
 /* ------------------------------------------------------------------ */
@@ -440,6 +555,7 @@ function moveTo(i: number): void {
 	if (!u) return;
 	const n = props.data.display.length;
 	const next = Math.max(0, Math.min(n - 1, i));
+	zoom.revealX(props.data.display[next]!);
 	u.setCursor({ left: u.valToPos(props.data.display[next]!, 'x'), top: u.bbox.height / uPlot.pxRatio / 2 });
 }
 
@@ -470,7 +586,10 @@ function onKey(event: KeyboardEvent): void {
 	else if (event.key === 'ArrowLeft') moveTo(current === null ? n - 1 : stepFrom(current, -1));
 	else if (event.key === 'Home') moveTo(0);
 	else if (event.key === 'End') moveTo(n - 1);
-	else if (event.key === 'Escape') plot.value?.setCursor({ left: -10, top: -10 });
+	else if (event.key === 'Escape') {
+		plot.value?.setCursor({ left: -10, top: -10 });
+		zoom.reset();
+	}
 	else handled = false;
 	if (handled) event.preventDefault();
 }
@@ -538,7 +657,7 @@ const tip = computed(() => {
 		class="chart"
 		tabindex="0"
 		role="img"
-		:aria-label="`Pace chart. Use the left and right arrow keys to inspect points; Escape clears.`"
+		:aria-label="`Pace chart. Use the left and right arrow keys to inspect points; Escape clears and resets the zoom. Drag across the chart to zoom in.`"
 		@keydown="onKey"
 		@pointerdown="root?.focus({ preventScroll: true })"
 	>
@@ -554,6 +673,9 @@ const tip = computed(() => {
 				</div>
 			</div>
 		</Teleport>
+		<button v-if="zoom.zoomed.value" type="button" class="zoom-reset" title="Reset zoom (or double-click the chart, or press Escape)" @click="zoom.reset()">
+			reset
+		</button>
 	</div>
 </template>
 

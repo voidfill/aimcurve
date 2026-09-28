@@ -8,11 +8,13 @@
  * painted on its canvas, so each can take its config group's colour, and so
  * can the session rules and the rank bands. The tooltip is a Vue element in
  * uPlot's overlay, driven by its cursor; the keyboard moves the same cursor.
+ * The x axis zooms and pans (`useChartZoom`), and y fits the runs in view.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { useChartZoom } from '../composables/useChartZoom';
 import { paintRanks, type RankLadder } from '../lib/benchmarks/paint';
 import { yBounds } from '../lib/run/chart-data';
 import { NEUTRAL } from '../lib/scenario/config';
@@ -58,6 +60,20 @@ const over = shallowRef<HTMLElement | null>(null);
 const idx = ref<number | null>(null);
 const cursorLeft = ref(0);
 
+const zoom = useChartZoom(plot, {
+	// Padded, so the first and last runs sit clear of the edges: half an
+	// attempt, each run centred in its slot, or 2 % of the dates, at least an hour.
+	bounds: () => {
+		const lo = props.x[0] ?? 0;
+		const hi = props.x[props.x.length - 1] ?? 0;
+		const pad = props.dateAxis ? Math.max(3600, (hi - lo) * 0.02) : 0.5;
+		return [lo - pad, hi + pad];
+	},
+	// Four attempts, or an hour.
+	minSpan: () => (props.dateAxis ? 3600 : 4),
+	yAuto: (_u, min, max) => yRange(min!, max!),
+});
+
 function aligned(): uPlot.AlignedData {
 	return [[...props.x], [...props.y], [...props.best], [...props.median]];
 }
@@ -100,7 +116,9 @@ function paintDots(u: uPlot): void {
 	const r = 3.5 * ratio;
 	ctx.save();
 	ctx.beginPath();
-	ctx.rect(left - r, top - r, width + 2 * r, height + 2 * r);
+	// A dot may overhang the top and bottom, where the y range can end on it. Not
+	// the sides: the x domain is padded, and zoomed in, dots out of view stay out.
+	ctx.rect(left, top - r, width, height + 2 * r);
 	ctx.clip();
 	ctx.lineWidth = 1.5 * ratio;
 	ctx.strokeStyle = '#0e1114';
@@ -169,13 +187,13 @@ function options(width: number): uPlot.Options {
 		legend: { show: false },
 		padding: [14, 12, 0, 0],
 		cursor: {
-			drag: { x: false, y: false, setScale: false },
+			...zoom.cursor,
 			y: false,
 			points: { show: false },
 		},
 		scales: {
-			x: { time: props.dateAxis },
-			y: { range: (_u, min, max) => yRange(min, max) },
+			x: { time: props.dateAxis, ...zoom.scales.x },
+			y: zoom.scales.y,
 		},
 		axes: [
 			{
@@ -204,6 +222,7 @@ function options(width: number): uPlot.Options {
 		hooks: {
 			drawAxes: [paintUnder],
 			draw: [paintDots],
+			...zoom.hooks,
 			setCursor: [
 				(u) => {
 					idx.value = u.cursor.idx ?? null;
@@ -221,6 +240,7 @@ function build(): void {
 	const u = new uPlot(options(Math.max(200, el.clientWidth)), aligned(), el);
 	plot.value = u;
 	over.value = u.over;
+	zoom.attach(u);
 	u.over.addEventListener('click', () => {
 		const i = idx.value;
 		if (i !== null && props.y[i] != null) emit('open', i);
@@ -236,10 +256,14 @@ useResizeObserver(root, (entries) => {
 	if (plot.value && width > 0 && width !== plot.value.width) plot.value.setSize({ width, height: HEIGHT });
 });
 
-// The x scale's kind depends on this; everything else is pushed into the live instance.
+// The x scale's kind depends on this; everything else is pushed into the live
+// instance. A view in attempts means nothing on dates, so the zoom goes too.
 watch(
 	() => props.dateAxis,
-	() => build(),
+	() => {
+		zoom.reset();
+		build();
+	},
 );
 
 watch(
@@ -247,15 +271,18 @@ watch(
 	() => {
 		const u = plot.value;
 		if (!u) return;
-		u.setData(aligned(), true);
+		u.batch(() => {
+			u.setData(aligned(), false);
+			zoom.refresh();
+		});
 		idx.value = null;
 	},
 );
 
-// The y range depends on the ladder: resetting the data reruns it.
+// The y range depends on the ladder: setting the x scale reruns it.
 watch(
 	() => props.ranks,
-	() => plot.value?.setData(aligned(), true),
+	() => zoom.apply(),
 );
 
 // The hovered dot's ring is painted. Redrawing only when the run changes
@@ -278,6 +305,7 @@ function step(from: number, direction: 1 | -1): number {
 function moveTo(i: number): void {
 	const u = plot.value;
 	if (!u || i < 0 || i >= props.x.length) return;
+	zoom.revealX(props.x[i]!);
 	u.setCursor({ left: u.valToPos(props.x[i]!, 'x'), top: u.bbox.height / uPlot.pxRatio / 2 });
 }
 
@@ -290,7 +318,10 @@ function onKey(event: KeyboardEvent): void {
 	else if (event.key === 'Home') moveTo(step(-1, 1));
 	else if (event.key === 'End') moveTo(step(n, -1));
 	else if (event.key === 'Enter' && current !== null && props.y[current] != null) emit('open', current);
-	else if (event.key === 'Escape') plot.value?.setCursor({ left: -10, top: -10 });
+	else if (event.key === 'Escape') {
+		plot.value?.setCursor({ left: -10, top: -10 });
+		zoom.reset();
+	}
 	else handled = false;
 	if (handled) event.preventDefault();
 }
@@ -312,7 +343,7 @@ const tip = computed(() => {
 		class="chart"
 		tabindex="0"
 		role="img"
-		:aria-label="`${label}. Use the left and right arrow keys to step through runs, Enter to open one; Escape clears.`"
+		:aria-label="`${label}. Use the left and right arrow keys to step through runs, Enter to open one; Escape clears and resets the zoom. Drag across the chart to zoom in.`"
 		@keydown="onKey"
 		@pointerdown="root?.focus({ preventScroll: true })"
 	>
@@ -328,6 +359,9 @@ const tip = computed(() => {
 				</div>
 			</div>
 		</Teleport>
+		<button v-if="zoom.zoomed.value" type="button" class="zoom-reset" title="Reset zoom (or double-click the chart, or press Escape)" @click="zoom.reset()">
+			reset
+		</button>
 	</div>
 </template>
 
