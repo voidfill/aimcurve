@@ -3,7 +3,7 @@ import { live } from '@electric-sql/pglite/live';
 import { PGliteWorker } from '@electric-sql/pglite/worker';
 import { applyMigrations, type MigrateResult } from './migrate';
 import { migrations } from './migrations';
-import { CLOSE_REQUEST, type CloseReply } from './opfs';
+import { CLOSE_REQUEST, type CloseReply } from './store';
 
 interface Handles {
 	pg: PGliteInterface;
@@ -17,7 +17,7 @@ let handles: Promise<Handles> | undefined;
 let lastMigration: MigrateResult | undefined;
 
 /**
- * Browser-only: one PGlite worker, backed by OPFS, migrated on first use.
+ * Browser-only: one PGlite worker, backed by IndexedDB, migrated on first use.
  * Every `getPg()` awaits this single initialization so the app never opens a
  * second connection to the same database.
  */
@@ -85,13 +85,12 @@ function closeInWorker(worker: Worker): Promise<boolean> {
  * Closes the connection and drops the cache, so the next `getPg()` starts a
  * fresh worker.
  *
- * Only the dev reset calls this. The pool holds sync access handles on roughly
- * two thousand OPFS files, and removing that directory underneath a live pool
- * leaves a half-deleted data directory that the next start cannot resume from.
- * The cache is cleared before the close is awaited: a close that hangs must
+ * Only the dev reset calls this. `deleteDatabase` is blocked for as long as
+ * PGlite holds its IndexedDB connection, so the database has to be closed
+ * before it can be deleted. The cache is cleared before the close is awaited: a close that hangs must
  * not leave a handle behind that callers can still reach.
  *
- * Rejects when the handles may still be held: the worker did not answer in
+ * Rejects when the connection may still be open: the worker did not answer in
  * time, or another tab's worker is the one holding the database.
  */
 export async function closePg(): Promise<void> {
@@ -104,7 +103,7 @@ export async function closePg(): Promise<void> {
 	const settled = await pending.catch(() => undefined);
 	if (settled === undefined) return;
 	// PGlite is closed inside the worker first: `pg.close()` only terminates
-	// the worker, and the browser releases the pool's handles some time after.
+	// the worker, and the browser closes its connection some time after.
 	let held: boolean;
 	try {
 		held = await closeInWorker(settled.worker);

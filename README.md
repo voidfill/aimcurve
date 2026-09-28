@@ -129,7 +129,7 @@ the two filenames can disagree by a second, and `Challenge Start` is not a uniqu
 ### Database
 
 No server. `src/db/client.ts` runs PGlite in a dedicated worker (`src/db/worker.ts`) on
-an OPFS access-handle pool in the browser; tests open an in-memory instance. Both apply
+IndexedDB (`idb://`) in the browser; tests open an in-memory instance. Both apply
 the same hand-written SQL.
 
 Migrations are hand-written, numbered SQL files in `src/db/sql/`, named

@@ -1,7 +1,7 @@
 ## Development
 
 Run the dev server in background mode; it binds port 4321 with `strictPort`,
-so the origin stays constant and the local database (OPFS) and saved folder
+so the origin stays constant and the local database and saved folder
 handle (IndexedDB) survive restarts.
 
     pnpm dev
