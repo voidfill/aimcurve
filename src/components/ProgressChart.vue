@@ -360,10 +360,19 @@ const tip = computed(() => {
 					<span class="tip-value" :class="row.tone">{{ row.value }}</span>
 				</div>
 			</div>
+			<button
+				v-if="zoom.zoomed.value"
+				type="button"
+				class="zoom-reset"
+				title="Show every run (or press Escape)"
+				@click.stop="zoom.reset()"
+				@pointerdown.stop
+				@mousedown.stop
+				@dblclick.stop
+			>
+				reset zoom
+			</button>
 		</Teleport>
-		<button v-if="zoom.zoomed.value" type="button" class="zoom-reset" title="Reset zoom (or press Escape)" @click="zoom.reset()">
-			reset
-		</button>
 	</div>
 </template>
 

@@ -191,7 +191,7 @@ tooltip. A cursor moved out of a zoomed view pans the view to it.
 | Ctrl/⌘ + wheel, or a trackpad pinch | zoom x at the pointer; with the whole run in view, zooming out continues in y, and zooming in retraces that first; over the y axis, y only |
 | Shift + wheel, or a sideways swipe | pan x, while zoomed |
 | Shift + drag on the plot, or a drag on an axis | pan |
-| double-click, Escape, or the *reset* button in the axes' corner | the whole run, y fitted again |
+| double-click, Escape, or the *reset zoom* button in the plot's top right corner | the whole run, y fitted again |
 
 A plain wheel is left to the page. Pans take the mouse only, so a finger on a
 phone keeps scrolling the page. x never leaves the run and stops at 1/200 of

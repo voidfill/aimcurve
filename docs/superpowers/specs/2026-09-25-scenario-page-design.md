@@ -134,7 +134,7 @@ scatter can carry: the first three dark slots of the dataviz reference palette
   centred in its slot, or on dates 2 % of the range, at least an hour.
 - **Zoom and pan:** as Run's pace chart (Run R3), through `useChartZoom`; y
   fits the runs in view. The click that ends a drag opens no run. A click
-  opens a run, so a double-click is no reset here: Escape and the *reset*
+  opens a run, so a double-click is no reset here: Escape and the *reset zoom*
   button are, and keys on that button are its own (Enter resets, not opens).
   Switching between attempt and date resets the zoom.
 - **Dots:** one per completed run, coloured by config group (S4).
