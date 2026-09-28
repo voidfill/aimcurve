@@ -310,6 +310,8 @@ function moveTo(i: number): void {
 }
 
 function onKey(event: KeyboardEvent): void {
+	// Keys on the reset button are its own: Enter there must reset, not open a run.
+	if (event.target !== root.value) return;
 	const n = props.y.length;
 	const current = idx.value;
 	let handled = true;
@@ -359,7 +361,7 @@ const tip = computed(() => {
 				</div>
 			</div>
 		</Teleport>
-		<button v-if="zoom.zoomed.value" type="button" class="zoom-reset" title="Reset zoom (or double-click the chart, or press Escape)" @click="zoom.reset()">
+		<button v-if="zoom.zoomed.value" type="button" class="zoom-reset" title="Reset zoom (or press Escape)" @click="zoom.reset()">
 			reset
 		</button>
 	</div>

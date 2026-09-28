@@ -134,7 +134,7 @@ const anyNeutral = computed(() => props.data.groups.some((g) => g.color === null
 			<span><b class="amber" aria-hidden="true"></b>best so far</span>
 			<span><b class="white" aria-hidden="true"></b>median of last 10 (fades in over the first 10 runs)</span>
 			<span v-if="breaks.length > 0"><b class="rule" aria-hidden="true"></b>new session</span>
-			<span class="coverage">drag to zoom · ctrl+scroll zooms · shift+drag or drag an axis pans · double-click resets</span>
+			<span class="coverage">drag to zoom · ctrl+scroll zooms · shift+drag or drag an axis pans · Escape or the reset button resets</span>
 			<span v-if="coverage" class="coverage">{{ coverage }}</span>
 			<span v-if="activeTab" class="coverage">
 				pace = the {{ race ? 'race time' : 'run score' }} at this bot's rate, as in Run's bot table · time between
