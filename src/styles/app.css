@@ -241,3 +241,43 @@ pre,
 		visibility: hidden;
 	}
 }
+
+/*
+	Zoomable uPlot charts (useChartZoom): the drag selection, the axes that pan
+	when dragged, and the button that resets the zoom.
+*/
+.u-select {
+	background: rgb(95 155 214 / 0.14);
+	border-inline: 1px solid rgb(95 155 214 / 0.55);
+}
+
+.u-axis.pan-x {
+	cursor: ew-resize;
+}
+
+.u-axis.pan-y {
+	cursor: ns-resize;
+}
+
+/*
+	In the plot's top right corner, inside uPlot's overlay. Above the tooltip,
+	which flips left of the cursor near this edge anyway.
+*/
+.zoom-reset {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 3;
+	padding: 3px 8px;
+	background: rgb(18 22 26 / 0.92);
+	border: 1px solid #2b3238;
+	border-radius: 3px;
+	font: 400 11px/1.3 var(--font-mono);
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.zoom-reset:hover {
+	color: var(--color-text-strong);
+	border-color: #38414a;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { atX, type RunCurve } from '../scoring';
-import { sample, scrubGrid, unionGrid, yBounds } from './chart-data';
+import { type ChartData, focusExtent, pinView, sample, scrubGrid, unionGrid, yBounds } from './chart-data';
 
 const f = (values: number[]) => Float64Array.from(values);
 
@@ -65,5 +65,58 @@ describe('B7 y bounds', () => {
 
 	it('keeps the data max when the target is already inside the data', () => {
 		expect(yBounds(0, 100, { next: 80 }, true)).toEqual([0, 100]);
+	});
+});
+
+describe('focus fit', () => {
+	const x = [0, 0.05, 0.2, 0.5, 1];
+	const none = x.map(() => null);
+	const data: ChartData = {
+		x,
+		display: x.map((v) => v * 100),
+		xMax: 100,
+		accumulated: [2000, 1500, 900, 950, 1000],
+		local: [2000, 1500, 200, 1800, 400],
+		baseAccumulated: [null, 1200, 980, 990, 1010],
+		baseLocal: none,
+		recentMean: none,
+		recentLow: none,
+		recentHigh: none,
+	};
+	const lines = { accumulated: true, baseAccumulated: true, recent: false };
+
+	it('fits the accumulated lines, leaving local pace out', () => {
+		expect(focusExtent(data, lines, 0, 4)).toEqual([900, 2000]);
+	});
+
+	it('fits only what is drawn', () => {
+		expect(focusExtent(data, { ...lines, baseAccumulated: false }, 2, 4)).toEqual([900, 1000]);
+	});
+
+	it('fits only the window', () => {
+		expect(focusExtent(data, lines, 2, 4)).toEqual([900, 1010]);
+	});
+
+	it('is null with no accumulated line drawn', () => {
+		expect(focusExtent(data, { accumulated: false, baseAccumulated: false, recent: false }, 0, 4)).toBeNull();
+	});
+});
+
+describe('pinned bot view', () => {
+	it('is one encounter with a tenth of it on each side, in display units', () => {
+		const [a, b] = pinView([{ x0: 0.5, x1: 0.7 }], 60)!;
+		expect(a).toBeCloseTo(28.8);
+		expect(b).toBeCloseTo(43.2);
+	});
+
+	it('covers every encounter of a bot met more than once', () => {
+		const [a, b] = pinView([{ x0: 0.1, x1: 0.2 }, { x0: 0.4, x1: 0.5 }], 100)!;
+		expect(a).toBeCloseTo(6);
+		expect(b).toBeCloseTo(54);
+	});
+
+	it('is null for encounters spread over most of the run, or none', () => {
+		expect(pinView([{ x0: 0.05, x1: 0.1 }, { x0: 0.9, x1: 0.95 }], 100)).toBeNull();
+		expect(pinView([], 100)).toBeNull();
 	});
 });

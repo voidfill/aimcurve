@@ -51,6 +51,8 @@ export interface RunChartsApi {
 	hovered: Ref<string | null>;
 	pinned: Ref<string | null>;
 	highlight: ComputedRef<Encounter[] | null>;
+	/** The pinned row's encounters alone, which the chart zooms to; null when none is pinned. */
+	pinnedSpans: ComputedRef<Encounter[] | null>;
 	/** Pins a row, or unpins it when it is already pinned. */
 	toggle: (key: string) => void;
 }
@@ -156,11 +158,13 @@ export function useRunCharts(
 		},
 	);
 
-	const highlight = computed<Encounter[] | null>(() => {
-		const key = hovered.value ?? pinned.value;
+	function spansOf(key: string | null): Encounter[] | null {
 		if (key === null) return null;
 		return race.value ? spans.value.filter((e) => String(e.index) === key) : spans.value.filter((e) => e.bot === key);
-	});
+	}
+
+	const highlight = computed(() => spansOf(hovered.value ?? pinned.value));
+	const pinnedSpans = computed(() => spansOf(pinned.value));
 
 	function toggle(key: string): void {
 		pinned.value = pinned.value === key ? null : key;
@@ -182,6 +186,7 @@ export function useRunCharts(
 		hovered,
 		pinned,
 		highlight,
+		pinnedSpans,
 		toggle,
 	};
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * The chart header (Run view R4): title and axis note, layer toggles, the
- * baseline option and the local-pace window. A toggle that cannot apply is
- * disabled with its reason as a tooltip rather than hidden.
+ * baseline option, the local-pace window and what the y axis fits. A toggle
+ * that cannot apply is disabled with its reason as a tooltip rather than hidden.
  */
 import { computed } from 'vue';
 import { BASELINE_OPTIONS, type BaselineOption } from '../lib/run/baseline';
@@ -63,6 +63,11 @@ const toggles = computed<Toggle[]>(() => {
 
 const windows: ChartSettings['window'][] = [1, 3, 5];
 
+const fits: { value: ChartSettings['fit']; label: string; title: string }[] = [
+	{ value: 'pace', label: 'fit pace', title: 'Fit the y axis to the accumulated lines; local pace may run off the edge' },
+	{ value: 'all', label: 'fit all', title: 'Fit the y axis to every drawn line' },
+];
+
 function onOption(event: Event): void {
 	emit('update', { option: (event.target as HTMLSelectElement).value as BaselineOption });
 }
@@ -107,6 +112,20 @@ function onOption(event: Event): void {
 					@click="emit('update', { window: w })"
 				>
 					{{ w === 1 ? 'raw' : `${w} s` }}
+				</button>
+			</div>
+
+			<div class="segment" role="group" aria-label="y axis fit">
+				<button
+					v-for="f in fits"
+					:key="f.value"
+					type="button"
+					:class="{ on: settings.fit === f.value }"
+					:aria-pressed="settings.fit === f.value"
+					:title="f.title"
+					@click="emit('update', { fit: f.value })"
+				>
+					{{ f.label }}
 				</button>
 			</div>
 		</div>

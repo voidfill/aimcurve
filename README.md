@@ -14,7 +14,7 @@ getting better. It runs entirely in your browser.
 
 **Where the run slipped.** One chart per run: your projected final result as the run
 unfolds, against your previous best, over the benchmark's rank bands. Hover anywhere
-for the exact difference at that moment.
+for the exact difference at that moment, and drag across any stretch to zoom in.
 
 ![The pace chart of a run that led its personal best at halfway and finished behind](docs/images/pace.png)
 

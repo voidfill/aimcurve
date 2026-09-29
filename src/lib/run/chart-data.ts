@@ -9,6 +9,7 @@
  * (NaN) in a source stays a gap (`null`), and nothing is extrapolated past a
  * source's ends.
  */
+import { extent, type View } from '../chart/view';
 import { atTime, type PaceLines, type RecentRange, type RunCurve } from '../scoring';
 
 export type Sampled = (number | null)[];
@@ -153,4 +154,49 @@ export function yBounds(
 	const next = rank?.next ?? null;
 	if (!layerOn || next === null || next - dataMax > 0.5 * (dataMax - dataMin)) return [dataMin, dataMax];
 	return [dataMin, Math.max(dataMax, next)];
+}
+
+/** Which accumulated lines are drawn, for the focus fit. */
+export interface FocusLines {
+	accumulated: boolean;
+	baseAccumulated: boolean;
+	recent: boolean;
+}
+
+/**
+ * The focus y range over the grid window `[i0, i1]`: the accumulated lines
+ * alone. Local pace is left to run off the plot, being several times as wide.
+ * Null when no accumulated line has a value there.
+ */
+export function focusExtent(data: ChartData, lines: FocusLines, i0: number, i1: number): View | null {
+	const series: Sampled[] = [];
+	if (lines.accumulated) series.push(data.accumulated);
+	if (lines.baseAccumulated) series.push(data.baseAccumulated);
+	if (lines.recent) series.push(data.recentLow, data.recentHigh, data.recentMean);
+	return extent(series, i0, i1);
+}
+
+/** Share of the span added on each side when the chart zooms to a pinned bot. */
+export const PIN_PAD = 0.1;
+
+/**
+ * Beyond this share of the run a pinned bot's encounters are not zoomed to.
+ * Over the full dump a bot met more than once in a clock run usually spans
+ * about 99 % of it (target switching meets one bot dozens of times), so the
+ * zoom would change nothing; the dimming alone shows it.
+ */
+export const PIN_MAX_SHARE = 0.6;
+
+/**
+ * The x view, in display units, that shows a pinned bot: its encounters' extent
+ * with `PIN_PAD` of it on each side. Null for none, or when they spread over
+ * more than `PIN_MAX_SHARE` of the run.
+ */
+export function pinView(list: readonly { x0: number; x1: number }[], xMax: number): View | null {
+	if (list.length === 0) return null;
+	const lo = Math.min(...list.map((e) => e.x0));
+	const hi = Math.max(...list.map((e) => e.x1));
+	if (!(hi > lo) || hi - lo > PIN_MAX_SHARE) return null;
+	const pad = (hi - lo) * PIN_PAD;
+	return [(lo - pad) * xMax, (hi + pad) * xMax];
 }

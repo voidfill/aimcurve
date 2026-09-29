@@ -60,9 +60,12 @@ describe('useRunCharts', () => {
 
 		charts.hovered.value = second!;
 		expect(charts.highlight.value!.every((e) => keyOf(e) === second)).toBe(true);
+		// What the chart zooms to follows the pin alone, not the hover.
+		expect(charts.pinnedSpans.value!.every((e) => keyOf(e) === first)).toBe(true);
 
 		charts.hovered.value = null;
 		charts.toggle(first!);
 		expect(charts.highlight.value).toBeNull();
+		expect(charts.pinnedSpans.value).toBeNull();
 	});
 });

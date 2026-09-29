@@ -142,7 +142,15 @@ Axes:
   progress, `x` as a percentage, labelled "progress". The label says which;
   they are never presented as interchangeable.
 - **y.** Projected final score. Race ticks show seconds (`B − y`). Both kinds use
-  the same scale for every series; nothing is stretched to fit.
+  the same scale for every series; nothing is stretched to fit. The range fits
+  the stretch of x in view (see *Zoom and pan*), to the accumulated lines alone
+  by default: this run's, the baseline's and the recent band, plus the next
+  rank's threshold when it is near (B7). Local pace is left to run off the plot.
+  Over the 124 sample runs it made the range 4.1× the accumulated line's at the
+  median and up to 11×, and trimming a percentile does not help, because it is
+  wide throughout, not just spiky. Where a local line leaves the plot, a dashed
+  rule in its colour runs just inside that edge, and the tooltip still gives its
+  value. *fit all* (R4) fits every drawn line instead.
 
 Series and styling, from Unified:
 
@@ -169,8 +177,28 @@ curve"); the cumulative difference vs the baseline (R7). Dots mark each visible
 line at the cursor.
 
 **Keyboard.** The chart is focusable. Left and right move the cursor one grid
-point, Home and End jump to the ends, Escape clears. This calls
-`u.setCursor(...)`, so pointer and keyboard show the same tooltip.
+point, Home and End jump to the ends, Escape clears the cursor and resets the
+zoom. This calls `u.setCursor(...)`, so pointer and keyboard show the same
+tooltip. A cursor moved out of a zoomed view pans the view to it.
+
+**Zoom and pan.** Shared with the progress chart (scenario page S5) through
+`useChartZoom`. The views are kept outside uPlot and read by the scales'
+`range` callbacks, so rescales, rebuilds and data changes keep them.
+
+| input | effect |
+| --- | --- |
+| drag across the plot | zoom x to the selection |
+| Ctrl/⌘ + wheel, or a trackpad pinch | zoom x at the pointer; with the whole run in view, zooming out continues in y, and zooming in retraces that first; over the y axis, y only |
+| Shift + wheel, or a sideways swipe | pan x, while zoomed |
+| Shift + drag on the plot, or a drag on an axis | pan |
+| double-click, Escape, or the *reset zoom* button in the plot's top right corner | the whole run, y fitted again |
+
+A plain wheel is left to the page. Pans take the mouse only, so a finger on a
+phone keeps scrolling the page. x never leaves the run and stops at 1/200 of
+it; y is unbounded. A new run keeps the x view, clamped to it, and y follows
+the data again. Bot labels follow the zoom: a span cut by the left edge is
+labelled from that edge, and the density rules (R5) are in pixels, so zooming
+in brings labels back.
 
 **Recent range.** Up to ten candidates that started before the inspected run,
 most recent first, through `recentRange()` (scoring D5). With fewer than ten, the
@@ -183,10 +211,10 @@ The chart header, left to right: title ("Pace over elapsed time" or "Pace over
 progress"), the axis note, then Unified's toggle chips — *local*, *accumulated*,
 *baseline*, *recent* — each showing its line style, then the baseline dropdown
 (R2), then Run A's smoothing segment: *raw* (1 s) / *3 s* / *5 s*, the local-pace
-window `w`. Default 5 s.
+window `w`. Default 5 s. Last, the y fit (R3): *fit pace* (default) / *fit all*.
 
-Toggles, baseline option and smoothing are stored with `useStorage` under one
-key. Turning a line off also removes what depends on it: the gap needs both
+Toggles, baseline option, smoothing and the y fit are stored with `useStorage`
+under one key. Turning a line off also removes what depends on it: the gap needs both
 accumulated lines, and the baseline's local line needs both *local* and
 *baseline*. Smoothing changes only local pace. Accumulated pace always comes
 from `u` (scoring D5).
@@ -226,6 +254,16 @@ Hovering a bot row in the table highlights all of that bot's encounters — a
 blue tint with edge lines — and dims the rest of the plot (Run B). Clicking a row
 pins the highlight, clicking it again unpins. The tooltip's bot name uses the
 same data. Runs without kills have no bot marks.
+
+Pinning also zooms x to the pinned encounters' extent, with 10 % of it on each
+side (`pinView`), and y refits to that stretch; hover never zooms. Pinning
+another row moves there. Unpinning puts back the view from before the first
+pin, unless the view was moved while pinned. Encounters spread over more than
+60 % of the run are not zoomed to: over the full dump, 107 of 127 clock
+scenarios meet a bot more than once in a run, usually across about 99 % of it
+(target switchers meet one bot 30–130 times), so the zoom would change
+nothing. Only four scenarios, which cycle many differently named bots, repeat
+one within less.
 
 ### R6. The bot table is per kill slot for races and per bot for clock runs
 

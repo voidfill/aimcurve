@@ -129,7 +129,14 @@ scatter can carry: the first three dark slots of the dataviz reference palette
 
 - **x-axis:** completed attempt number (1-based, oldest first) by default; a
   toggle switches to date. The choice is persisted per browser. Session
-  boundaries from `run_session` are faint vertical rules.
+  boundaries from `run_session` are faint vertical rules. The axis is padded
+  so the first and last runs sit clear of the edges: half an attempt, each run
+  centred in its slot, or on dates 2 % of the range, at least an hour.
+- **Zoom and pan:** as Run's pace chart (Run R3), through `useChartZoom`; y
+  fits the runs in view. The click that ends a drag opens no run. A click
+  opens a run, so a double-click is no reset here: Escape and the *reset zoom*
+  button are, and keys on that button are its own (Enter resets, not opens).
+  Switching between attempt and date resets the zoom.
 - **Dots:** one per completed run, coloured by config group (S4).
 - **PB line:** a step line of the best result so far.
 - **Typical line:** a rolling median of the last 10 completed runs, drawn
