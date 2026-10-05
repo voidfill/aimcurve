@@ -238,14 +238,15 @@ differs:
 - **PB energy:** each scenario's best score as of time `T`. It never decreases.
   This is what conventional trackers show.
 - **Form energy:** the median of each scenario's last `N` complete runs as of
-  `T`, with `N = 5`, or fewer while fewer exist. It can fall, so it reflects
-  current skill, not peak skill.
+  `T`, or fewer while fewer exist. It can fall, so it reflects current skill,
+  not peak skill. `N` is the shared form window setting: 5, 10 or 20, default
+  10 ([benchmarks page P13](2026-10-05-benchmarks-page-design.md)).
 
 Only complete runs (`run_complete`) with a non-null score count. Time is
 `started_at`, the same clock as `run_progress`.
 
-How form treats a scenario whose last run is old (mark it stale, decay it, or
-count it as is) is left to the page spec.
+Form is not decayed for age. The page marks a scenario as stale after 30 days
+instead ([benchmarks page P3](2026-10-05-benchmarks-page-design.md)).
 
 ### E7. Snapshot v2 adds each difficulty's category tree
 

@@ -36,6 +36,7 @@ Out of scope:
 | P10 | Charts use the scenario page's date / runs toggle, shared and persisted |
 | P11 | Scenario charts merge every hash of the name; aggregate charts plot custom energy |
 | P12 | Pure modules in `src/lib/energy/`, one composable, components per part |
+| P13 | One form window setting (5, 10 or 20 runs; default 10), shared with the scenario page |
 
 ---
 
@@ -70,6 +71,8 @@ The routes mirror Scenarios (`/scenarios`, `/scenario/:hash`).
 - the provisional / strict toggle (E4), persisted per browser;
 - the run window for the candle and the median (P5): a select with 10, 20 and
   50, stored in `useStorage('aimcurve.benchmark-window', 20, localStorage)`;
+- the form window (P13): a select with 5, 10 and 20, shared with the scenario
+  page;
 - a legend for the candle and the pills.
 
 **Table:** one row per tree node in tree order: overall, then each category,
@@ -100,6 +103,14 @@ children are all unplayed shows the same. In strict mode, aggregates count
 unplayed scenarios as 0 (E4) for every statistic.
 
 **Unrated** slots (E2) show "unrated" and are excluded, as in E4.
+
+**Stale:** a scenario whose last complete run is more than 30 days old is
+marked, but its values are not decayed:
+- a muted age after the name ("4 mo ago");
+- the candle and the median pill drawn at about half opacity.
+
+The PB pill stays at full strength. Aggregate rows are not marked; their
+scenarios carry the marks.
 
 ### P4. Every row shares one rank axis, Unranked to overflow
 
@@ -138,7 +149,8 @@ the E3 rules (mean for subcategories, `G` above) and the page's coverage mode
 category is the aggregate of its scenarios' p10s, not a percentile of anything.
 
 The median pill and the candle use this `W`-run window. The form line in the
-charts (P11) is E6 form. They are different quantities with different names.
+charts (P11) uses the form window (P13). They are different quantities with
+different names.
 
 ### P6. Each part of the candle takes the colour of the rank it reaches
 
@@ -153,14 +165,14 @@ charts (P11) is E6 form. They are different quantities with different names.
 Unranked uses the neutral `#8b9299`. Rank colours come from the benchmark, as
 everywhere (B7).
 
-### P7. The lane background is a per-rank pattern
+### P7. The lane background is a per-rank hatch
 
-Each rank column is filled with a fine pattern in that rank's colour, and the
-Unranked column with the same pattern in neutral grey. Two candidates were
-liked in the experiments (board 10, T3 and T8) and the final pick is made in
-implementation, against real data in both light and busy rows:
-- **Hatch:** 45° lines, about 1.6 px every 6 px, at 30–45 % opacity;
-- **Dot screen:** about 0.9 px dots every 5 px, at 50–70 % opacity.
+Each rank column is hatched in that rank's colour, and the Unranked column in
+neutral grey. The hatch is 45° lines, about 1.6 px every 6 px, at 30–45 %
+opacity (board 10, T3).
+
+A dot screen (T8: about 0.9 px dots every 5 px, at 50–70 % opacity) was liked
+too. It is the fallback if the hatch turns out too busy on real data.
 
 The opacity is tuned per rank colour so light colours (Diamond, Jade) and
 saturated ones (Master) read equally strong. The previous flat tint at 7 % was
@@ -207,7 +219,8 @@ axis resets the zoom.
 ### P11. Scenario charts merge every hash; aggregate charts plot custom energy
 
 **Scenario charts** reuse the scenario page's progression chart (S5): runs as
-dots, the PB step and the rolling median, with the rank bands of **this**
+dots, the PB step and the rolling median over the form window (P13), with the
+rank bands of **this**
 difficulty (not the stored B4 pick).
 - Energy matches scenarios by trimmed name (E8), so the chart shows the runs of
   every scenario hash with that name, merged in time order.
@@ -215,7 +228,8 @@ difficulty (not the stored B4 pick).
 
 **Aggregate charts** (subcategory, category, overall) plot custom energy on y:
 - the PB energy as a step line (`#f0b23f`, as the scenario chart's PB);
-- the E6 form energy as a line (`#e8ebee`, as the scenario chart's median);
+- the E6 form energy, over the form window (P13), as a line (`#e8ebee`, as the
+  scenario chart's median);
 - rank bands and threshold labels from E5;
 - no dots in v1. One point per run event comes from the history pass (E8).
 
@@ -251,6 +265,31 @@ or the watched folder), the existing change notification reruns the query, the
 history pass and the spread step (E8). Rows, pills and open charts then update
 in place, with no reload and no lost fold state.
 
+### P13. One form window setting, shared with the scenario page
+
+"Form" is the rolling median of a scenario's last `N` complete runs. `N` is one
+user setting:
+- **Values:** 5, 10 or 20, stored in
+  `useStorage('aimcurve.form-window', 10, localStorage)`.
+- **Default:** 10, so the scenario page looks the same as today until someone
+  changes it.
+- **Where it applies:**
+  - the scenario page's typical line (S5), which replaces its fixed 10;
+  - E6 form energy, which replaces its fixed `N = 5`;
+  - the form lines in this page's charts (P11).
+- **Where it is set:** a select in the header of both pages. Changing it on
+  either page changes both.
+- **Labels:** the legend and tooltips name the window ("form · median of last
+  10").
+
+The scenario page's lighter drawing for the first `N − 1` points (S5) follows
+`N`. Changing `N` reruns the history pass (E8), because form energy depends on
+it.
+
+The candle window `W` (P5) stays a separate setting. It describes the spread of
+recent runs, while `N` describes how quickly form reacts. They default to 20 and
+10.
+
 ## Testing
 
 - `spread`:
@@ -277,6 +316,12 @@ in place, with no reload and no lost fold state.
   - an unknown or `tree: null` id shows the notice;
   - the segmented control lists only that family's difficulties.
 - The window setting: changing it updates the candle and median, not PB.
+- Form window:
+  - one stored value read by both pages;
+  - the scenario page's typical line and its lighter first points follow `N`;
+  - form energy in the history pass follows `N`.
+- Stale: a scenario at 30 days is not marked, and one at 31 days is; the PB pill
+  is never dimmed; aggregate rows are never marked.
 - Live update: a newly ingested run updates its row and the aggregates above it,
   and open charts stay open.
 - Row model:
@@ -335,8 +380,8 @@ Ten variants of what a row shows, all on the same rows:
 9. balanced candle (worst, p10–p90, median, PB, all rank-coloured);
 10. board 9 plus PB and median pills and nine lane backgrounds.
 
-**Chosen:** board 10's candle and pills (P5–P8), with hatch or dots as the lane
-background (P7).
+**Chosen:** board 10's candle and pills (P5–P8), with the hatch (T3) as the lane
+background and the dot screen (T8) as its fallback (P7).
 
 Why the candle won:
 - it shows consistency, which no PB tracker shows;
@@ -391,20 +436,6 @@ basics, date with a switch to runs (P10), and park the rest.
   the all-time PB as a separate dot. The gap between them is a better rust
   signal than form vs PB.
 - **Hidden coverage and difficulty fit**, probably on their own page.
-
-## Open questions
-
-- **Stale data** (not refresh, which P12 covers): a scenario last played months
-  ago still shows its last `W` runs as if they were current. The options are:
-  - mark it: a muted "4 mo ago" in the row and the candle drawn fainter;
-  - decay it;
-  - leave it as is.
-
-  The proposal is to mark it in v1, after 30 days, and not decay.
-- **E6 form window:** E6 form uses the last 5 runs, the scenario page's typical
-  line the last 10, and the candle `W` (20). Should E6 move to 10, to match the
-  scenario page, or follow `W`?
-- **Lane pattern:** hatch or dots (P7).
 
 ## Facts worth not re-deriving
 
