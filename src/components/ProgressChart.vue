@@ -45,6 +45,12 @@ const props = defineProps<{
 	formatY: (v: number) => string;
 	tipFor: (i: number) => ProgressTip | null;
 	label: string;
+	/**
+	 * Whether the keyboard steps through every point, not only those with a
+	 * dot: a chart of lines alone (custom energy) has none. Enter still opens
+	 * only a run with a dot.
+	 */
+	everyPoint?: boolean;
 }>();
 
 const emit = defineEmits<{ (event: 'open', index: number): void }>();
@@ -296,9 +302,9 @@ watch(
 /* Keyboard                                                            */
 /* ------------------------------------------------------------------ */
 
-/** The next run in `direction` that has a dot. */
+/** The next run in `direction` that has a dot, or simply the next with `everyPoint`. */
 function step(from: number, direction: 1 | -1): number {
-	for (let i = from + direction; i >= 0 && i < props.y.length; i += direction) if (props.y[i] != null) return i;
+	for (let i = from + direction; i >= 0 && i < props.y.length; i += direction) if (props.everyPoint || props.y[i] != null) return i;
 	return from;
 }
 
@@ -345,7 +351,7 @@ const tip = computed(() => {
 		class="chart"
 		tabindex="0"
 		role="img"
-		:aria-label="`${label}. Use the left and right arrow keys to step through runs, Enter to open one; Escape clears and resets the zoom. Drag across the chart to zoom in.`"
+		:aria-label="`${label}. Use the left and right arrow keys to step through runs${everyPoint ? '' : ', Enter to open one'}; Escape clears and resets the zoom. Drag across the chart to zoom in.`"
 		@keydown="onKey"
 		@pointerdown="root?.focus({ preventScroll: true })"
 	>
