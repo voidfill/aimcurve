@@ -45,8 +45,7 @@ function mount(id: number, data: Run[], options: Partial<BenchmarkPageOptions> =
 	const runs = [...data];
 	app.provide(SOURCE_KEY, { source: shallowRef(source(runs)), revision });
 	const settings = {
-		formWindow: ref(10),
-		candleWindow: ref(20),
+		runWindow: ref(20),
 		mode: ref<CoverageMode>('provisional'),
 	};
 	const idRef = ref(id);
@@ -115,14 +114,14 @@ describe('P2 row model', () => {
 		expect(api.rows.value.find((r) => r.name === 'Static')!.state).toBe('played');
 	});
 
-	it('changing the window changes the candle and median, not the PB', async () => {
+	it('changing the run window changes the candle and median, not the PB', async () => {
 		const { api, settings } = mount(458, played);
 		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
 		const before = api.rows.value[3]!.spread!;
-		settings.candleWindow.value = 10;
+		settings.runWindow.value = 10;
 		await nextTick();
 		expect(api.rows.value[3]!.spread).toEqual(before);
-		settings.candleWindow.value = 2 as never;
+		settings.runWindow.value = 2 as never;
 		await nextTick();
 		const after = api.rows.value[3]!.spread!;
 		expect(after.pb).toBe(before.pb);

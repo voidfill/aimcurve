@@ -13,7 +13,7 @@ import { formatValue, timeFormat } from '../lib/run/format';
 import { formatPlayed, type ResultKind } from '../lib/scenario/format';
 import { isNewestVersion, kovaaksLink, type ScenarioVersion, shortHash, versionLabel } from '../lib/scenario/link';
 import type { Scenario } from '../lib/scenario/queries';
-import { FORM_WINDOWS, useFormWindow } from '../composables/useChartSettings';
+import { RUN_WINDOWS, useRunWindow } from '../composables/useChartSettings';
 import { useSelection } from '../composables/useSelection';
 
 const props = defineProps<{
@@ -34,7 +34,7 @@ const emit = defineEmits<{ (event: 'pick', benchmarkId: number | null): void }>(
 
 const router = useRouter();
 const { latestSeen } = useSelection();
-const formWindow = useFormWindow();
+const runWindow = useRunWindow();
 
 const meta = computed(() => [
 	`${formatValue(props.runs)} completed ${props.runs === 1 ? 'run' : 'runs'}`,
@@ -138,9 +138,9 @@ function onPick(event: Event): void {
 		</div>
 		<div class="actions">
 			<label class="setting" title="Form, the chart's typical line, is the median of this many latest runs. Shared with the Benchmarks page.">
-				<span>form</span>
-				<select :value="formWindow" @change="formWindow = Number(($event.target as HTMLSelectElement).value)">
-					<option v-for="n in FORM_WINDOWS" :key="n" :value="n">last {{ n }}</option>
+				<span>runs</span>
+				<select :value="runWindow" @change="runWindow = Number(($event.target as HTMLSelectElement).value)">
+					<option v-for="n in RUN_WINDOWS" :key="n" :value="n">last {{ n }}</option>
 				</select>
 			</label>
 			<RouterLink v-slot="{ href, navigate }" :to="playTo" custom>

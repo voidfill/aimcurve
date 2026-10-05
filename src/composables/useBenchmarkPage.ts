@@ -4,8 +4,8 @@
  *
  * One difficulty joins the snapshot tree, the run stream, the history pass and
  * the candle statistics into one row per tree node. The stream is reread when
- * an import adds runs (`revision`); the form window `N` and the coverage mode
- * rerun only the history pass, the candle window `W` only the candle step.
+ * an import adds runs (`revision`); the run window reruns the history pass and
+ * the candle step, the coverage mode only the history pass and the rows.
  */
 import { computed, type ComputedRef, type Ref, ref, shallowRef, watch } from 'vue';
 import type { Snapshot, SnapshotBenchmark } from '../lib/benchmarks/snapshot';
@@ -24,7 +24,7 @@ import type { RunLink } from '../lib/energy/queries';
 import { aggregateSpread, BODY_MIN, type Spread, spreadPass } from '../lib/energy/spread';
 import { errorText } from '../lib/error';
 import { loadedSnapshot, loadSnapshot } from './useBenchmarkRank';
-import { useCandleWindow, useCoverageMode, useFormWindow } from './useChartSettings';
+import { useCoverageMode, useRunWindow } from './useChartSettings';
 import { useSource } from './useSource';
 
 export type RowLevel = 'overall' | 'category' | 'subcategory' | 'scenario';
@@ -141,8 +141,8 @@ export interface BenchmarkPageApi {
 
 export interface BenchmarkPageOptions {
 	load?: () => Promise<Snapshot>;
-	formWindow?: Ref<number>;
-	candleWindow?: Ref<number>;
+	/** How many latest runs count: form, the candle and the median pill. */
+	runWindow?: Ref<number>;
 	mode?: Ref<CoverageMode>;
 	/** Epoch ms; the stale marks are measured from it. */
 	now?: () => number;
@@ -173,8 +173,7 @@ export function useSnapshot(load?: () => Promise<Snapshot>): {
 export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions = {}): BenchmarkPageApi {
 	const { source, revision } = useSource();
 	const { snapshot, failed, reload } = useSnapshot(options.load);
-	const formWindow = options.formWindow ?? useFormWindow();
-	const candleWindow = options.candleWindow ?? useCandleWindow();
+	const runWindow = options.runWindow ?? useRunWindow();
 	const mode = options.mode ?? useCoverageMode();
 	const now = options.now ?? Date.now;
 
@@ -232,11 +231,11 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 	});
 	const history = computed(() => {
 		const s = stream.value;
-		return s === null ? null : historyPass(s.tree, s.stream, formWindow.value, mode.value);
+		return s === null ? null : historyPass(s.tree, s.stream, runWindow.value, mode.value);
 	});
 	const spreads = computed(() => {
 		const s = stream.value;
-		return s === null ? null : spreadPass(s.tree, s.stream, candleWindow.value);
+		return s === null ? null : spreadPass(s.tree, s.stream, runWindow.value);
 	});
 	const rows = computed(() => {
 		const s = stream.value;
@@ -254,7 +253,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 		if (s === null) return null;
 		if (row.scenario !== null) {
 			if (row.state !== 'played') return null;
-			return scenarioChart(s.tree, s.stream, row.scenario, formWindow.value, dateAxis);
+			return scenarioChart(s.tree, s.stream, row.scenario, runWindow.value, dateAxis);
 		}
 		// Only aggregate charts need the history pass.
 		const h = history.value;

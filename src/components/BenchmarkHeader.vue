@@ -8,7 +8,7 @@ import { computed } from 'vue';
 import type { SnapshotBenchmark } from '../lib/benchmarks/snapshot';
 import { type Coverage, type CoverageMode, isFull } from '../lib/energy/aggregate';
 import { STALE_MS } from '../composables/useBenchmarkPage';
-import { CANDLE_WINDOWS, type ChartAxis, FORM_WINDOWS } from '../composables/useChartSettings';
+import { type ChartAxis, RUN_WINDOWS } from '../composables/useChartSettings';
 import { BODY_MIN } from '../lib/energy/spread';
 
 const STALE_DAYS = STALE_MS / 86_400_000;
@@ -20,8 +20,7 @@ const props = defineProps<{
 }>();
 
 const mode = defineModel<CoverageMode>('mode', { required: true });
-const candleWindow = defineModel<number>('candleWindow', { required: true });
-const formWindow = defineModel<number>('formWindow', { required: true });
+const runWindow = defineModel<number>('runWindow', { required: true });
 const axis = defineModel<ChartAxis>('axis', { required: true });
 
 const coverageText = computed(() => {
@@ -84,16 +83,13 @@ function number(event: Event): number {
 					strict
 				</button>
 			</div>
-			<label class="select" title="The candle and the median pill take each scenario's latest runs">
-				<span>candle</span>
-				<select :value="candleWindow" @change="candleWindow = number($event)">
-					<option v-for="n in CANDLE_WINDOWS" :key="n" :value="n">last {{ n }}</option>
-				</select>
-			</label>
-			<label class="select" title="Form, the charts' white line, is the median of this many latest runs. Shared with the scenario page.">
-				<span>form</span>
-				<select :value="formWindow" @change="formWindow = number($event)">
-					<option v-for="n in FORM_WINDOWS" :key="n" :value="n">last {{ n }}</option>
+			<label
+				class="select"
+				title="How many of each scenario's latest runs count: the candle, the median pill and form, the charts' white line. Shared with the scenario page."
+			>
+				<span>runs</span>
+				<select :value="runWindow" @change="runWindow = number($event)">
+					<option v-for="n in RUN_WINDOWS" :key="n" :value="n">last {{ n }}</option>
 				</select>
 			</label>
 			<div class="segment" role="group" aria-label="Chart x axis">
@@ -114,7 +110,7 @@ function number(event: Event): number {
 					<line x1="62" x2="84" y1="7" y2="7" stroke="#B9F2FF" stroke-width="2" />
 					<circle cx="84" cy="7" r="4.5" fill="#B9F2FF" stroke="#0b0d0f" stroke-width="1.5" />
 				</svg>
-				worst · p10–p90 · median of the last {{ candleWindow }} runs · all-time PB, each in the colour of the rank it reaches
+				worst · p10–p90 · median of the last {{ runWindow }} runs · all-time PB, each in the colour of the rank it reaches
 			</span>
 			<span class="item">fewer than {{ BODY_MIN }} runs: one tick per run</span>
 			<span class="item">categories and the overall aggregate each statistic on its own: an approximation, not a percentile</span>

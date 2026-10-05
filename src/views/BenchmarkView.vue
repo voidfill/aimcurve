@@ -12,7 +12,7 @@ import { useRoute, useRouter } from 'vue-router';
 import BenchmarkHeader from '../components/BenchmarkHeader.vue';
 import BenchmarkTable from '../components/BenchmarkTable.vue';
 import { useBenchmarkPage } from '../composables/useBenchmarkPage';
-import { useCandleWindow, useChartAxis, useCoverageMode, useFormWindow } from '../composables/useChartSettings';
+import { useChartAxis, useCoverageMode, useRunWindow } from '../composables/useChartSettings';
 import { useDb } from '../composables/useDb';
 
 const route = useRoute();
@@ -25,12 +25,11 @@ const id = computed(() => {
 });
 
 const mode = useCoverageMode();
-const candleWindow = useCandleWindow();
-const formWindow = useFormWindow();
+const runWindow = useRunWindow();
 const axis = useChartAxis();
 const dateAxis = computed(() => axis.value === 'date');
 
-const page = useBenchmarkPage(id, { mode, candleWindow, formWindow });
+const page = useBenchmarkPage(id, { mode, runWindow });
 const { state, error, snapshot, benchmark, family, tree, rows, coverage } = page;
 
 const open = ref(new Set<string>(['overall']));
@@ -93,8 +92,7 @@ watch(
 		<template v-else>
 			<BenchmarkHeader
 				v-model:mode="mode"
-				v-model:candle-window="candleWindow"
-				v-model:form-window="formWindow"
+				v-model:run-window="runWindow"
 				v-model:axis="axis"
 				:benchmark="benchmark"
 				:family="family"
@@ -107,7 +105,7 @@ watch(
 					:open="open"
 					:chart-for="page.chartFor"
 					:date-axis="dateAxis"
-					:candle-window="candleWindow"
+					:run-window="runWindow"
 					@toggle="toggle"
 					@open-run="openRun"
 				/>

@@ -62,7 +62,7 @@ async function mount(open: Set<string>, chartFor: () => RowChart = () => ({ x: [
 				open,
 				chartFor,
 				dateAxis: false,
-				candleWindow: 20,
+				runWindow: 20,
 				onToggle: (key: string) => toggled.push(key),
 			}),
 	});
@@ -88,7 +88,7 @@ describe('BenchmarkTable', () => {
 
 	it('keeps an open chart when the rows change but its row does not', async () => {
 		const chartFor = vi.fn(() => ({ x: [1], y: [null], runIds: null }) as unknown as RowChart);
-		const state = reactive({ rows, open: new Set(['overall']), candleWindow: 20 });
+		const state = reactive({ rows, open: new Set(['overall']), runWindow: 20 });
 		const el = document.createElement('div');
 		const app = createApp({
 			render: () => h(BenchmarkTable, { ...state, ranks, chartFor, dateAxis: false }),
@@ -98,7 +98,7 @@ describe('BenchmarkTable', () => {
 		await nextTick();
 		expect(chartFor).toHaveBeenCalledTimes(1);
 		state.rows = rows.map((r) => ({ ...r }));
-		state.candleWindow = 10;
+		state.runWindow = 10;
 		await nextTick();
 		expect(chartFor).toHaveBeenCalledTimes(1);
 		state.open = new Set(['overall', 's0.0']);

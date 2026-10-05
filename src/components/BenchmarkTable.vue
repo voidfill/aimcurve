@@ -24,8 +24,8 @@ const props = defineProps<{
 	open: ReadonlySet<string>;
 	chartFor: (row: BenchmarkRow, dateAxis: boolean) => RowChart | null;
 	dateAxis: boolean;
-	/** `W`, for the median pill's label. */
-	candleWindow: number;
+	/** The run window, for the median pill's label. */
+	runWindow: number;
 }>();
 
 const emit = defineEmits<{
@@ -117,7 +117,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 					<span v-for="c in columns" :key="c.name" :style="{ color: c.tint }">{{ c.name }}</span>
 				</span>
 				<span role="columnheader">PB</span>
-				<span role="columnheader">Median · last {{ candleWindow }}</span>
+				<span role="columnheader">Median · last {{ runWindow }}</span>
 			</div>
 
 			<template v-for="row in rows" :key="row.key">
@@ -164,7 +164,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 					/>
 					<span role="cell"><RankPill :r="row.spread?.pb ?? null" :ranks="ranks" :label="`${row.name} PB`" /></span>
 					<span role="cell" :class="{ dim: row.stale !== null }">
-						<RankPill :r="row.spread?.median ?? null" :ranks="ranks" :label="`${row.name} median of last ${candleWindow}`" />
+						<RankPill :r="row.spread?.median ?? null" :ranks="ranks" :label="`${row.name} median of last ${runWindow}`" />
 					</span>
 				</div>
 

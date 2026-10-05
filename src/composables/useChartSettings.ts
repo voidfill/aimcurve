@@ -1,7 +1,7 @@
 /**
  * Settings shared by the scenario and Benchmarks pages, each persisted per
- * browser: the chart's x axis (S5), the form window (P13 of the benchmarks
- * page design), and the Benchmarks page's candle window and coverage mode.
+ * browser: the chart's x axis (S5), the run window, and the Benchmarks page's
+ * coverage mode.
  *
  * VueUse keeps every `useStorage` of one key in step within the document, so
  * changing a setting on either page changes it on both. No storage argument:
@@ -30,18 +30,16 @@ export function useChartAxis(): WritableComputedRef<ChartAxis> {
 	return choice<ChartAxis>('aimcurve.scenario-axis', ['attempt', 'date'], 'attempt');
 }
 
-export const FORM_WINDOWS = [5, 10, 20] as const;
+export const RUN_WINDOWS = [5, 10, 20, 50] as const;
 
-/** `N`: form is the median of a scenario's last `N` complete runs. */
-export function useFormWindow(): WritableComputedRef<number> {
-	return choice<number>('aimcurve.form-window', FORM_WINDOWS, 10);
-}
-
-export const CANDLE_WINDOWS = [10, 20, 50] as const;
-
-/** `W`: the candle and the median pill take a scenario's last `W` complete runs. */
-export function useCandleWindow(): WritableComputedRef<number> {
-	return choice<number>('aimcurve.benchmark-window', CANDLE_WINDOWS, 20);
+/**
+ * How many of a scenario's latest complete runs count as recent: form (the
+ * charts' median line and form energy), the candle and the median pill all
+ * take that many. One setting where the spec had two (`N` for form, `W` for
+ * the candle); 10 by default, so the scenario page looks as it always has.
+ */
+export function useRunWindow(): WritableComputedRef<number> {
+	return choice<number>('aimcurve.form-window', RUN_WINDOWS, 10);
 }
 
 /** Provisional (the default) or strict coverage (E4). */

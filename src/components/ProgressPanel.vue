@@ -10,7 +10,7 @@ import { formatValue } from '../lib/run/format';
 import type { BotSeries } from '../lib/scenario/bots';
 import { NEUTRAL } from '../lib/scenario/config';
 import type { HistoryRun } from '../lib/scenario/queries';
-import { useChartAxis, useFormWindow } from '../composables/useChartSettings';
+import { useChartAxis, useRunWindow } from '../composables/useChartSettings';
 import { useProgressChart } from '../composables/useProgressChart';
 import type { BotState, ScenarioData } from '../composables/useScenario';
 import ProgressChart from './ProgressChart.vue';
@@ -43,7 +43,7 @@ watch(tab, (key) => {
 
 const axis = useChartAxis();
 const dateAxis = computed(() => axis.value === 'date');
-const formWindow = useFormWindow();
+const formWindow = useRunWindow();
 
 const runs = computed(() => props.data.runs);
 const race = computed(() => props.data.kind.kind === 'race');
