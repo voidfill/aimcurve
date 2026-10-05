@@ -184,6 +184,11 @@ scenario is shown against. It is a select joined to an arrow that opens the
 selected difficulty's sheet (left out for none, or a difficulty without a
 sheet). Each option names the rank the PB reaches on it.
 
+**The About page** ends its walkthrough with one category of a real sheet
+(Viscose Benchmarks S2 Medium, Reactive Tracking) from the bundled sample: the
+same table without the column legend, the fold actions or stored settings, its
+category open. See [preview-assets.md](preview-assets.md).
+
 **The scenario page** shows the scenario's row from the selected benchmark,
 exactly as the sheet draws it (the same legend, lane, pills and tooltip, from
 the same model). Its name cell says where the scenario sits ("in Clicking ›
