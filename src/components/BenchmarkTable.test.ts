@@ -32,13 +32,16 @@ function row(over: Partial<BenchmarkRow>): BenchmarkRow {
 		ticks: [],
 		stale: null,
 		hash: 'h',
-		rule: null,
+		color: '#CC0000',
+		parents: ['overall', 'c0'],
+		facts: null,
 		...over,
 	};
 }
 
 const rows = [
-	row({ key: 'overall', level: 'overall', name: 'Overall', node: 0, scenario: null, hash: null, rule: 'shifted geometric mean of its categories' }),
+	row({ key: 'overall', level: 'overall', name: 'Overall', node: 0, scenario: null, hash: null, color: null, parents: [] }),
+	row({ key: 'c0', level: 'category', name: 'Clicking', node: 1, scenario: null, hash: null, parents: ['overall'] }),
 	row({ key: 's0.0', name: 'Pasu', stale: '4 mo ago' }),
 	row({ key: 's0.1', name: 'Popcorn', state: 'unplayed', spread: null, body: false, hash: null }),
 ];
@@ -79,10 +82,10 @@ describe('BenchmarkTable', () => {
 		expect(el.querySelectorAll('[data-stub="chart"]')).toHaveLength(1);
 		const chevrons = [...el.querySelectorAll<HTMLButtonElement>('button.chevron')];
 		expect(chevrons[0]!.getAttribute('aria-expanded')).toBe('true');
-		expect(chevrons[0]!.getAttribute('aria-label')).toBe('Hide Overall history');
-		expect(chevrons[1]!.getAttribute('aria-label')).toBe('Show Pasu history');
-		chevrons[1]!.click();
-		el.querySelectorAll<HTMLButtonElement>('button.label')[1]!.click();
+		expect(chevrons[0]!.getAttribute('aria-label')).toBe('Hide Overall');
+		expect(chevrons[2]!.getAttribute('aria-label')).toBe('Show Pasu');
+		chevrons[2]!.click();
+		el.querySelectorAll<HTMLElement>('[role="row"].row')[2]!.click();
 		expect(toggled).toEqual(['s0.0', 's0.0']);
 	});
 
@@ -109,26 +112,25 @@ describe('BenchmarkTable', () => {
 	it('fades a stale candle and median, never its PB, and marks only that scenario', async () => {
 		const { el } = await mount(new Set());
 		const lines = el.querySelectorAll<HTMLElement>('[role="row"].row');
-		const pasu = lines[1]!;
+		const pasu = lines[2]!;
 		expect(pasu.querySelector('.age')!.textContent).toBe('4 mo ago');
-		expect(pasu.querySelector('svg g')!.getAttribute('opacity')).toBe('0.5');
+		expect(pasu.querySelector('svg g:not(.parts)')!.getAttribute('opacity')).toBe('0.5');
 		const [pb, median] = [...pasu.querySelectorAll<HTMLElement>('[role="cell"]')].slice(1);
 		expect(pb!.classList.contains('dim')).toBe(false);
 		expect(median!.classList.contains('dim')).toBe(true);
 		expect(lines[0]!.querySelector('.age')).toBeNull();
 	});
 
-	it('says not played with empty pills, and links played scenarios', async () => {
+	it('says not played with empty pills', async () => {
 		const { el } = await mount(new Set());
-		const popcorn = el.querySelectorAll<HTMLElement>('[role="row"].row')[2]!;
+		const popcorn = el.querySelectorAll<HTMLElement>('[role="row"].row')[3]!;
 		expect(popcorn.querySelector('.empty')!.textContent).toBe('not played');
 		expect([...popcorn.querySelectorAll('.pill')].map((p) => p.textContent)).toEqual(['—', '—']);
-		expect(el.querySelectorAll('a.go')).toHaveLength(1);
 	});
 
 	it('paints the candle with its lane’s rank gradient and the hatch per column', async () => {
 		const { el } = await mount(new Set());
-		const lane = el.querySelectorAll('[role="row"].row')[1]!;
+		const lane = el.querySelectorAll('[role="row"].row')[2]!;
 		const gradient = lane.querySelector('linearGradient')!;
 		expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
 		expect(gradient.querySelectorAll('stop')).toHaveLength(6);

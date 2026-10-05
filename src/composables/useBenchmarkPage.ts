@@ -18,6 +18,7 @@ import {
 	energyTree,
 	subNode,
 } from '../lib/energy/aggregate';
+import { rankOf } from '../lib/benchmarks/rank';
 import { aggregateChart, type RowChart, scenarioChart } from '../lib/energy/chart';
 import { historyPass, type RunStream, type StreamRows, toStream } from '../lib/energy/history';
 import type { RunLink } from '../lib/energy/queries';
@@ -49,8 +50,24 @@ export interface BenchmarkRow {
 	stale: string | null;
 	/** The scenario page to link: the hash with the most runs. */
 	hash: string | null;
-	/** How the row's value is made, for its chart's title. */
-	rule: string | null;
+	/** The Evxl colour of the category the row is in; null for the overall or none given. */
+	color: string | null;
+	/** The keys of the rows this one feeds into, overall first. */
+	parents: string[];
+	/** A scenario's concrete numbers for its fold; null on an aggregate. */
+	facts: ScenarioFacts | null;
+}
+
+/** What a scenario's fold states before its chart: scores, not ranks. */
+export interface ScenarioFacts {
+	/** The all-time best score; null when unplayed. */
+	pb: number | null;
+	/** Complete runs, every version of the name. */
+	runs: number;
+	/** The last run's `started_at`, epoch ms; null when unplayed. */
+	last: number | null;
+	/** The next rank above the PB on this difficulty's ladder; null at the top or unrated. */
+	next: { name: string; at: number; gap: number | null } | null;
 }
 
 export type PageState = 'loading' | 'ready' | 'missing' | 'error';
@@ -78,7 +95,14 @@ export function buildRows(
 	nodes: (Spread | null)[],
 	now: number,
 ): BenchmarkRow[] {
-	const aggregate = (key: string, level: RowLevel, name: string, node: number, rule: string): BenchmarkRow => ({
+	const aggregate = (
+		key: string,
+		level: RowLevel,
+		name: string,
+		node: number,
+		color: string | null,
+		parents: string[],
+	): BenchmarkRow => ({
 		key,
 		level,
 		name,
@@ -90,17 +114,50 @@ export function buildRows(
 		ticks: [],
 		stale: null,
 		hash: null,
-		rule,
+		color,
+		parents,
+		facts: null,
 	});
-	const rows: BenchmarkRow[] = [aggregate('overall', 'overall', 'Overall', 0, 'shifted geometric mean of its categories')];
+	const rows: BenchmarkRow[] = [
+		aggregate(
+			'overall',
+			'overall',
+			'Overall',
+			0,
+			null,
+			[],
+		),
+	];
 	tree.categories.forEach((c, ci) => {
-		rows.push(aggregate(`c${ci}`, 'category', c.name, categoryNode(ci), 'shifted geometric mean of its subcategories'));
+		const color = c.color === '' ? null : c.color;
+		const cat = `c${ci}`;
+		rows.push(
+			aggregate(
+				cat,
+				'category',
+				c.name,
+				categoryNode(ci),
+				color,
+				['overall'],
+			),
+		);
 		for (const si of c.subs) {
 			const sub = tree.subs[si]!;
-			if (sub.name !== '') rows.push(aggregate(`s${si}`, 'subcategory', sub.name, subNode(tree, si), 'mean of its scenarios'));
+			const named = sub.name !== '';
+			const parents = named ? ['overall', cat, `s${si}`] : ['overall', cat];
+			if (named) rows.push(aggregate(`s${si}`, 'subcategory', sub.name, subNode(tree, si), color, parents.slice(0, 2)));
 			sub.slots.forEach((i, slot) => {
 				const s = spreads[i] ?? null;
-				const unrated = tree.thresholds[i] === null;
+				const thresholds = tree.thresholds[i] ?? null;
+				const unrated = thresholds === null;
+				const runs = stream.runsOf[i] ?? [];
+				let pb: number | null = null;
+				for (const e of runs) if (pb === null || stream.score[e]! > pb) pb = stream.score[e]!;
+				const rank = thresholds === null ? null : rankOf(thresholds, pb ?? Number.NEGATIVE_INFINITY);
+				const next =
+					rank === null || rank.next === null || rank.nextRank === null
+						? null
+						: { name: tree.ranks[rank.nextRank]!.name, at: rank.next, gap: pb === null ? null : rank.gap };
 				const age = s === null ? 0 : now - s.last;
 				rows.push({
 					key: `s${si}.${slot}`,
@@ -114,7 +171,9 @@ export function buildRows(
 					ticks: s !== null && s.runs > 1 && s.runs < BODY_MIN ? s.window : [],
 					stale: s !== null && age > STALE_MS ? ageText(age) : null,
 					hash: stream.topHash[i] ?? null,
-					rule: null,
+					color,
+					parents,
+					facts: { pb, runs: runs.length, last: runs.length ? stream.t[runs[runs.length - 1]!]! : null, next },
 				});
 			});
 		}

@@ -84,6 +84,16 @@ describe('P2 row model', () => {
 		expect(api.coverage.value?.scenarios).toEqual([2, 4]);
 	});
 
+	it('links each row to its parents and its category colour', async () => {
+		const { api } = mount(458, played);
+		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+		const by = new Map(api.rows.value.map((r) => [r.key, r]));
+		expect(by.get('s0.0')!.parents).toEqual(['overall', 'c0', 's0']);
+		expect(by.get('s0')!.parents).toEqual(['overall', 'c0']);
+		expect(by.get('c0')!.color).toBe('#c00');
+		expect(by.get('overall')!.color).toBeNull();
+	});
+
 	it('gives an unnamed subcategory no row, but keeps its scenarios', async () => {
 		const snapshot = smallSnapshot();
 		snapshot.benchmarks[1]!.tree![0]!.subs[1]!.name = '';

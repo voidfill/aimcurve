@@ -98,7 +98,7 @@ watch(
 				:family="family"
 				:coverage="coverage"
 			/>
-			<section class="panel" aria-label="Benchmark sheet">
+			<section class="sheet" aria-label="Benchmark sheet">
 				<BenchmarkTable
 					:rows="rows"
 					:ranks="tree.ranks"
@@ -123,10 +123,7 @@ watch(
 	min-width: 0;
 }
 
-.panel {
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 3px;
+.sheet {
 	min-width: 0;
 }
 
