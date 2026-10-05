@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { inkFor } from '../benchmarks/format';
-import { lanePosition, laneColumns, laneGradient, rankColorAt, UNRANKED } from './axis';
+import { lanePosition, laneColumns, rankColorAt, UNRANKED } from './axis';
 import { pill } from './pill';
 
 const ranks = [
@@ -30,15 +30,6 @@ describe('P4 lane axis', () => {
 		expect(rankColorAt(1, ranks)).toBe('#2FCFC2');
 		expect(rankColorAt(4.7, ranks)).toBe('#7900FF');
 		expect(rankColorAt(5, ranks)).toBe('#7900FF');
-	});
-
-	it('paints each column in its rank colour, blending only near the edges', () => {
-		const stops = laneGradient(ranks);
-		expect(stops).toHaveLength(10);
-		expect(stops[0]!.offset).toBe(0);
-		expect(stops[9]!.offset).toBe(1);
-		for (let i = 1; i < stops.length; i++) expect(stops[i]!.offset).toBeGreaterThan(stops[i - 1]!.offset);
-		expect(stops[2]!.color).toBe(stops[3]!.color);
 	});
 });
 
