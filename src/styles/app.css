@@ -281,3 +281,15 @@ pre,
 	color: var(--color-text-strong);
 	border-color: #38414a;
 }
+
+/*
+	The Benchmarks sheet's columns: name, candle lane, PB pill, median pill.
+	Shared by the sheet's legend and rows and the scenario page's benchmark row.
+*/
+.sheet-grid {
+	display: grid;
+	grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) 150px 150px;
+	column-gap: 16px;
+	align-items: center;
+	padding: 0 12px;
+}

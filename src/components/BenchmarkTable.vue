@@ -19,12 +19,11 @@
 import { computed, type ComputedRef } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
-import { laneColumns } from '../lib/energy/axis';
 import type { RowChart } from '../lib/energy/chart';
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
-import CandleLane from './CandleLane.vue';
 import ProgressChart from './ProgressChart.vue';
-import RankPill from './RankPill.vue';
+import RowCells from './RowCells.vue';
+import SheetLegend from './SheetLegend.vue';
 import ScenarioFold from './ScenarioFold.vue';
 
 const props = defineProps<{
@@ -45,7 +44,6 @@ const emit = defineEmits<{
 	(event: 'open-run', runId: number): void;
 }>();
 
-const columns = computed(() => laneColumns(props.ranks).map((c) => ({ ...c, tint: chartColor(c.color) })));
 
 /** Body height, pill height and pill font size per level, as in the approved board. */
 const SIZES = {
@@ -108,10 +106,6 @@ function rowStyle(row: BenchmarkRow): Record<string, string> {
 	};
 }
 
-function emptyText(row: BenchmarkRow): string | null {
-	return row.state === 'unrated' ? 'unrated · no ladder on this difficulty' : row.state === 'unplayed' ? 'not played' : null;
-}
-
 function onOpen(row: BenchmarkRow, index: number): void {
 	const id = charts.value.get(row.key)?.runIds?.[index];
 	if (id !== undefined) emit('open-run', id);
@@ -128,22 +122,16 @@ function onOpen(row: BenchmarkRow, index: number): void {
 				sheet while the overall's row and chart scroll away beneath it.
 			-->
 			<div class="pin">
-				<div class="grid head" role="row">
-					<span role="columnheader">Benchmark</span>
-					<span class="axis" role="columnheader">
-						<span v-for="c in columns" :key="c.name" :style="{ color: c.tint }">{{ c.name }}</span>
-					</span>
-					<span role="columnheader">PB</span>
-					<span role="columnheader">Median · last {{ runWindow }}</span>
-				</div>
+				<SheetLegend :ranks="ranks" :run-window="runWindow" />
 			</div>
 
 			<div v-for="block in blocks" :key="block.key" class="block" :class="{ hero: block.key === 'overall' }" role="rowgroup">
 				<template v-for="row in block.rows" :key="row.key">
 					<div
-						class="grid row"
+						class="sheet-grid row"
 						:class="[row.level, { stale: row.stale !== null }]"
 						role="row"
+						:data-row="row.key"
 						:style="rowStyle(row)"
 						@click="emit('toggle', row.key)"
 					>
@@ -161,21 +149,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 							<span class="label" :title="row.name">{{ row.name }}</span>
 							<span v-if="row.stale" class="age" :title="`Last played ${row.stale}`">{{ row.stale }}</span>
 						</span>
-						<CandleLane
-							role="cell"
-							:ranks="ranks"
-							:spread="row.spread"
-							:body="row.body"
-							:ticks="row.ticks"
-							:empty="emptyText(row)"
-							:size="SIZES[row.level].body"
-							:dim="row.stale !== null"
-							:name="row.name"
-						/>
-						<span role="cell"><RankPill :r="row.spread?.pb ?? null" :ranks="ranks" :label="`${row.name} PB`" /></span>
-						<span role="cell" :class="{ dim: row.stale !== null }">
-							<RankPill :r="row.spread?.median ?? null" :ranks="ranks" :label="`${row.name} median of last ${runWindow}`" />
-						</span>
+						<RowCells :row="row" :ranks="ranks" :run-window="runWindow" :size="SIZES[row.level].body" />
 					</div>
 
 					<div v-if="open.has(row.key)" class="fold" role="row" :style="rowStyle(row)">
@@ -235,14 +209,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	min-width: 760px;
 }
 
-.grid {
-	display: grid;
-	grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) 150px 150px;
-	column-gap: 16px;
-	align-items: center;
-	padding: 0 12px;
-}
-
 /*
  * The column legend: a long pill of its own that pins 5 px under the header
  * bar for the whole sheet. Behind it, one blur layer spans the gap up to the
@@ -274,47 +240,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	pointer-events: none;
 }
 
-.head {
-	position: relative;
-	height: 30px;
-	border-radius: var(--sheet-radius);
-	background: rgb(20 25 32 / 0.85);
-	box-shadow:
-		inset 0 0 0 1px var(--color-border),
-		0 4px 14px rgb(0 0 0 / 0.45);
-	font: 400 11px/1 var(--font-mono);
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	color: var(--color-text-faint);
-}
-
-/* The lane's ranks and the pills' labels centred on their columns. */
-.head > span {
-	text-align: center;
-}
-
-/* "Benchmark" starts where the names do: past the chevron (20 px) and its 6 px gap. */
-.head > span:first-child {
-	text-align: left;
-	padding-left: 26px;
-}
-
-.axis {
-	display: flex;
-	text-transform: none;
-	letter-spacing: 0;
-	font-size: 11.5px;
-}
-
-.axis span {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-align: center;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
 /* Containment: the overall's hero band, then one raised block per category. */
 .block {
 	margin-bottom: var(--sheet-space);
@@ -331,6 +256,8 @@ function onOpen(row: BenchmarkRow, index: number): void {
 .row {
 	position: relative;
 	height: 36px;
+	/* Scrolled to, a row stops below the pinned bar and legend, not under them. */
+	scroll-margin-top: calc(var(--bar-h, 0px) + 56px);
 	cursor: pointer;
 }
 
@@ -432,10 +359,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	font: 400 11px/1 var(--font-mono);
 	color: var(--color-text-faint);
 	white-space: nowrap;
-}
-
-.dim {
-	opacity: 0.5;
 }
 
 .fold {
