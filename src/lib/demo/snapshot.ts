@@ -11,6 +11,7 @@
  * Must not import from `src/db/`: this is what keeps PGlite out of About.
  */
 import type { DataSource } from '../data-source';
+import type { StreamRows } from '../energy/history';
 import type { ScenarioRun } from '../run/baseline';
 import type { KillDetail, SlotStats } from '../run/bots';
 import type { Attempt } from '../run/queries';
@@ -61,7 +62,32 @@ function pick<T>(table: Record<string, T>, ids: number[]): Map<number, T> {
 	return out;
 }
 
+/** The energy run stream from the bundled history, as `listEnergyRuns` reads it from the database. */
+function energyRuns(snapshot: DemoSnapshot, names: readonly string[]): StreamRows {
+	const wanted = new Set(names);
+	const scenarios = Object.values(snapshot.scenarios)
+		.map((s) => ({ id: s.id, name: s.name.trim(), hash: s.hash }))
+		.filter((s) => wanted.has(s.name));
+	const runs = scenarios
+		.flatMap((s) => (snapshot.history[s.id] ?? []).filter((r) => r.score !== null).map((r) => ({ scenario: s.id, run: r })))
+		.sort((a, b) => (a.run.startedAt < b.run.startedAt ? -1 : a.run.startedAt > b.run.startedAt ? 1 : a.run.id - b.run.id));
+	return {
+		scenarios,
+		scenarioId: Int32Array.from(runs.map((r) => r.scenario)),
+		runId: Int32Array.from(runs.map((r) => r.run.id)),
+		t: Float64Array.from(runs.map((r) => new Date(r.run.startedAt).getTime())),
+		score: Float64Array.from(runs.map((r) => r.run.score!)),
+	};
+}
+
 export function snapshotSource(snapshot: DemoSnapshot): DataSource {
+	const scenarioOf = (runId: number) => {
+		for (const s of Object.values(snapshot.scenarios)) {
+			const run = snapshot.history[s.id]?.find((r) => r.id === runId);
+			if (run) return { fileStem: run.fileStem, hash: s.hash };
+		}
+		return null;
+	};
 	return {
 		getAttempt: async (fileStem) => snapshot.attempts[fileStem] ?? null,
 		listScenarioRuns: async (scenarioId) => snapshot.scenarioRuns[scenarioId] ?? [],
@@ -71,5 +97,13 @@ export function snapshotSource(snapshot: DemoSnapshot): DataSource {
 		getScenario: async (hash) => snapshot.scenarios[hash] ?? null,
 		listVersions: async (name) => snapshot.versions[name] ?? [],
 		listHistory: async (scenarioId) => snapshot.history[scenarioId] ?? [],
+		listEnergyRuns: async (names) => energyRuns(snapshot, names),
+		listPlayedNames: async () =>
+			new Set(
+				Object.values(snapshot.scenarios)
+					.filter((s) => (snapshot.history[s.id] ?? []).some((r) => r.score !== null))
+					.map((s) => s.name.trim()),
+			),
+		getRunLink: async (runId) => scenarioOf(runId),
 	};
 }
