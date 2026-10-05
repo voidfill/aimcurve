@@ -26,14 +26,8 @@ const { families, error } = useBenchmarkIndex();
 					<h2>{{ family.name }}</h2>
 					<ul>
 						<li v-for="d in family.difficulties" :key="d.benchmark.id">
-							<template v-if="d.total !== null">
-								<RouterLink :to="{ name: 'benchmark', params: { id: d.benchmark.id } }">{{ d.benchmark.difficulty }}</RouterLink>
-								<span v-if="d.played" class="muted">{{ d.played }}/{{ d.total }} played</span>
-							</template>
-							<template v-else>
-								<span>{{ d.benchmark.difficulty }}</span>
-								<span class="muted">no category tree</span>
-							</template>
+							<RouterLink :to="{ name: 'benchmark', params: { id: d.benchmark.id } }">{{ d.benchmark.difficulty }}</RouterLink>
+							<span v-if="d.played" class="muted">{{ d.played }}/{{ d.total }} played</span>
 						</li>
 					</ul>
 				</section>

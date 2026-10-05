@@ -131,16 +131,8 @@ export function buildRows(
 	tree.categories.forEach((c, ci) => {
 		const color = c.color === '' ? null : c.color;
 		const cat = `c${ci}`;
-		rows.push(
-			aggregate(
-				cat,
-				'category',
-				c.name,
-				categoryNode(ci),
-				color,
-				['overall'],
-			),
-		);
+		// A lone category equals the overall (G of one value is that value): its row would repeat it.
+		if (tree.categories.length > 1) rows.push(aggregate(cat, 'category', c.name, categoryNode(ci), color, ['overall']));
 		for (const si of c.subs) {
 			const sub = tree.subs[si]!;
 			const named = sub.name !== '';
@@ -240,7 +232,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 	const benchmark = computed(() => (index.value < 0 ? null : snapshot.value!.benchmarks[index.value]!));
 	const family = computed(() => {
 		const b = benchmark.value;
-		return b === null ? [] : snapshot.value!.benchmarks.filter((o) => o.name === b.name);
+		return b === null ? [] : snapshot.value!.benchmarks.filter((o) => o.name === b.name && o.tree !== null);
 	});
 	const tree = computed(() => (index.value < 0 ? null : energyTree(snapshot.value!, index.value)));
 
@@ -335,9 +327,9 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 
 export interface IndexDifficulty {
 	benchmark: SnapshotBenchmark;
-	/** Distinct rated scenarios played, and in total; null without a tree. */
-	played: number | null;
-	total: number | null;
+	/** Distinct rated scenarios played, and in total. */
+	played: number;
+	total: number;
 }
 
 export interface IndexFamily {
@@ -345,17 +337,18 @@ export interface IndexFamily {
 	difficulties: IndexDifficulty[];
 }
 
-/** The index (P1): families in snapshot order, each with its difficulties and what is played. */
+/**
+ * The index (P1): families in snapshot order, each with its difficulties and
+ * what is played. A difficulty without a category tree has no sheet, and is
+ * left out; a family left with none is too.
+ */
 export function indexFamilies(snapshot: Snapshot, played: ReadonlySet<string>): IndexFamily[] {
 	const families: IndexFamily[] = [];
 	snapshot.benchmarks.forEach((b, i) => {
+		const tree = energyTree(snapshot, i);
+		if (tree === null) return;
 		let family = families[families.length - 1];
 		if (family?.name !== b.name) families.push((family = { name: b.name, difficulties: [] }));
-		const tree = energyTree(snapshot, i);
-		if (tree === null) {
-			family.difficulties.push({ benchmark: b, played: null, total: null });
-			return;
-		}
 		const c = coverageOf(tree, (s) => played.has(tree.names[s]!));
 		family.difficulties.push({ benchmark: b, played: c.scenarios[0], total: c.scenarios[1] });
 	});

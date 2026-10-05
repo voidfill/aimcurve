@@ -212,12 +212,12 @@ describe('recovery', () => {
 		fail = false;
 		revision.value++;
 		await vi.waitFor(() => expect(index.error.value).toBeNull());
-		expect(index.families.value![1]!.difficulties[0]!.played).toBe(1);
+		expect(index.families.value![0]!.difficulties[0]!.played).toBe(1);
 	});
 });
 
 describe('P1 index', () => {
-	it('lists families and difficulties in snapshot order, played counts and treeless ones', () => {
+	it('lists families and difficulties in snapshot order with played counts, leaving out treeless ones', () => {
 		const snapshot = smallSnapshot();
 		snapshot.benchmarks.push({ ...snapshot.benchmarks[1]!, id: 459, difficulty: 'Novice' });
 		// The same ladders on the second difficulty.
@@ -227,9 +227,8 @@ describe('P1 index', () => {
 		}
 		const families = indexFamilies(snapshot, new Set(['A', 'Unrated', 'Elsewhere']));
 		expect(families.map((f) => [f.name, f.difficulties.map((d) => [d.benchmark.id, d.played, d.total])])).toEqual([
-			['Other', [[1, null, null]]],
 			['Voltaic S5', [[458, 1, 4], [459, 1, 4]]],
 		]);
-		expect(indexFamilies(snapshot, new Set())[1]!.difficulties[0]!.played).toBe(0);
+		expect(indexFamilies(snapshot, new Set())[0]!.difficulties[0]!.played).toBe(0);
 	});
 });

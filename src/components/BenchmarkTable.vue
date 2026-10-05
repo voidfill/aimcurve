@@ -86,11 +86,15 @@ const charts = computed(() => {
 	return out;
 });
 
-/** The overall on its own, then one block per category with all its rows. */
+/**
+ * The overall on its own, then one block per category with all its rows, by
+ * the category a row belongs to: a lone category has no row of its own.
+ */
 const blocks = computed(() => {
 	const out: { key: string; rows: BenchmarkRow[] }[] = [];
 	for (const row of props.rows) {
-		if (row.level === 'overall' || row.level === 'category' || out.length === 0) out.push({ key: row.key, rows: [] });
+		const key = row.level === 'overall' ? 'overall' : row.level === 'category' ? row.key : row.parents[1]!;
+		if (out[out.length - 1]?.key !== key) out.push({ key, rows: [] });
 		out[out.length - 1]!.rows.push(row);
 	}
 	return out;
