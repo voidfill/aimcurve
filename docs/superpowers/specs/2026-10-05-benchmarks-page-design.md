@@ -24,11 +24,11 @@ Out of scope:
 
 | | |
 | --- | --- |
-| P1 | Route `#/benchmarks`, a Benchmarks nav tab, and a benchmark and difficulty picker |
+| P1 | A minimal index at `#/benchmarks`; one page per difficulty at `#/benchmark/:id` |
 | P2 | Layout: header, then one table of rows in tree order, overall first |
 | P3 | A row is name, candle lane, PB pill and median pill |
 | P4 | Every row shares one rank axis from Unranked to the top rank's overflow |
-| P5 | The candle is worst, p10–p90, median and PB, from the last 20 runs and the all-time PB |
+| P5 | The candle is worst, p10–p90, median and PB, from the last `W` runs (default 20) and the all-time PB |
 | P6 | Each part of the candle takes the colour of the rank it reaches |
 | P7 | The lane background is a per-rank pattern in the rank's colour |
 | P8 | PB and median are pills that fill toward the next rank |
@@ -39,20 +39,28 @@ Out of scope:
 
 ---
 
-### P1. Route `#/benchmarks`, a nav tab and a picker
+### P1. An index at `#/benchmarks`, one page per difficulty at `#/benchmark/:id`
 
-- **Route:** `#/benchmarks`, with the selected difficulty in the query
-  (`?id=<kovaaksBenchmarkId>`) so a view can be linked.
-- **Nav:** a Benchmarks tab in the header.
-- **Picker:** a benchmark select (families in snapshot order), then the
-  difficulties of that benchmark as a segmented control. Difficulties with
-  `tree: null` (E7) are listed but disabled, with the reason as a tooltip.
-- **Default:** the difficulty with the most completed runs on its scenarios,
-  counted by trimmed name across all difficulties. Ties go to snapshot order.
-  With no runs at all, the first difficulty of the first family.
-- **Stored pick:** an explicit pick is stored in
-  `useStorage('aimcurve.benchmarks-pick', null, localStorage)` and wins over the
-  default while the difficulty still exists. A `?id=` in the URL wins over both.
+The routes mirror Scenarios (`/scenarios`, `/scenario/:hash`).
+
+- **Nav:** a Benchmarks tab in the header opens the index. On a difficulty page,
+  the tab stays active.
+- **Index (`#/benchmarks`):** deliberately minimal, only an access point. A
+  proper concept for it comes later.
+  - It lists the benchmark families in snapshot order. Each family has a heading
+    and its difficulties as links, one per line.
+  - A difficulty with any played scenario adds muted "14/18 played" after its
+    link. The count comes from the current-state query (E8).
+  - A difficulty with `tree: null` (E7) is listed without a link, with the
+    reason in muted text.
+  - It has no search, sorting, energies or charts.
+- **Difficulty page (`#/benchmark/:id`):** `:id` is the difficulty's
+  `kovaaksBenchmarkId`.
+  - The header has a back link to the index and the family's difficulties as a
+    segmented control, which switches between those difficulties' routes.
+  - An unknown `:id`, or one whose tree is null, shows a notice in the style of
+    the scenario page's missing-scenario notice, with a link to the index.
+  - The page title in the tab is "<benchmark> <difficulty>".
 
 ### P2. Layout: header, then one table
 
@@ -60,6 +68,8 @@ Out of scope:
 - benchmark name, difficulty control, the "Custom energy" chip (E1);
 - coverage, for example "provisional · 14/18 scenarios" (E4);
 - the provisional / strict toggle (E4), persisted per browser;
+- the run window for the candle and the median (P5): a select with 10, 20 and
+  50, stored in `useStorage('aimcurve.benchmark-window', 20, localStorage)`;
 - a legend for the candle and the pills.
 
 **Table:** one row per tree node in tree order: overall, then each category,
@@ -78,7 +88,7 @@ page works at phone width without squeezing the lane.
 | Name | node name, which folds the row's chart open (P9); scenario rows add an icon link to their scenario page (P11) |
 | Lane | the candle on the shared rank axis (P4–P7) |
 | PB | pill (P8) |
-| Median | pill (P8): the median of the last 20 runs |
+| Median | pill (P8): the median of the last `W` runs |
 
 There is no separate energy number column. The pill's text carries rank and
 progress, and the exact custom energy is in the tooltip and the folded-open
@@ -108,8 +118,8 @@ Every row uses the same axis, so candles compare by eye down the table.
 ### P5. The candle: worst, p10–p90, median and PB
 
 Per scenario, from its complete runs (E6):
-- **Window:** the 20 most recent complete runs, or all of them while there are
-  fewer.
+- **Window:** the `W` most recent complete runs, or all of them while there are
+  fewer. `W` is the header's setting (P2), 20 by default.
 - **Statistics:** worst (minimum), p10, median (p50) and p90 of the window's
   scores, and the all-time PB.
 - **Percentiles:** linear interpolation between closest ranks (the common
@@ -127,7 +137,7 @@ the E3 rules (mean for subcategories, `G` above) and the page's coverage mode
 (E4). The result is labelled in the legend as an approximation: the p10 of a
 category is the aggregate of its scenarios' p10s, not a percentile of anything.
 
-The median pill and the candle use this 20-run window. The form line in the
+The median pill and the candle use this `W`-run window. The form line in the
 charts (P11) is E6 form. They are different quantities with different names.
 
 ### P6. Each part of the candle takes the colour of the rank it reaches
@@ -233,12 +243,18 @@ Components:
   progression chart.
 
 The spread statistics come from the same ordered run stream as the history pass
-(E8): the end state of each scenario's last 20 scores. No new query is needed.
+(E8): the end state of each scenario's last `W` scores. No new query is needed.
+Changing `W` reruns only this step.
+
+**Live updates:** the page is reactive. When runs are ingested (a manual import
+or the watched folder), the existing change notification reruns the query, the
+history pass and the spread step (E8). Rows, pills and open charts then update
+in place, with no reload and no lost fold state.
 
 ## Testing
 
 - `spread`:
-  - window of exactly 20, of fewer, of 1;
+  - window of exactly `W`, of fewer, of 1, for `W` = 10, 20 and 50;
   - percentiles against hand-computed values, including interpolation;
   - worst ≤ p10 ≤ median ≤ p90 ≤ PB;
   - fewer than 5 runs → no body;
@@ -253,9 +269,16 @@ The spread statistics come from the same ordered run stream as the history pass
   - Unranked;
   - top rank with overflow;
   - overflow at the cap.
-- Picker default: most runs wins; ties by snapshot order; stored pick wins over
-  the default; `?id=` wins over both; a `tree: null` difficulty is not
-  selectable.
+- Index:
+  - families and difficulties in snapshot order;
+  - "n/m played" only where something is played;
+  - a `tree: null` difficulty is listed without a link.
+- Difficulty route:
+  - an unknown or `tree: null` id shows the notice;
+  - the segmented control lists only that family's difficulties.
+- The window setting: changing it updates the candle and median, not PB.
+- Live update: a newly ingested run updates its row and the aggregates above it,
+  and open charts stay open.
 - Row model:
   - tree order and levels;
   - unplayed and unrated rows;
@@ -371,12 +394,16 @@ basics, date with a switch to runs (P10), and park the rest.
 
 ## Open questions
 
-- **Stale data:** a scenario last played months ago still shows its old window.
-  The options are to mark it stale (with an age on hover), decay it, or leave it
-  as is. The proposal is to mark it in v1 and not decay.
-- **Window sizes:** E6 form uses the last 5 runs, the scenario page's typical
-  line the last 10, and the candle the last 20. Should E6 move to 10, to match
-  the scenario page?
+- **Stale data** (not refresh, which P12 covers): a scenario last played months
+  ago still shows its last `W` runs as if they were current. The options are:
+  - mark it: a muted "4 mo ago" in the row and the candle drawn fainter;
+  - decay it;
+  - leave it as is.
+
+  The proposal is to mark it in v1, after 30 days, and not decay.
+- **E6 form window:** E6 form uses the last 5 runs, the scenario page's typical
+  line the last 10, and the candle `W` (20). Should E6 move to 10, to match the
+  scenario page, or follow `W`?
 - **Lane pattern:** hatch or dots (P7).
 
 ## Facts worth not re-deriving
