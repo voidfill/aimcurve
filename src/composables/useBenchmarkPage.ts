@@ -258,7 +258,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 
 	const state = ref<PageState>('loading');
 	const error = ref<string | null>(null);
-	const rowsData = shallowRef<{ tree: ArcTree; rows: StreamRows; at: number } | null>(null);
+	const rowsData = shallowRef<{ tree: ArcTree; names: string; rows: StreamRows; at: number } | null>(null);
 	let gen = 0;
 
 	async function load(): Promise<void> {
@@ -276,15 +276,17 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 			state.value = 'missing';
 			return;
 		}
-		// Another difficulty starts from a clean slate; an import keeps showing this one while it reloads.
-		if (rowsData.value?.tree.id !== t.id) {
+		const names = options.only?.value ?? t.names;
+		const namesKey = JSON.stringify(names);
+		// Another difficulty (or another `only`) starts from a clean slate; an import keeps showing this one while it reloads.
+		if (rowsData.value?.tree.id !== t.id || rowsData.value.names !== namesKey) {
 			rowsData.value = null;
 			state.value = 'loading';
 		}
 		try {
-			const rows = await handle.listArcRuns(options.only?.value ?? t.names);
+			const rows = await handle.listArcRuns(names);
 			if (mine !== gen) return;
-			rowsData.value = { tree: t, rows, at: now() };
+			rowsData.value = { tree: t, names: namesKey, rows, at: now() };
 			state.value = 'ready';
 			error.value = null;
 		} catch (err) {
