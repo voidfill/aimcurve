@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * One row's lane (P4–P7 of the benchmarks page design): the hatched rank
- * columns, and on them the candle of recent runs: worst, p10–p90, median and
+ * One row's lane (P4–P7 of the benchmarks page design): a flat light tint
+ * per rank column, and on them the candle of recent runs: worst, p10–p90, median and
  * the all-time PB.
  *
  * The wicks, the end cap and the body are painted with a lane-wide rank
@@ -9,20 +9,18 @@
  * spanning several ranks shows each. The median is white and the PB dot the
  * solid colour of the rank it reaches.
  *
- * The hatch patterns are the table's, under `defs`. The gradient is each
- * lane's own: a user-space gradient's percentages resolve against the SVG it
- * is defined in, so a shared one would span the defs, not the lane.
+ * The tints are plain HTML behind the SVG. The gradient is each lane's own: a user-space gradient's
+ * percentages resolve against the SVG it is defined in.
  */
 import { computed, useId } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
-import { laneColorAt, laneColumns, laneGradient, lanePosition } from '../lib/energy/axis';
+import { chartColor } from '../lib/benchmarks/format';
+import { bandOpacity, laneColorAt, laneColumns, laneGradient, lanePosition } from '../lib/energy/axis';
 import { describeRank } from '../lib/energy/name';
 import type { Spread } from '../lib/energy/spread';
 
 const props = defineProps<{
 	ranks: readonly RankStep[];
-	/** The id prefix of the table's hatch patterns. */
-	defs: string;
 	spread: Spread | null;
 	/** Whether to draw a body; without one, `ticks` and the PB dot. */
 	body: boolean;
@@ -38,7 +36,12 @@ const props = defineProps<{
 const H = 26;
 const MID = H / 2;
 
-const columns = computed(() => laneColumns(props.ranks));
+const columns = computed(() =>
+	laneColumns(props.ranks).map((c) => ({
+		...c,
+		fill: `color-mix(in srgb, ${chartColor(c.color)} ${Math.round(bandOpacity(c.color) * 100)}%, transparent)`,
+	})),
+);
 const stops = computed(() => laneGradient(props.ranks));
 const gradientId = `candle-${useId()}`;
 const paint = `url(#${gradientId})`;
@@ -72,21 +75,15 @@ const label = computed(() => {
 
 <template>
 	<div class="lane">
+		<div class="bands" aria-hidden="true">
+			<span v-for="c in columns" :key="c.name" :style="{ background: c.fill }"></span>
+		</div>
 		<svg :height="H" role="img" :aria-label="label">
 			<defs>
 				<linearGradient :id="gradientId" gradientUnits="userSpaceOnUse" x1="0%" x2="100%" y1="0" y2="0">
 					<stop v-for="(s, i) in stops" :key="i" :offset="s.offset" :stop-color="s.color" />
 				</linearGradient>
 			</defs>
-			<rect
-				v-for="(c, i) in columns"
-				:key="c.name"
-				:x="`${c.from * 100}%`"
-				y="0"
-				:width="`${(c.to - c.from) * 100}%`"
-				:height="H"
-				:fill="`url(#${defs}-h${i})`"
-			/>
 			<g v-if="candle" :opacity="dim ? 0.5 : 1">
 				<template v-if="body">
 					<line :x1="candle.worst" :x2="candle.p10" :y1="MID" :y2="MID" :stroke="paint" stroke-width="2" />
@@ -129,7 +126,21 @@ const label = computed(() => {
 	min-width: 0;
 }
 
+/* One flat tint per rank column, equal widths, edge to edge; the strip's ends slightly rounded. */
+.bands {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.bands span {
+	flex: 1;
+}
+
 svg {
+	position: relative;
 	display: block;
 	width: 100%;
 	overflow: visible;

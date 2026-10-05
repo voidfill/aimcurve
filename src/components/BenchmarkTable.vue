@@ -4,8 +4,6 @@
  * per tree node in tree order, every row on the same rank axis, and under any
  * row its folded-open history chart.
  *
- * The lanes' hatch patterns are defined here once and referenced by every
- * lane; each lane defines its own candle gradient (see `CandleLane`).
  *
  * The tree shows without indentation, and without words:
  * - each category is a block of its own, its row the block's tinted header
@@ -18,10 +16,10 @@
  * its concrete numbers and what to do next (`ScenarioFold`), so inspecting,
  * deciding and acting happen in one place.
  */
-import { computed, type ComputedRef, useId } from 'vue';
+import { computed, type ComputedRef } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
-import { hatchOpacity, laneColumns } from '../lib/energy/axis';
+import { laneColumns } from '../lib/energy/axis';
 import type { RowChart } from '../lib/energy/chart';
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
 import CandleLane from './CandleLane.vue';
@@ -45,10 +43,7 @@ const emit = defineEmits<{
 	(event: 'open-run', runId: number): void;
 }>();
 
-const defs = `lane-${useId()}`;
-const columns = computed(() =>
-	laneColumns(props.ranks).map((c) => ({ ...c, tint: chartColor(c.color), opacity: hatchOpacity(c.color) })),
-);
+const columns = computed(() => laneColumns(props.ranks).map((c) => ({ ...c, tint: chartColor(c.color) })));
 
 /** Body height, pill height and pill font size per level, as in the approved board. */
 const SIZES = {
@@ -119,21 +114,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 
 <template>
 	<div class="scroll">
-		<svg class="defs" width="0" height="0" aria-hidden="true">
-			<defs>
-				<pattern
-					v-for="(c, i) in columns"
-					:id="`${defs}-h${i}`"
-					:key="c.name"
-					width="6"
-					height="6"
-					patternUnits="userSpaceOnUse"
-					patternTransform="rotate(45)"
-				>
-					<rect width="1.6" height="6" :fill="c.tint" :opacity="c.opacity" />
-				</pattern>
-			</defs>
-		</svg>
 
 		<div class="sheet" role="table" aria-label="Benchmark sheet">
 			<!--
@@ -178,7 +158,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 						<CandleLane
 							role="cell"
 							:ranks="ranks"
-							:defs="defs"
 							:spread="row.spread"
 							:body="row.body"
 							:ticks="row.ticks"
@@ -241,13 +220,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	}
 }
 
-.defs {
-	position: absolute;
-	width: 0;
-	height: 0;
-	overflow: hidden;
-}
-
 .sheet {
 	/* The one vertical spacing between the legend and every box. */
 	--sheet-space: 10px;
@@ -307,6 +279,17 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--color-text-faint);
+}
+
+/* The lane's ranks and the pills' labels centred on their columns. */
+.head > span {
+	text-align: center;
+}
+
+/* "Benchmark" starts where the names do: past the chevron (20 px) and its 6 px gap. */
+.head > span:first-child {
+	text-align: left;
+	padding-left: 26px;
 }
 
 .axis {

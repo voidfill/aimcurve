@@ -70,10 +70,10 @@ export function laneGradient(ranks: readonly RankStep[], blend = 0.18): Gradient
 }
 
 /**
- * The hatch's opacity for a rank colour (P7): light colours fainter, dark and
- * saturated ones stronger, so every column reads about as strong.
+ * How strongly a lane's rank box is tinted (P7): light colours fainter, dark
+ * and saturated ones stronger, so every column reads about as strong.
  */
-export function hatchOpacity(color: string): number {
+export function bandOpacity(color: string): number {
 	const c = rgb(color);
-	return c === null ? 0.38 : 0.45 - 0.15 * luminance(c);
+	return c === null ? 0.14 : 0.18 - 0.07 * luminance(c);
 }
