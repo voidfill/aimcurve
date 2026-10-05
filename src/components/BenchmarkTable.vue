@@ -10,8 +10,8 @@
  * The tree shows without indentation, and without words:
  * - each category is a block of its own, its row the block's tinted header
  *   and each subcategory a faint band inside it;
- * - in a narrow gutter left of the names, braces in the category's colour
- *   join each aggregate to the rows it is made of (see `lib/energy/brace`).
+ * - level shows in the type: the overall largest, categories bold,
+ *   subcategories semibold, scenarios regular and lighter.
  *
  * A row is one control: clicking anywhere on it folds its chart open (the
  * chevron is the same toggle for the keyboard). A scenario's fold leads with
@@ -22,7 +22,6 @@ import { computed, type ComputedRef, useId } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
 import { hatchOpacity, laneColumns } from '../lib/energy/axis';
-import { type BraceMark, braces, continuation } from '../lib/energy/brace';
 import type { RowChart } from '../lib/energy/chart';
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
 import CandleLane from './CandleLane.vue';
@@ -60,11 +59,7 @@ const SIZES = {
 } as const;
 
 const rowByKey = computed(() => new Map(props.rows.map((r) => [r.key, r])));
-const marks = computed(() => new Map(braces(props.rows).map((m, i) => [props.rows[i]!.key, m])));
 
-function marksOf(row: BenchmarkRow): BraceMark[] {
-	return marks.value.get(row.key) ?? [];
-}
 
 /**
  * One cached chart per open row. It depends on what `chartFor` reads of the
@@ -108,7 +103,7 @@ function rowStyle(row: BenchmarkRow): Record<string, string> {
 	return {
 		'--pill-height': `${SIZES[row.level].pill}px`,
 		'--pill-font': `${SIZES[row.level].font}px`,
-		'--brace': row.color ? chartColor(row.color) : '#4a535c',
+		'--tint': row.color ? chartColor(row.color) : '#4a535c',
 	};
 }
 
@@ -159,9 +154,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 						:style="rowStyle(row)"
 						@click="emit('toggle', row.key)"
 					>
-						<span class="brace" aria-hidden="true">
-							<i v-for="(m, c) in marksOf(row)" :key="c" :class="[m, `col${c}`]"></i>
-						</span>
 						<span class="name" role="rowheader">
 							<button
 								type="button"
@@ -195,9 +187,6 @@ function onOpen(row: BenchmarkRow, index: number): void {
 					</div>
 
 					<div v-if="open.has(row.key)" class="fold" role="row" :style="rowStyle(row)">
-						<span class="brace" aria-hidden="true">
-							<i v-for="(m, c) in continuation(marksOf(row))" :key="c" :class="[m, `col${c}`]"></i>
-						</span>
 						<div role="cell" class="fold-cell">
 							<ScenarioFold
 								v-if="row.facts"
@@ -254,7 +243,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) 150px 150px;
 	column-gap: 16px;
 	align-items: center;
-	padding: 0 12px 0 34px;
+	padding: 0 12px;
 }
 
 .head {
@@ -305,101 +294,13 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	color: var(--color-text-strong);
 }
 
-/*
- * The brace gutter: column 0 at 9 px, column 1 at 19 px, elbows reaching
- * to 28 px, just short of the chevron.
- */
-.brace {
-	position: absolute;
-	left: 0;
-	top: 0;
-	bottom: 0;
-	width: 30px;
-	pointer-events: none;
-	color: var(--brace);
-	opacity: 0.6;
-}
-
-.brace i {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	width: 0;
-}
-
-.brace .col0 {
-	left: 9px;
-}
-
-.brace .col1 {
-	left: 19px;
-}
-
-/* The vertical: through, from the middle down, or from the top to the middle. */
-.brace i::before {
-	content: '';
-	position: absolute;
-	left: -0.75px;
-	width: 1.5px;
-	background: currentColor;
-}
-
-.brace .pass::before,
-.brace .tee::before {
-	top: 0;
-	bottom: 0;
-}
-
-.brace .node::before {
-	top: 50%;
-	bottom: 0;
-}
-
-.brace .end::before {
-	top: 0;
-	bottom: 50%;
-}
-
-/* The elbow into a child, and the node on the parent. */
-.brace i::after {
-	content: '';
-	position: absolute;
-	top: 50%;
-}
-
-.brace .tee::after,
-.brace .end::after {
-	left: 0;
-	width: calc(28px - var(--at));
-	height: 1.5px;
-	margin-top: -0.75px;
-	background: currentColor;
-}
-
-.brace .col0 {
-	--at: 9px;
-}
-
-.brace .col1 {
-	--at: 19px;
-}
-
-.brace .node::after {
-	left: -3px;
-	width: 6px;
-	height: 6px;
-	margin-top: -3px;
-	border-radius: 50%;
-	background: currentColor;
-}
-
 .row.overall {
 	height: 52px;
 }
 
 .row.category {
 	height: 44px;
-	background: color-mix(in srgb, var(--brace) 9%, #161a1e);
+	background: color-mix(in srgb, var(--tint) 9%, #161a1e);
 }
 
 .row.subcategory {
@@ -495,7 +396,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 
 .fold {
 	position: relative;
-	padding: 6px 12px 12px 34px;
+	padding: 6px 12px 12px;
 }
 
 .fold-cell {
