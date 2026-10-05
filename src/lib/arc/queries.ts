@@ -15,7 +15,9 @@ const TRIMMED = (column: string) => `regexp_replace(${column}, '^[\\s\u00a0\ufef
 /**
  * Every complete scored run of every scenario whose trimmed name is in
  * `names`, ordered by `started_at, id`. Scenarios are matched by trimmed
- * name, so all hashes of a name come along.
+ * name, so all hashes of a name come along. Scores are read as stored, as the
+ * scenario page reads them: a cast to float8 would widen the `real` into
+ * digits the CSV never had (881.858 as 881.8579711914062).
  */
 export async function listArcRuns(pg: PGliteInterface, names: readonly string[]): Promise<StreamRows> {
 	const scenarios = await pg.query<{ id: number; name: string; hash: string }>(
@@ -28,7 +30,7 @@ export async function listArcRuns(pg: PGliteInterface, names: readonly string[])
 			? { rows: [] as [number, number, number, number][] }
 			: await pg.query<[number, number, number, number]>(
 					`
-					select scenario_id, id, (extract(epoch from started_at) * 1000)::float8, score::float8
+					select scenario_id, id, (extract(epoch from started_at) * 1000)::float8, score
 					from run
 					where kind = 'complete' and score is not null and scenario_id = any($1::integer[])
 					order by started_at, id
