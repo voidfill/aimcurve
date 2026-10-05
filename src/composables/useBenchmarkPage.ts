@@ -1,6 +1,6 @@
 /**
- * The Benchmarks pages' data (P1, P12 of the benchmarks page design).
- * See docs/superpowers/specs/2026-10-05-benchmarks-page-design.md.
+ * The Benchmarks pages' data.
+ * See docs/benchmarks.md.
  *
  * One difficulty joins the snapshot tree, the run stream, the history pass and
  * the candle statistics into one row per tree node. The stream is reread when
@@ -14,15 +14,15 @@ import {
 	type Coverage,
 	coverage as coverageOf,
 	type CoverageMode,
-	type EnergyTree,
-	energyTree,
+	type ArcTree,
+	arcTree,
 	subNode,
-} from '../lib/energy/aggregate';
+} from '../lib/arc/aggregate';
 import { rankOf } from '../lib/benchmarks/rank';
-import { aggregateChart, type RowChart, scenarioChart } from '../lib/energy/chart';
-import { historyPass, nodeScenarios, type RunStream, type StreamRows, toStream } from '../lib/energy/history';
-import type { RunLink } from '../lib/energy/queries';
-import { aggregateSpread, BODY_MIN, type Spread, spreadPass } from '../lib/energy/spread';
+import { aggregateChart, type RowChart, scenarioChart } from '../lib/arc/chart';
+import { historyPass, nodeScenarios, type RunStream, type StreamRows, toStream } from '../lib/arc/history';
+import type { RunLink } from '../lib/arc/queries';
+import { aggregateSpread, BODY_MIN, type Spread, spreadPass } from '../lib/arc/spread';
 import { errorText } from '../lib/error';
 import { loadedSnapshot, loadSnapshot } from './useBenchmarkRank';
 import { useCoverageMode, useRunWindow } from './useChartSettings';
@@ -80,7 +80,7 @@ export interface ScenarioFacts {
 
 export type PageState = 'loading' | 'ready' | 'missing' | 'error';
 
-/** A scenario is stale once its last run is more than this old (P3). */
+/** A scenario is stale once its last run is more than this old. */
 export const STALE_MS = 30 * 86_400_000;
 
 /** `31 d ago`, `4 mo ago`, `2 y ago`. */
@@ -97,7 +97,7 @@ export function ageText(ms: number): string {
  * scenarios sit under the category, though it still counts as a subcategory.
  */
 export function buildRows(
-	tree: EnergyTree,
+	tree: ArcTree,
 	stream: RunStream,
 	spreads: ReturnType<typeof spreadPass>,
 	nodes: (Spread | null)[],
@@ -192,7 +192,7 @@ export interface BenchmarkPageApi {
 	benchmark: ComputedRef<SnapshotBenchmark | null>;
 	/** The benchmark's difficulties, in snapshot order: the segmented control. */
 	family: ComputedRef<SnapshotBenchmark[]>;
-	tree: ComputedRef<EnergyTree | null>;
+	tree: ComputedRef<ArcTree | null>;
 	rows: ComputedRef<BenchmarkRow[]>;
 	coverage: ComputedRef<Coverage | null>;
 	/** The chart of an open row. */
@@ -215,7 +215,7 @@ export interface BenchmarkPageOptions {
 	 * coverage then count only these and mean nothing.
 	 */
 	only?: Ref<readonly string[]>;
-	/** Give a difficulty without a category tree a flat one (see `energyTree`), for one scenario's row. */
+	/** Give a difficulty without a category tree a flat one (see `arcTree`), for one scenario's row. */
 	flat?: boolean;
 }
 
@@ -254,11 +254,11 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 		const b = benchmark.value;
 		return b === null ? [] : snapshot.value!.benchmarks.filter((o) => o.name === b.name && o.tree !== null);
 	});
-	const tree = computed(() => (index.value < 0 ? null : energyTree(snapshot.value!, index.value, options.flat)));
+	const tree = computed(() => (index.value < 0 ? null : arcTree(snapshot.value!, index.value, options.flat)));
 
 	const state = ref<PageState>('loading');
 	const error = ref<string | null>(null);
-	const rowsData = shallowRef<{ tree: EnergyTree; rows: StreamRows; at: number } | null>(null);
+	const rowsData = shallowRef<{ tree: ArcTree; rows: StreamRows; at: number } | null>(null);
 	let gen = 0;
 
 	async function load(): Promise<void> {
@@ -282,7 +282,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 			state.value = 'loading';
 		}
 		try {
-			const rows = await handle.listEnergyRuns(options.only?.value ?? t.names);
+			const rows = await handle.listArcRuns(options.only?.value ?? t.names);
 			if (mine !== gen) return;
 			rowsData.value = { tree: t, rows, at: now() };
 			state.value = 'ready';
@@ -361,14 +361,14 @@ export interface IndexFamily {
 }
 
 /**
- * The index (P1): families in snapshot order, each with its difficulties and
+ * The index: families in snapshot order, each with its difficulties and
  * what is played. A difficulty without a category tree has no sheet, and is
  * left out; a family left with none is too.
  */
 export function indexFamilies(snapshot: Snapshot, played: ReadonlySet<string>): IndexFamily[] {
 	const families: IndexFamily[] = [];
 	snapshot.benchmarks.forEach((b, i) => {
-		const tree = energyTree(snapshot, i);
+		const tree = arcTree(snapshot, i);
 		if (tree === null) return;
 		let family = families[families.length - 1];
 		if (family?.name !== b.name) families.push((family = { name: b.name, difficulties: [] }));

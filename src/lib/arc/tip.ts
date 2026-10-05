@@ -1,7 +1,7 @@
 /**
  * The tooltip of a Benchmarks row's candle lane: the numbers behind the candle.
  * The lane is drawn in rank; the tooltip gives a scenario's scores and the
- * score of the next rank, an aggregate's custom energy. Built like the
+ * score of the next rank, an aggregate's arc. Built like the
  * progress charts' tooltips, so it reads the same.
  */
 import type { ProgressTip } from '../../components/ProgressChart.vue';
@@ -9,7 +9,7 @@ import type { BenchmarkRow } from '../../composables/useBenchmarkPage';
 import { ageText } from '../../composables/useBenchmarkPage';
 import type { RankStep } from '../benchmarks/snapshot';
 import { formatScore, formatSigned } from '../run/format';
-import { energyText, percentOf, rankName } from './name';
+import { arcText, percentOf, rankName } from './name';
 
 /** `Nova 78 %`, or at the top `Master 40 % over`. */
 export function shortRank(r: number, ranks: readonly RankStep[]): string {
@@ -56,20 +56,20 @@ export function laneTip(row: BenchmarkRow, ranks: readonly RankStep[], now: numb
 	}
 	const spread = row.spread;
 	if (spread === null) return null;
-	const energy = (r: number) => `${energyText(r)} · ${shortRank(r, ranks)}`;
+	const arc = (r: number) => `${arcText(r)} · ${shortRank(r, ranks)}`;
 	const rows: ProgressTip['rows'] = [
-		{ label: 'PB energy', value: energy(spread.pb), tone: 'base' },
-		{ label: 'median energy', value: energy(spread.median), tone: 'strong' },
-		{ label: 'p10 – p90', value: `${energyText(spread.p10)} – ${energyText(spread.p90)}` },
-		{ label: 'worst', value: energy(spread.worst) },
+		{ label: 'PB', value: arc(spread.pb), tone: 'base' },
+		{ label: 'median', value: arc(spread.median), tone: 'strong' },
+		{ label: 'p10 – p90', value: `${arcText(spread.p10)} – ${arcText(spread.p90)}` },
+		{ label: 'worst', value: arc(spread.worst) },
 	];
 	const next = rankName(spread.pb, ranks);
 	if (next.next !== null) {
 		const target = next.k + 1;
-		rows.push({ label: 'next rank', value: `${next.next} at ${energyText(target)}` });
-		rows.push({ label: 'from PB', value: formatSigned(100 * (target - spread.pb)) });
-		rows.push({ label: 'from median', value: formatSigned(100 * (target - spread.median)) });
+		rows.push({ label: 'next rank', value: `${next.next} at ${arcText(target)}` });
+		rows.push({ label: 'from PB', value: `${formatSigned(100 * (target - spread.pb))} arc` });
+		rows.push({ label: 'from median', value: `${formatSigned(100 * (target - spread.median))} arc` });
 	}
 	if (row.played !== null) rows.push({ label: 'scenarios played', value: `${row.played[0]}/${row.played[1]}` });
-	return { head: row.name, sub: 'custom energy', rows };
+	return { head: row.name, sub: 'ARC', rows };
 }

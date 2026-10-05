@@ -67,7 +67,7 @@ describe('useProgressChart', () => {
 		expect(later.rows.map((r) => r.label)).toEqual(expect.arrayContaining(['time', 'rank', 'vs PB before']));
 	});
 
-	it('takes its typical line over the form window N, 10 by default (P13)', () => {
+	it('takes its typical line over the form window N, 10 by default', () => {
 		const scores = data.value.runs.map((r) => r.score);
 		expect(overall(false).lines.value!.median).toEqual(rollingMedian(scores, 10).value);
 		for (const n of [5, 20]) {

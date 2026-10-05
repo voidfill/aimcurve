@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fractionalRank } from './rank';
 
-describe('E2 fractionalRank', () => {
+describe('fractionalRank', () => {
 	const t = [500, 600, 700, 800];
 
 	it.each([

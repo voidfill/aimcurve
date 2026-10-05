@@ -25,7 +25,7 @@ export interface ProgressChartOptions {
 	/** The highlighted config group, or null. */
 	group: Ref<number | null>;
 	dateAxis: Ref<boolean>;
-	/** `N`, the typical line's window (P13 of the benchmarks page design); 10 when absent. */
+	/** `N`, the typical line's window; 10 when absent. */
 	formWindow?: Ref<number>;
 }
 

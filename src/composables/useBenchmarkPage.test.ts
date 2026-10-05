@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp, effectScope, nextTick, ref, shallowRef } from 'vue';
-import { smallSnapshot } from '../../test/helpers/energy';
+import { smallSnapshot } from '../../test/helpers/arc';
 import type { DataSource } from '../lib/data-source';
-import type { CoverageMode } from '../lib/energy/aggregate';
-import type { StreamRows } from '../lib/energy/history';
+import type { CoverageMode } from '../lib/arc/aggregate';
+import type { StreamRows } from '../lib/arc/history';
 import { type BenchmarkPageOptions, indexFamilies, useBenchmarkIndex, STALE_MS, useBenchmarkPage } from './useBenchmarkPage';
 import { SOURCE_KEY } from './useSource';
 
@@ -26,7 +26,7 @@ function source(runs: Run[]): DataSource {
 		{ id: 5, name: 'Unrated', hash: 'u' },
 	];
 	return {
-		listEnergyRuns: async (): Promise<StreamRows> => {
+		listArcRuns: async (): Promise<StreamRows> => {
 			const sorted = [...runs].sort((p, q) => p.at - q.at);
 			return {
 				scenarios,
@@ -62,7 +62,7 @@ const played = [
 	{ scenario: 3, score: 260, at: NOW - 2 * DAY },
 ];
 
-describe('P2 row model', () => {
+describe('row model', () => {
 	it('lists the tree in order with its levels, unplayed and unrated rows', async () => {
 		const { api } = mount(458, played);
 		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
@@ -95,7 +95,7 @@ describe('P2 row model', () => {
 		expect(by.get('overall')!.color).toBeNull();
 	});
 
-	it('counts an unrated scenario as played, though it has no energy', async () => {
+	it('counts an unrated scenario as played, though it has no arc', async () => {
 		const { api } = mount(458, [...played, { scenario: 5, score: 7, at: NOW - DAY }]);
 		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
 		const unrated = api.rows.value.find((r) => r.name === 'Unrated')!;
@@ -161,7 +161,7 @@ describe('P2 row model', () => {
 	});
 });
 
-describe('P3 stale', () => {
+describe('stale', () => {
 	it('marks a scenario at 31 days, not at 30, and never an aggregate', async () => {
 		const at = (days: number) => [{ scenario: 1, score: 150, at: NOW - days * DAY }];
 		const fresh = mount(458, at(30)).api;
@@ -175,7 +175,7 @@ describe('P3 stale', () => {
 	});
 });
 
-describe('P1 difficulty route', () => {
+describe('difficulty route', () => {
 	it('an unknown id or a difficulty without a tree is missing', async () => {
 		for (const id of [999, 1]) {
 			const { api } = mount(id, played);
@@ -227,7 +227,7 @@ describe('recovery', () => {
 	});
 });
 
-describe('P1 index', () => {
+describe('index', () => {
 	it('lists families and difficulties in snapshot order with played counts, leaving out treeless ones', () => {
 		const snapshot = smallSnapshot();
 		snapshot.benchmarks.push({ ...snapshot.benchmarks[1]!, id: 459, difficulty: 'Novice' });

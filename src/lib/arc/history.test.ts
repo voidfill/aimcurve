@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/energy';
-import { energyTree, evaluate } from './aggregate';
+import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/arc';
+import { arcTree, evaluate } from './aggregate';
 import { historyPass, type StreamRows, toStream, valueAt } from './history';
 import { fractionalRank } from './rank';
 import { median } from '../scenario/config';
 
-const tree = energyTree(syntheticSnapshot(), 0)!;
+const tree = arcTree(syntheticSnapshot(), 0)!;
 
 function rows(runs: [scenarioId: number, score: number][], scenarios = [{ id: 1, name: 'S0', hash: 'a' }]): StreamRows {
 	return {
@@ -17,7 +17,7 @@ function rows(runs: [scenarioId: number, score: number][], scenarios = [{ id: 1,
 	};
 }
 
-describe('E8 toStream', () => {
+describe('toStream', () => {
 	it('merges every id of a name into one scenario and drops unknown names', () => {
 		const stream = toStream(
 			tree,
@@ -38,7 +38,7 @@ describe('E8 toStream', () => {
 	});
 });
 
-describe('E8 historyPass', () => {
+describe('historyPass', () => {
 	it('keeps PB monotone while form can fall', () => {
 		const stream = toStream(tree, rows([[1, 350], [1, 120], [1, 110], [1, 100]]));
 		const h = historyPass(tree, stream, 3, 'provisional');
@@ -58,7 +58,7 @@ describe('E8 historyPass', () => {
 		expect(valueAt(historyPass(tree, stream, 3, 'strict'), 3, sub, 'form')).toBeCloseTo(r(300) / 2, 12);
 	});
 
-	it('takes form over the form window N, PB regardless (P13)', () => {
+	it('takes form over the form window N, PB regardless ', () => {
 		const stream = toStream(tree, rows([[1, 400], [1, 100], [1, 120], [1, 140], [1, 160], [1, 180]]));
 		const [five, twenty] = [5, 20].map((n) => historyPass(tree, stream, n, 'provisional'));
 		expect(valueAt(five!, 5, 0, 'form')).not.toBeCloseTo(valueAt(twenty!, 5, 0, 'form')!, 6);

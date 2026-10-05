@@ -1,6 +1,5 @@
 /**
- * The last Benchmarks location, for the header's tab (P12 of the benchmarks
- * page design): the index, or the difficulty last open. Kept in memory, as
+ * The last Benchmarks location, for the header's tab: the index, or the difficulty last open. Kept in memory, as
  * Scenarios' and Run's are.
  */
 import { computed, type ComputedRef, ref, watch } from 'vue';

@@ -90,7 +90,7 @@ watch(
 			<h1>{{ benchmark ? 'This difficulty has no category tree' : 'That benchmark is not known' }}</h1>
 			<p v-if="benchmark">
 				{{ benchmark.name }} {{ benchmark.difficulty }}'s categories could not be matched to its scenarios, so it has no
-				custom energy. Its ladders still rank scenarios on their own pages.
+				sheet. Its ladders still rank scenarios on their own pages.
 			</p>
 			<p v-else>
 				The link points at benchmark difficulty <code>{{ route.params.id }}</code>, which is not in this version's

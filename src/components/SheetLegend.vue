@@ -7,7 +7,7 @@
 import { computed } from 'vue';
 import { chartColor } from '../lib/benchmarks/format';
 import type { RankStep } from '../lib/benchmarks/snapshot';
-import { laneColumns } from '../lib/energy/axis';
+import { laneColumns } from '../lib/arc/axis';
 
 const props = defineProps<{
 	ranks: readonly RankStep[];

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The difficulty page's header (P1, P2 of the benchmarks page design): the
+ * The difficulty page's header: the
  * way back to the index, the benchmark and its difficulties, coverage, the
  * settings and a legend for the candle and the pills.
  *
@@ -9,14 +9,19 @@
  * `position: sticky`), while the back link above it and the coverage and
  * legend below it scroll away. Its height is `--bar-h`, which the sheet's
  * column legend pins beneath.
+ *
+ * The ARC chip shows and hides a plain explainer of ARC (docs/arc.md), above
+ * all that it is not Voltaic's, Evxl's or anyone's official number. It is open
+ * until first closed, and remembered per browser.
  */
-import { computed } from 'vue';
+import { computed, nextTick, ref } from 'vue';
+import { useStorage } from '@vueuse/core';
 import type { SnapshotBenchmark } from '../lib/benchmarks/snapshot';
-import { type Coverage, type CoverageMode, isFull } from '../lib/energy/aggregate';
+import { type Coverage, type CoverageMode, isFull } from '../lib/arc/aggregate';
 import { STALE_MS } from '../composables/useBenchmarkPage';
 import type { ChartAxis } from '../composables/useChartSettings';
 import RunWindowSelect from './RunWindowSelect.vue';
-import { BODY_MIN } from '../lib/energy/spread';
+import { BODY_MIN } from '../lib/arc/spread';
 
 const STALE_DAYS = STALE_MS / 86_400_000;
 
@@ -30,6 +35,16 @@ const props = defineProps<{
 
 const mode = defineModel<CoverageMode>('mode', { required: true });
 const axis = defineModel<ChartAxis>('axis', { required: true });
+
+const explainer = useStorage('aimcurve.arc-explainer', true);
+const explainerEl = ref<HTMLElement | null>(null);
+
+async function toggleExplainer(): Promise<void> {
+	explainer.value = !explainer.value;
+	if (!explainer.value) return;
+	await nextTick();
+	explainerEl.value?.scrollIntoView({ block: 'nearest' });
+}
 
 const coverageText = computed(() => {
 	const c = props.coverage;
@@ -57,11 +72,17 @@ const coverageText = computed(() => {
 			>
 		</nav>
 		<span v-else class="single">{{ benchmark.difficulty }}</span>
-		<span
+		<button
+			type="button"
 			class="chip"
-			title="aimcurve's own balanced score per difficulty: 100 per rank step, scenarios averaged per subcategory, then shifted geometric means. Not Voltaic's or Evxl's energy."
-			>Custom energy</span
+			:class="{ on: explainer }"
+			:aria-expanded="explainer"
+			aria-controls="arc-explainer"
+			title="What ARC is"
+			@click="toggleExplainer"
 		>
+			ARC
+		</button>
 
 		<div class="settings">
 			<div class="segment" role="group" aria-label="Coverage">
@@ -95,6 +116,19 @@ const coverageText = computed(() => {
 	</div>
 
 	<div class="details">
+		<section v-if="explainer" id="arc-explainer" ref="explainerEl" class="explainer" aria-label="About ARC">
+			<p>
+				<strong>ARC</strong> is the <em>aimcurve rank composite</em>: one number for where you stand on this
+				difficulty. Every rank is worth 100 arc, and progress in between counts, so halfway from the third rank to
+				the fourth is 350. Scenarios average into their subcategory; subcategories and categories then combine so
+				that a weak spot pulls the total down, but never to zero.
+			</p>
+			<p class="not">
+				ARC is aimcurve's own. It is not Voltaic energy, Evxl's energy or any benchmark's official score, and it does
+				not convert to them: 400 arc is not 400 energy, and an ARC rank is not an official rank.
+			</p>
+			<button type="button" class="close" aria-label="Hide the ARC explainer" @click="toggleExplainer">×</button>
+		</section>
 		<p v-if="coverageText" class="coverage">{{ coverageText }}</p>
 		<div class="legend">
 			<span class="item">
@@ -205,11 +239,56 @@ h1 {
 	padding: 3px 7px;
 	border: 1px solid var(--color-border-strong);
 	border-radius: 3px;
+	background: transparent;
 	font: 500 10px/1 var(--font-mono);
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
 	color: var(--color-text-muted);
-	cursor: help;
+	cursor: pointer;
+}
+
+.chip:hover,
+.chip.on {
+	border-color: var(--color-accent);
+	color: var(--color-text);
+}
+
+.explainer {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 760px;
+	padding: 10px 36px 10px 12px;
+	border: 1px solid var(--color-border);
+	border-radius: 15px;
+	background: var(--color-surface);
+	font: 400 12.5px/1.5 var(--font-sans);
+	color: var(--color-text-muted);
+}
+
+.explainer strong {
+	font-weight: 600;
+	color: var(--color-text-strong);
+}
+
+.explainer .not {
+	color: var(--color-text);
+}
+
+.explainer .close {
+	position: absolute;
+	top: 6px;
+	right: 10px;
+	border: 0;
+	background: transparent;
+	font: 400 16px/1 var(--font-sans);
+	color: var(--color-text-faint);
+	cursor: pointer;
+}
+
+.explainer .close:hover {
+	color: var(--color-text);
 }
 
 .coverage {

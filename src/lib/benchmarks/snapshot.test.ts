@@ -119,7 +119,7 @@ describe('B2 buildSnapshot', () => {
 	});
 });
 
-describe('E7 category tree', () => {
+describe('category tree', () => {
 	const sub = (name: string, scenarioCount: number) => ({ subcategoryName: name, scenarioCount, color: `#${name}` });
 	function treed(categories: EvxlBenchmark['difficulties'][number]['categories']): EvxlBenchmark {
 		return {

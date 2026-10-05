@@ -48,7 +48,7 @@ const props = defineProps<{
 	label: string;
 	/**
 	 * Whether the keyboard steps through every point, not only those with a
-	 * dot: a chart of lines alone (custom energy) has none. Enter still opens
+	 * dot: a chart of lines alone (ARC) has none. Enter still opens
 	 * only a run with a dot.
 	 */
 	everyPoint?: boolean;

@@ -1,10 +1,10 @@
 /**
- * A score's fractional rank on its ladder (E2 of the custom energy design).
- * See docs/superpowers/specs/2026-10-04-custom-energy-design.md.
+ * A score's fractional rank on its ladder.
+ * See docs/arc.md.
  *
  * The ladder `t₁ … tₙ` is extended by one step at each end, so a difficulty
  * with `n` ranks spans `r ∈ [0, n + 1]`: `[0, 1)` is the step below rank 1,
- * `[n, n + 1]` the top rank and its overflow. Custom energy is `100 r`.
+ * `[n, n + 1]` the top rank and its overflow. ARC is `100 r`.
  */
 
 /** The first non-zero step from either end; a single rank steps by a tenth of its threshold. */

@@ -1,13 +1,13 @@
 /**
- * The candle's statistics (P5 of the benchmarks page design): per scenario,
+ * The candle's statistics: per scenario,
  * the worst, p10, median and p90 of its last `W` complete runs and its
  * all-time PB, and each statistic aggregated through the tree.
- * See docs/superpowers/specs/2026-10-05-benchmarks-page-design.md.
+ * See docs/benchmarks.md.
  *
  * Everything is in fractional rank. `fractionalRank` is monotone, so taking
  * the percentiles of scores and then ranking them is the same as the reverse.
  */
-import { type CoverageMode, type EnergyTree, evaluate } from './aggregate';
+import { type CoverageMode, type ArcTree, evaluate } from './aggregate';
 import type { RunStream } from './history';
 import { rankScale } from './rank';
 
@@ -57,7 +57,7 @@ export function windowSpread(scores: readonly number[], W: number, pb: number): 
 }
 
 /** Each scenario's spread in `r`, from the run stream; null when unplayed. */
-export function spreadPass(tree: EnergyTree, stream: RunStream, W: number): (ScenarioSpread | null)[] {
+export function spreadPass(tree: ArcTree, stream: RunStream, W: number): (ScenarioSpread | null)[] {
 	return tree.names.map((_, i) => {
 		const thresholds = tree.thresholds[i] ?? null;
 		const runs = stream.runsOf[i]!;
@@ -84,11 +84,11 @@ export function spreadPass(tree: EnergyTree, stream: RunStream, W: number): (Sce
 const STATS = ['worst', 'p10', 'median', 'p90', 'pb'] as const;
 
 /**
- * Every node's spread, each statistic aggregated on its own with the E3 rules
+ * Every node's spread, each statistic aggregated on its own with the tree's rules
  * and `mode`. Mean and `G` are non-decreasing in every argument, so the
  * order worst ≤ p10 ≤ median ≤ p90 ≤ PB holds at every level.
  */
-export function aggregateSpread(tree: EnergyTree, spreads: readonly (ScenarioSpread | null)[], mode: CoverageMode): (Spread | null)[] {
+export function aggregateSpread(tree: ArcTree, spreads: readonly (ScenarioSpread | null)[], mode: CoverageMode): (Spread | null)[] {
 	const columns = STATS.map((stat) => evaluate(tree, spreads.map((s) => (s === null ? null : s[stat])), mode).nodes);
 	return columns[0]!.map((_, node) => {
 		if (columns[0]![node] === null) return null;

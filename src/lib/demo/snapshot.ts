@@ -11,7 +11,7 @@
  * Must not import from `src/db/`: this is what keeps PGlite out of About.
  */
 import type { DataSource } from '../data-source';
-import type { StreamRows } from '../energy/history';
+import type { StreamRows } from '../arc/history';
 import type { ScenarioRun } from '../run/baseline';
 import type { KillDetail, SlotStats } from '../run/bots';
 import type { Attempt } from '../run/queries';
@@ -62,8 +62,8 @@ function pick<T>(table: Record<string, T>, ids: number[]): Map<number, T> {
 	return out;
 }
 
-/** The energy run stream from the bundled history, as `listEnergyRuns` reads it from the database. */
-function energyRuns(snapshot: DemoSnapshot, names: readonly string[]): StreamRows {
+/** The ARC run stream from the bundled history, as `listArcRuns` reads it from the database. */
+function arcRuns(snapshot: DemoSnapshot, names: readonly string[]): StreamRows {
 	const wanted = new Set(names);
 	const scenarios = Object.values(snapshot.scenarios)
 		.map((s) => ({ id: s.id, name: s.name.trim(), hash: s.hash }))
@@ -97,7 +97,7 @@ export function snapshotSource(snapshot: DemoSnapshot): DataSource {
 		getScenario: async (hash) => snapshot.scenarios[hash] ?? null,
 		listVersions: async (name) => snapshot.versions[name] ?? [],
 		listHistory: async (scenarioId) => snapshot.history[scenarioId] ?? [],
-		listEnergyRuns: async (names) => energyRuns(snapshot, names),
+		listArcRuns: async (names) => arcRuns(snapshot, names),
 		listPlayedNames: async () =>
 			new Set(
 				Object.values(snapshot.scenarios)

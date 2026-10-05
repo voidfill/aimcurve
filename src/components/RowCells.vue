@@ -7,7 +7,7 @@
  */
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
 import type { RankStep } from '../lib/benchmarks/snapshot';
-import { laneTip } from '../lib/energy/tip';
+import { laneTip } from '../lib/arc/tip';
 import CandleLane from './CandleLane.vue';
 import RankPill from './RankPill.vue';
 

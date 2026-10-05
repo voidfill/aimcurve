@@ -1,12 +1,12 @@
 /**
- * The lane's rank axis (P4 of the benchmarks page design): `n + 1` equal
+ * The lane's rank axis: `n + 1` equal
  * columns, Unranked first, the top rank's column holding its overflow.
- * See docs/superpowers/specs/2026-10-05-benchmarks-page-design.md.
+ * See docs/benchmarks.md.
  */
 import { chartColor, luminance, rgb } from '../benchmarks/format';
 import type { RankStep } from '../benchmarks/snapshot';
 
-/** Unranked's colour, on the lane and in the pills (P6). */
+/** Unranked's colour, on the lane and in the pills. */
 export const UNRANKED = '#8b9299';
 
 export interface LaneColumn {
@@ -40,7 +40,7 @@ export function rankColorAt(r: number, ranks: readonly RankStep[]): string {
 	return k === 0 ? UNRANKED : ranks[k - 1]!.color;
 }
 
-/** `rankColorAt`, readable on the dark lane (P6). */
+/** `rankColorAt`, readable on the dark lane. */
 export function laneColorAt(r: number, ranks: readonly RankStep[]): string {
 	return chartColor(rankColorAt(r, ranks));
 }
@@ -70,7 +70,7 @@ export function laneGradient(ranks: readonly RankStep[], blend = 0.18): Gradient
 }
 
 /**
- * How strongly a lane's rank box is tinted (P7): light colours fainter, dark
+ * How strongly a lane's rank box is tinted: light colours fainter, dark
  * and saturated ones stronger, so every column reads about as strong.
  */
 export function bandOpacity(color: string): number {

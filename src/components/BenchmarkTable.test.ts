@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * The sheet's load-bearing behaviour (P9 of the benchmarks page design):
+ * The sheet's load-bearing behaviour:
  * which rows fold open, and that an open chart survives unrelated changes.
  * How rows look is checked by eye, not here. The chart is stubbed: uPlot
  * needs a real canvas.
@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, h, nextTick, reactive } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
-import type { RowChart } from '../lib/energy/chart';
+import type { RowChart } from '../lib/arc/chart';
 import BenchmarkTable from './BenchmarkTable.vue';
 
 vi.mock('./ProgressChart.vue', () => ({

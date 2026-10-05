@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/energy';
-import { energyTree } from './aggregate';
+import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/arc';
+import { arcTree } from './aggregate';
 import { type StreamRows, toStream } from './history';
 import { fractionalRank } from './rank';
 import { aggregateSpread, percentile, spreadPass, windowSpread } from './spread';
 
-const tree = energyTree(syntheticSnapshot(), 0)!;
+const tree = arcTree(syntheticSnapshot(), 0)!;
 const r = (score: number) => fractionalRank([100, 200, 300, 400], score);
 
 function rows(scores: number[], ids = scores.map(() => 1)): StreamRows {
@@ -21,7 +21,7 @@ function rows(scores: number[], ids = scores.map(() => 1)): StreamRows {
 	};
 }
 
-describe('P5 percentiles', () => {
+describe('percentiles', () => {
 	it('interpolates between closest ranks', () => {
 		const sorted = [10, 20, 30, 40, 50];
 		expect(percentile(sorted, 0.5)).toBe(30);
@@ -41,7 +41,7 @@ describe('P5 percentiles', () => {
 	});
 });
 
-describe('P5 spreadPass', () => {
+describe('spreadPass', () => {
 	it('ranks each statistic and keeps the all-time PB outside the window', () => {
 		const scores = [390, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
 		const [s] = spreadPass(tree, toStream(tree, rows(scores)), 10);
@@ -70,7 +70,7 @@ describe('P5 spreadPass', () => {
 	});
 });
 
-describe('P5 aggregateSpread', () => {
+describe('aggregateSpread', () => {
 	const stream = toStream(tree, syntheticRows(500, 12, 3));
 	const spreads = spreadPass(tree, stream, 20);
 

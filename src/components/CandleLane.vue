@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One row's lane (P4–P7 of the benchmarks page design): a flat light tint
+ * One row's lane: a flat light tint
  * per rank column, and on them the candle of recent runs: worst, p10–p90, median and
  * the all-time PB.
  *
@@ -20,9 +20,9 @@ import { computed, ref, useId } from 'vue';
 import { useEventListener, useResizeObserver } from '@vueuse/core';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
-import { bandOpacity, laneColorAt, laneColumns, laneGradient, lanePosition } from '../lib/energy/axis';
-import { describeRank } from '../lib/energy/name';
-import type { Spread } from '../lib/energy/spread';
+import { bandOpacity, laneColorAt, laneColumns, laneGradient, lanePosition } from '../lib/arc/axis';
+import { describeRank } from '../lib/arc/name';
+import type { Spread } from '../lib/arc/spread';
 import type { ProgressTip } from './ProgressChart.vue';
 import TipCard from './TipCard.vue';
 

@@ -1,6 +1,5 @@
 /**
- * A fractional rank named on the difficulty's ladder (E5 of the custom energy
- * design): Unranked below rank 1, then the rank reached with its progress to
+ * A fractional rank named on the difficulty's ladder: Unranked below rank 1, then the rank reached with its progress to
  * the next, and at the top the overflow.
  */
 import type { RankStep } from '../benchmarks/snapshot';
@@ -42,7 +41,7 @@ export function describeRank(r: number, ranks: readonly RankStep[]): string {
 	return `${name.name}, ${percent} % to ${name.next}`;
 }
 
-/** Custom energy, whole: `100 r`. */
-export function energyText(r: number): string {
+/** ARC, whole: `100 r`. */
+export function arcText(r: number): string {
 	return String(Math.round(100 * r));
 }

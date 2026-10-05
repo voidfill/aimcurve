@@ -10,7 +10,7 @@
  */
 import { computed, type WritableComputedRef } from 'vue';
 import { useStorage } from '@vueuse/core';
-import type { CoverageMode } from '../lib/energy/aggregate';
+import type { CoverageMode } from '../lib/arc/aggregate';
 
 /** One stored setting, read back as the default when storage holds anything else. */
 function choice<T extends string | number>(key: string, options: readonly T[], fallback: T): WritableComputedRef<T> {
@@ -34,7 +34,7 @@ export const RUN_WINDOWS = [5, 10, 20, 50] as const;
 
 /**
  * How many of a scenario's latest complete runs count as recent: form (the
- * charts' median line and form energy), the candle and the median pill all
+ * charts' median line and form arc), the candle and the median pill all
  * take that many. One setting where the spec had two (`N` for form, `W` for
  * the candle); 10 by default, so the scenario page looks as it always has.
  */
@@ -42,7 +42,7 @@ export function useRunWindow(): WritableComputedRef<number> {
 	return choice<number>('aimcurve.form-window', RUN_WINDOWS, 10);
 }
 
-/** Provisional (the default) or strict coverage (E4). */
+/** Provisional (the default) or strict coverage. */
 export function useCoverageMode(): WritableComputedRef<CoverageMode> {
 	return choice<CoverageMode>('aimcurve.benchmark-coverage', ['provisional', 'strict'], 'provisional');
 }

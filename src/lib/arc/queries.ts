@@ -1,7 +1,6 @@
 /**
- * Queries for custom energy and the Benchmarks page (E8 of the custom energy
- * design, P12 of the benchmarks page design). SQL only narrows; the energy
- * math is done in JS over the stream.
+ * Queries for ARC and the Benchmarks pages. SQL only narrows; the ARC math
+ * is done in JS over the stream. See docs/arc.md.
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
 import type { StreamRows } from './history';
@@ -18,7 +17,7 @@ const TRIMMED = (column: string) => `regexp_replace(${column}, '^[\\s\u00a0\ufef
  * `names`, ordered by `started_at, id`. Scenarios are matched by trimmed
  * name, so all hashes of a name come along.
  */
-export async function listEnergyRuns(pg: PGliteInterface, names: readonly string[]): Promise<StreamRows> {
+export async function listArcRuns(pg: PGliteInterface, names: readonly string[]): Promise<StreamRows> {
 	const scenarios = await pg.query<{ id: number; name: string; hash: string }>(
 		`select id, ${TRIMMED('name')} as name, hash from scenario where ${TRIMMED('name')} = any($1::text[])`,
 		[[...names]],

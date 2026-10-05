@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The Benchmarks index (P1 of the benchmarks page design): deliberately
+ * The Benchmarks index: deliberately
  * minimal, only the way into a difficulty. Every family in snapshot order,
  * its difficulties one per line, with what has been played.
  */
@@ -27,7 +27,7 @@ const { error: dbError } = useDb();
 		<template v-else>
 			<header>
 				<h1>Benchmarks</h1>
-				<p class="muted">Each difficulty's sheet, with custom energy, spread and history.</p>
+				<p class="muted">Each difficulty's sheet, with ARC, spread and history.</p>
 			</header>
 			<div class="families">
 				<section v-for="family in families" :key="family.name" class="family">

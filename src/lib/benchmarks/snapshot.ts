@@ -29,7 +29,7 @@ export interface EvxlDifficulty {
 	kovaaksBenchmarkId: number;
 	/** Rank name → colour; key order is the ladder order. */
 	rankColors: Record<string, string>;
-	/** Category and subcategory names in benchmark order; no scenario names (E7). */
+	/** Category and subcategory names in benchmark order; no scenario names. */
 	categories?: EvxlCategory[];
 }
 
@@ -80,7 +80,7 @@ export interface SnapshotBenchmark {
 	color: string;
 	ranks: RankStep[];
 	/**
-	 * The category tree (E7 of the custom energy design), or null when Evxl's
+	 * The category tree, or null when Evxl's
 	 * scenario counts do not add up to KovaaK's scenarios.
 	 */
 	tree: SnapshotCategory[] | null;
@@ -103,7 +103,7 @@ export interface Built {
 	scenarios: Record<string, SnapshotCandidate[]>;
 	/** Deterministic upstream data problems that were skipped, for the run summary. */
 	skipped: string[];
-	/** Included difficulties whose category tree could not be built (E7), for the run summary. */
+	/** Included difficulties whose category tree could not be built, for the run summary. */
 	treeless: string[];
 }
 
@@ -245,7 +245,7 @@ export function buildSnapshot(index: readonly EvxlBenchmark[], responses: Readon
 
 /**
  * Slices KovaaK's scenarios, in response order, by Evxl's scenario counts in
- * Evxl's order (E7). Null when the counts do not add up to the scenarios, or
+ * Evxl's order. Null when the counts do not add up to the scenarios, or
  * when there are no categories.
  */
 function buildTree(categories: readonly EvxlCategory[], flat: readonly string[]): SnapshotCategory[] | null {

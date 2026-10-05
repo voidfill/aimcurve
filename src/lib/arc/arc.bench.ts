@@ -1,18 +1,18 @@
 /**
- * The history pass over 100k synthetic runs across 30 scenarios (E9 of the
- * custom energy design). The budget is one frame, 16 ms; over it, the pass
- * moves to a compute worker.
+ * The history pass over 100k synthetic runs across 30 scenarios.
+ * The budget is one frame, 16 ms; over it, the pass can move to a compute
+ * worker. See docs/arc.md.
  *
  * As in `ingest.bench.ts`, `bench` is a test-context fixture in vitest 5, and
  * each `test` only hosts one `bench(...).run()`.
  */
 import { test } from 'vitest';
-import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/energy';
-import { energyTree } from './aggregate';
+import { syntheticRows, syntheticSnapshot } from '../../../test/helpers/arc';
+import { arcTree } from './aggregate';
 import { historyPass, toStream } from './history';
 import { spreadPass } from './spread';
 
-const tree = energyTree(syntheticSnapshot(3, 5, 2), 0)!;
+const tree = arcTree(syntheticSnapshot(3, 5, 2), 0)!;
 const rows = syntheticRows(100_000, tree.names.length);
 const stream = toStream(tree, rows);
 

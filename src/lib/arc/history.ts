@@ -1,8 +1,8 @@
 /**
- * The single pass over a difficulty's runs (E8, E9 of the custom energy
- * design): every node's PB and form energy after each run inside it, as
+ * The single pass over a difficulty's runs: every node's PB and form
+ * arc after each run inside it, as
  * columnar arrays.
- * See docs/superpowers/specs/2026-10-04-custom-energy-design.md.
+ * See docs/arc.md.
  *
  * State per scenario is its PB and its last `N` scores, kept sorted; per
  * subcategory a running sum and count of `r`. A run updates its scenario and
@@ -11,7 +11,7 @@
  * One pass computes one coverage mode: the 16 ms budget for 100k runs does
  * not fit both, and the page shows one at a time. The toggle reruns it.
  */
-import { type CoverageMode, type EnergyTree, nodeCount, POWER } from './aggregate';
+import { type CoverageMode, type ArcTree, nodeCount, POWER } from './aggregate';
 import { rankScale } from './rank';
 
 /** One scenario row of the run stream query: every hash of a trimmed name. */
@@ -56,10 +56,10 @@ export interface ScenarioPlayed {
 
 /**
  * Maps the stream to scenario indices. Only rated scenarios' runs are events
- * (the energy needs a ladder); every scenario of the tree counts towards what
+ * (arc needs a ladder); every scenario of the tree counts towards what
  * was played and its most-played hash.
  */
-export function toStream(tree: EnergyTree, rows: StreamRows): RunStream {
+export function toStream(tree: ArcTree, rows: StreamRows): RunStream {
 	const index = new Map(tree.names.map((name, i) => [name, i]));
 	const sidOf = new Map<number, number>();
 	const hashOf = new Map<number, string>();
@@ -108,7 +108,7 @@ export function toStream(tree: EnergyTree, rows: StreamRows): RunStream {
 	return { sid, runId, t, score, runsOf, topHash, played };
 }
 
-export type EnergyInput = 'pb' | 'form';
+export type ArcInput = 'pb' | 'form';
 
 /** One node's values at the runs inside it, the only points its chart plots. */
 export interface NodeHistory {
@@ -138,7 +138,7 @@ export interface History {
 	mode: CoverageMode;
 }
 
-function slot(input: EnergyInput): number {
+function slot(input: ArcInput): number {
 	return input === 'form' ? 1 : 0;
 }
 
@@ -151,13 +151,13 @@ function read(n: NodeHistory, v: number): number | null {
 }
 
 /** A node's value after its own `j`-th run; null where nothing counts. */
-export function nodeValue(h: History, node: number, j: number, input: EnergyInput): number | null {
+export function nodeValue(h: History, node: number, j: number, input: ArcInput): number | null {
 	const n = h.nodes[node]!;
 	return read(n, n.values[j * 2 + slot(input)]!);
 }
 
 /** A node's value after stream event `e`, whether or not that run is inside it. */
-export function valueAt(h: History, e: number, node: number, input: EnergyInput): number | null {
+export function valueAt(h: History, e: number, node: number, input: ArcInput): number | null {
 	const { events } = h.nodes[node]!;
 	// The last of the node's runs at or before e.
 	let lo = 0;
@@ -185,9 +185,9 @@ function unterm(mean: number): number {
 
 /**
  * Every node's PB and form `r` after each run inside it, in `mode`. Form is
- * the median of each scenario's last `window` scores (E6).
+ * the median of each scenario's last `window` scores.
  */
-export function historyPass(tree: EnergyTree, stream: RunStream, window: number, mode: CoverageMode): History {
+export function historyPass(tree: ArcTree, stream: RunStream, window: number, mode: CoverageMode): History {
 	const S = tree.names.length;
 	const C = tree.categories.length;
 	const U = tree.subs.length;
@@ -342,7 +342,7 @@ export function historyPass(tree: EnergyTree, stream: RunStream, window: number,
 }
 
 /** The rated scenarios inside node `node`. */
-export function nodeScenarios(tree: EnergyTree, node: number): Set<number> {
+export function nodeScenarios(tree: ArcTree, node: number): Set<number> {
 	const C = tree.categories.length;
 	const out = new Set<number>();
 	const addSub = (s: number) => {

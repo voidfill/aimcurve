@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { smallSnapshot } from '../../../test/helpers/energy';
-import { energyTree, evaluate, G, isFull } from './aggregate';
+import { smallSnapshot } from '../../../test/helpers/arc';
+import { arcTree, evaluate, G, isFull } from './aggregate';
 import { describeRank, rankName } from './name';
 
 const ranks = smallSnapshot().benchmarks[1]!.ranks;
 
-describe('E3 G', () => {
+describe('G', () => {
 	it('matches the table: a weak spot and a one-trick', () => {
 		expect(G([0, ...Array(11).fill(5)])).toBeCloseTo(4.17, 2);
 		expect(G([8, ...Array(11).fill(3)])).toBeCloseTo(3.28, 2);
@@ -17,8 +17,8 @@ describe('E3 G', () => {
 	});
 });
 
-describe('E7 energyTree', () => {
-	const tree = energyTree(smallSnapshot(), 1)!;
+describe('arcTree', () => {
+	const tree = arcTree(smallSnapshot(), 1)!;
 
 	it('lists each name once and its ladder on this difficulty', () => {
 		expect(tree.names).toEqual(['A', 'B', 'C', 'D', 'Unrated']);
@@ -32,11 +32,11 @@ describe('E7 energyTree', () => {
 	});
 
 	it('is null without a tree', () => {
-		expect(energyTree(smallSnapshot(), 0)).toBeNull();
+		expect(arcTree(smallSnapshot(), 0)).toBeNull();
 	});
 
 	it('flattens a difficulty without a tree on request: every scenario with a ladder there, in one group', () => {
-		const flat = energyTree(smallSnapshot(), 0, true)!;
+		const flat = arcTree(smallSnapshot(), 0, true)!;
 		expect(flat.names).toEqual(['B', 'Unrated']);
 		expect(flat.categories).toHaveLength(1);
 		expect(flat.subs.map((s) => s.name)).toEqual(['']);
@@ -44,8 +44,8 @@ describe('E7 energyTree', () => {
 	});
 });
 
-describe('E4 evaluate', () => {
-	const tree = energyTree(smallSnapshot(), 1)!;
+describe('evaluate', () => {
+	const tree = arcTree(smallSnapshot(), 1)!;
 	// A, B, C, D, Unrated
 	const some = [2, null, 1, null, 3];
 
@@ -85,7 +85,7 @@ describe('E4 evaluate', () => {
 	});
 });
 
-describe('E5 rank names', () => {
+describe('rank names', () => {
 	it('names Unranked, mid-ladder and the overflow', () => {
 		expect(rankName(0.4, ranks)).toMatchObject({ k: 0, name: 'Unranked', next: 'Gold' });
 		expect(describeRank(1.6, ranks)).toBe('Gold, 60 % to Platinum');

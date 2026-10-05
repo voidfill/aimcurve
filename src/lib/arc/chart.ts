@@ -1,10 +1,9 @@
 /**
- * The props `ProgressChart` draws a Benchmarks page row's history with (P10,
- * P11 of the benchmarks page design).
- * See docs/superpowers/specs/2026-10-05-benchmarks-page-design.md.
+ * The props `ProgressChart` draws a Benchmarks page row's history with.
+ * See docs/benchmarks.md.
  *
  * A scenario row plots every complete run of every hash of its name, on this
- * difficulty's ladder. An aggregate row plots custom energy: its PB and form
+ * difficulty's ladder. An aggregate row plots ARC: its PB and form
  * after each run inside it, over rank bands at 100, 200, … `n × 100`.
  */
 import type { ProgressTip } from '../../components/ProgressChart.vue';
@@ -13,11 +12,11 @@ import type { RankLadder } from '../benchmarks/paint';
 import { rankOf } from '../benchmarks/rank';
 import { formatScore, formatSigned, timeFormat } from '../run/format';
 import { pbSteps, rollingMedian } from '../scenario/series';
-import type { EnergyTree } from './aggregate';
+import type { ArcTree } from './aggregate';
 import { type History, nodeScenarios, nodeValue } from './history';
 import type { RunStream } from './history';
 import { UNRANKED } from './axis';
-import { describeRank, energyText } from './name';
+import { describeRank, arcText } from './name';
 import { fractionalRank } from './rank';
 
 export interface RowChart {
@@ -45,7 +44,7 @@ function when(stream: RunStream, e: number): string {
 }
 
 /** A scenario row's chart: every run of the name, coloured on this difficulty's ladder. */
-export function scenarioChart(tree: EnergyTree, stream: RunStream, i: number, formWindow: number, dateAxis: boolean): RowChart {
+export function scenarioChart(tree: ArcTree, stream: RunStream, i: number, formWindow: number, dateAxis: boolean): RowChart {
 	const thresholds = tree.thresholds[i]!;
 	const events = stream.runsOf[i]!;
 	const y = events.map((e) => stream.score[e]!);
@@ -91,14 +90,14 @@ export function scenarioChart(tree: EnergyTree, stream: RunStream, i: number, fo
 	};
 }
 
-/** The rank bands of custom energy: rank `i` from `i × 100`. */
-export function energyBands(tree: EnergyTree): RankLadder & { next: null } {
+/** The rank bands of ARC: rank `i` from `i × 100`. */
+export function arcBands(tree: ArcTree): RankLadder & { next: null } {
 	return { ranks: tree.ranks, thresholds: tree.ranks.map((_, i) => (i + 1) * 100), next: null };
 }
 
-/** An aggregate row's chart: PB and form custom energy after each run inside the node. */
+/** An aggregate row's chart: PB and form arc after each run inside the node. */
 export function aggregateChart(
-	tree: EnergyTree,
+	tree: ArcTree,
 	stream: RunStream,
 	history: History,
 	node: number,
@@ -107,13 +106,13 @@ export function aggregateChart(
 ): RowChart {
 	const { events } = history.nodes[node]!;
 	const n = events.length;
-	const energy = (input: 'pb' | 'form') =>
+	const arc = (input: 'pb' | 'form') =>
 		Array.from({ length: n }, (_, j) => {
 			const r = nodeValue(history, node, j, input);
 			return r === null ? null : 100 * r;
 		});
-	const best = energy('pb');
-	const form = energy('form');
+	const best = arc('pb');
+	const form = arc('form');
 	const inside = [...nodeScenarios(tree, node)];
 	return {
 		x: xs(stream, events, dateAxis),
@@ -122,7 +121,7 @@ export function aggregateChart(
 		median: form,
 		medianFull: new Array<boolean>(n).fill(true),
 		colors: new Array<string | null>(n).fill(null),
-		ranks: energyBands(tree),
+		ranks: arcBands(tree),
 		formatY: (v) => String(Math.round(v)),
 		tipFor: (j) => {
 			const e = events[j];
@@ -130,14 +129,14 @@ export function aggregateChart(
 			const rows: ProgressTip['rows'] = [];
 			const pb = best[j];
 			const f = form[j];
-			if (pb != null) rows.push({ label: 'PB energy', value: `${energyText(pb / 100)} · ${describeRank(pb / 100, tree.ranks)}`, tone: 'base' });
-			if (f != null) rows.push({ label: `form energy · last ${history.window}`, value: `${energyText(f / 100)} · ${describeRank(f / 100, tree.ranks)}`, tone: 'strong' });
+			if (pb != null) rows.push({ label: 'PB arc', value: `${arcText(pb / 100)} · ${describeRank(pb / 100, tree.ranks)}`, tone: 'base' });
+			if (f != null) rows.push({ label: `form arc · last ${history.window}`, value: `${arcText(f / 100)} · ${describeRank(f / 100, tree.ranks)}`, tone: 'strong' });
 			const played = inside.filter((i) => history.firstEvent[i]! >= 0 && history.firstEvent[i]! <= e).length;
 			rows.push({ label: 'scenarios played', value: `${played}/${inside.length}` });
 			rows.push({ label: 'this run', value: tree.names[stream.sid[e]!]! });
 			return { head: `#${j + 1} · ${when(stream, e)}`, sub: history.mode, rows };
 		},
 		runIds: null,
-		label: `Custom energy of ${name} after each of its runs`,
+		label: `ARC of ${name} after each of its runs`,
 	};
 }

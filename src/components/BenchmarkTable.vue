@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The difficulty's sheet (P2, P3, P9 of the benchmarks page design): one row
+ * The difficulty's sheet: one row
  * per tree node in tree order, every row on the same rank axis, and under any
  * row its folded-open history chart.
  *
@@ -19,7 +19,7 @@
 import { computed, type ComputedRef } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
-import type { RowChart } from '../lib/energy/chart';
+import type { RowChart } from '../lib/arc/chart';
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
 import ProgressChart from './ProgressChart.vue';
 import RowCells from './RowCells.vue';

@@ -1,6 +1,6 @@
-/** Synthetic difficulties and run streams for the energy tests and bench. */
+/** Synthetic difficulties and run streams for the ARC tests and bench. */
 import type { Snapshot } from '../../src/lib/benchmarks/snapshot';
-import type { StreamRows } from '../../src/lib/energy/history';
+import type { StreamRows } from '../../src/lib/arc/history';
 
 /**
  * One difficulty (`id` 458, snapshot index 0) of `categories × subs × per`

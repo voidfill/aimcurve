@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
- * A PB or median pill (P8 of the benchmarks page design): the rank name and
+ * A PB or median pill: the rank name and
  * progress, filled from the left toward the next rank. The text is drawn
  * twice, the top copy clipped to the fill in the fill's ink, so it inverts
  * exactly where the fill passes under it.
  */
 import { computed } from 'vue';
 import type { RankStep } from '../lib/benchmarks/snapshot';
-import { describeRank, energyText } from '../lib/energy/name';
-import { pill } from '../lib/energy/pill';
+import { describeRank, arcText } from '../lib/arc/name';
+import { pill } from '../lib/arc/pill';
 
 const props = defineProps<{
 	/** Fractional rank; null for an empty pill. */
@@ -20,7 +20,7 @@ const props = defineProps<{
 
 const p = computed(() => (props.r === null ? null : pill(props.r, props.ranks)));
 const title = computed(() =>
-	props.r === null ? `${props.label}: none` : `${props.label}: custom energy ${energyText(props.r)} · ${describeRank(props.r, props.ranks)}`,
+	props.r === null ? `${props.label}: none` : `${props.label}: ${arcText(props.r)} arc · ${describeRank(props.r, props.ranks)}`,
 );
 </script>
 

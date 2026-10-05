@@ -10,7 +10,7 @@ const ranks = [
 	{ name: 'Nova', color: '#7900FF' },
 ];
 
-describe('P4 lane axis', () => {
+describe('lane axis', () => {
 	it('has n + 1 equal columns, Unranked first', () => {
 		const columns = laneColumns(ranks);
 		expect(columns.map((c) => c.name)).toEqual(['Unranked', 'Platinum', 'Diamond', 'Jade', 'Nova']);
@@ -33,7 +33,7 @@ describe('P4 lane axis', () => {
 	});
 });
 
-describe('P8 pills', () => {
+describe('pills', () => {
 	it('mid-rank', () => {
 		expect(pill(2.62, ranks)).toMatchObject({ name: 'Diamond', text: '62%' });
 		expect(pill(2.62, ranks).fill).toBeCloseTo(0.62, 12);

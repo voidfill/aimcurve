@@ -1,7 +1,7 @@
 /**
- * A PB or median pill (P8 of the benchmarks page design): the rank name on
+ * A PB or median pill: the rank name on
  * the left, progress on the right, filled toward the next rank.
- * See docs/superpowers/specs/2026-10-05-benchmarks-page-design.md.
+ * See docs/benchmarks.md.
  */
 import { chartColor, inkFor } from '../benchmarks/format';
 import type { RankStep } from '../benchmarks/snapshot';

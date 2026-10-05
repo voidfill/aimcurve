@@ -1,7 +1,6 @@
 /**
- * A difficulty's category tree and how scenario ranks add up through it (E3,
- * E4 of the custom energy design).
- * See docs/superpowers/specs/2026-10-04-custom-energy-design.md.
+ * A difficulty's category tree and how scenario ranks add up through it.
+ * See docs/arc.md.
  *
  * Subcategory = mean of its scenarios' `r`; category and overall = `G`, the
  * shifted geometric mean. Provisional leaves out what was not played; strict
@@ -47,14 +46,14 @@ export interface TreeCategory {
  * One difficulty's tree, flattened for the history pass. Scenarios are by
  * index: each distinct trimmed name once.
  */
-export interface EnergyTree {
+export interface ArcTree {
 	id: number;
 	benchmark: string;
 	difficulty: string;
 	ranks: RankStep[];
 	/** Distinct trimmed scenario names. */
 	names: string[];
-	/** Each scenario's ladder on this difficulty; null is unrated (E2). */
+	/** Each scenario's ladder on this difficulty; null is unrated. */
 	thresholds: (number[] | null)[];
 	categories: TreeCategory[];
 	subs: TreeSub[];
@@ -63,7 +62,7 @@ export interface EnergyTree {
 }
 
 /** Node indices: 0 is the overall, then the categories, then the subcategories. */
-export function nodeCount(tree: EnergyTree): number {
+export function nodeCount(tree: ArcTree): number {
 	return 1 + tree.categories.length + tree.subs.length;
 }
 
@@ -71,17 +70,17 @@ export function categoryNode(c: number): number {
 	return 1 + c;
 }
 
-export function subNode(tree: EnergyTree, s: number): number {
+export function subNode(tree: ArcTree, s: number): number {
 	return 1 + tree.categories.length + s;
 }
 
 /**
- * The tree of `snapshot.benchmarks[index]`, or null when it has none (E7).
+ * The tree of `snapshot.benchmarks[index]`, or null when it has none.
  * With `flat`, a difficulty without a tree gets one unnamed category of one
  * unnamed subcategory holding every scenario with a ladder there: enough for
  * a single scenario's row, though its aggregates mean nothing.
  */
-export function energyTree(snapshot: Snapshot, index: number, flat = false): EnergyTree | null {
+export function arcTree(snapshot: Snapshot, index: number, flat = false): ArcTree | null {
 	const b = snapshot.benchmarks[index];
 	if (!b) return null;
 	if (!b.tree && !flat) return null;
@@ -146,7 +145,7 @@ export function isFull(c: Coverage): boolean {
 }
 
 /** Which scenarios count: rated, and played unless strict. */
-export function coverage(tree: EnergyTree, played: (i: number) => boolean): Coverage {
+export function coverage(tree: ArcTree, played: (i: number) => boolean): Coverage {
 	let scenarios = 0;
 	let total = 0;
 	tree.names.forEach((_, i) => {
@@ -176,7 +175,7 @@ export interface TreeValues {
  * Every node's value from each scenario's `r` (null when unplayed). Unrated
  * scenarios are skipped in both modes.
  */
-export function evaluate(tree: EnergyTree, r: readonly (number | null)[], mode: CoverageMode): TreeValues {
+export function evaluate(tree: ArcTree, r: readonly (number | null)[], mode: CoverageMode): TreeValues {
 	const strict = mode === 'strict';
 	const subValues = tree.subs.map((s) => {
 		let sum = 0;
