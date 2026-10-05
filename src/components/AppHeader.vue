@@ -33,6 +33,8 @@ const route = useRoute();
 const { rememberedRunRoute } = useSelection();
 const { rememberedRoute: rememberedScenariosRoute } = useDirectoryRoute();
 const rememberedBenchmarksRoute = useBenchmarksRoute();
+/** From a difficulty page, the tab goes up to the index; from elsewhere, back to where Benchmarks was left. */
+const benchmarksTo = computed(() => (route.name === 'benchmark' ? { name: 'benchmarks' } : rememberedBenchmarksRoute.value));
 
 const onRun = computed(() => route.name === 'run');
 const onScenarios = computed(() => route.name === 'scenarios' || route.name === 'scenario');
@@ -66,7 +68,7 @@ const onAbout = computed(() => route.name === 'about');
 					><span>Scenarios</span></a
 				>
 			</RouterLink>
-			<RouterLink v-slot="{ href, navigate }" :to="rememberedBenchmarksRoute" custom>
+			<RouterLink v-slot="{ href, navigate }" :to="benchmarksTo" custom>
 				<a
 					:href="href"
 					class="tab"

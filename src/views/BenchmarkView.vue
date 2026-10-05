@@ -106,6 +106,7 @@ watch(
 					:chart-for="page.chartFor"
 					:date-axis="dateAxis"
 					:run-window="runWindow"
+					:benchmark-id="benchmark.id"
 					@toggle="toggle"
 					@open-run="openRun"
 				/>

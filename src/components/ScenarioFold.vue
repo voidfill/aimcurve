@@ -18,6 +18,8 @@ const props = defineProps<{
 	facts: ScenarioFacts;
 	/** The version with the most runs; null when unplayed. */
 	hash: string | null;
+	/** This difficulty's KovaaK's benchmark ID: the scenario page opens with it selected. */
+	benchmarkId: number;
 	unrated: boolean;
 }>();
 
@@ -60,7 +62,9 @@ function follow(event: MouseEvent, navigate: (e?: MouseEvent) => unknown): void 
 					>Follow in Run</a
 				>
 			</RouterLink>
-			<RouterLink v-if="hash" class="page" :to="{ name: 'scenario', params: { hash } }">Scenario page →</RouterLink>
+			<RouterLink v-if="hash" class="page" :to="{ name: 'scenario', params: { hash }, query: { bench: benchmarkId } }"
+				>Scenario page →</RouterLink
+			>
 		</div>
 	</div>
 </template>

@@ -36,6 +36,8 @@ const props = defineProps<{
 	dateAxis: boolean;
 	/** The run window, for the median pill's label. */
 	runWindow: number;
+	/** The difficulty's KovaaK's benchmark ID, for links out. */
+	benchmarkId: number;
 }>();
 
 const emit = defineEmits<{
@@ -179,6 +181,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 								:name="row.name"
 								:facts="row.facts"
 								:hash="row.hash"
+								:benchmark-id="benchmarkId"
 								:unrated="row.state === 'unrated'"
 							/>
 							<ProgressChart

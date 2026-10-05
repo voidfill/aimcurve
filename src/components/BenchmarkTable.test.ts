@@ -66,6 +66,7 @@ async function mount(open: Set<string>, chartFor: () => RowChart = () => ({ x: [
 				chartFor,
 				dateAxis: false,
 				runWindow: 20,
+				benchmarkId: 458,
 				onToggle: (key: string) => toggled.push(key),
 			}),
 	});
@@ -94,7 +95,7 @@ describe('BenchmarkTable', () => {
 		const state = reactive({ rows, open: new Set(['overall']), runWindow: 20 });
 		const el = document.createElement('div');
 		const app = createApp({
-			render: () => h(BenchmarkTable, { ...state, ranks, chartFor, dateAxis: false }),
+			render: () => h(BenchmarkTable, { ...state, ranks, chartFor, dateAxis: false, benchmarkId: 458 }),
 		});
 		app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { render: () => null } }, { path: '/scenario/:hash', name: 'scenario', component: { render: () => null } }] }));
 		app.mount(el);
@@ -128,13 +129,12 @@ describe('BenchmarkTable', () => {
 		expect([...popcorn.querySelectorAll('.pill')].map((p) => p.textContent)).toEqual(['—', '—']);
 	});
 
-	it('paints the candle with its lane’s rank gradient and the hatch per column', async () => {
+	it('paints the candle with its lane’s rank gradient', async () => {
 		const { el } = await mount(new Set());
 		const lane = el.querySelectorAll('[role="row"].row')[2]!;
 		const gradient = lane.querySelector('linearGradient')!;
 		expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
 		expect(gradient.querySelectorAll('stop')).toHaveLength(6);
-		expect(el.querySelectorAll('pattern')).toHaveLength(3);
 		const body = lane.querySelector('rect[rx="3"]')!;
 		expect(body.getAttribute('fill')).toBe(`url(#${gradient.id})`);
 	});

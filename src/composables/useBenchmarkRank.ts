@@ -67,6 +67,11 @@ export interface BenchmarkRankOptions {
 	load?: () => Promise<Snapshot>;
 	/** Trimmed scenario name → picked KovaaK's benchmark ID, or null for none. */
 	picks?: Ref<Record<string, number | null>>;
+	/**
+	 * A benchmark to show instead of the stored pick while it is a candidate,
+	 * such as the one a Benchmarks page linked from. Never stored.
+	 */
+	preferred?: Ref<number | null>;
 }
 
 export function useBenchmarkRank(
@@ -88,6 +93,11 @@ export function useBenchmarkRank(
 	const stored = computed(() => storedPicks(picks.value));
 	const selected = computed(() => {
 		if (name.value === null) return null;
+		const preferred = options.preferred?.value ?? null;
+		if (preferred !== null) {
+			const linked = candidates.value.find((c) => c.benchmark.id === preferred);
+			if (linked) return linked;
+		}
 		const id = stored.value[name.value.trim()];
 		return pick(candidates.value, typeof id === 'number' || id === null ? id : undefined);
 	});
