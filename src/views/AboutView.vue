@@ -16,7 +16,7 @@ import { GITHUB_MARK_PATH, ISSUES_URL, REPO_URL } from '../lib/links';
 
 const PRIVACY = 'Fully local: your stats stay in this browser. No server, no account, no tracking.';
 
-const { state, attempt } = provideDemo();
+const { state, attempt, now } = provideDemo();
 
 /**
  * Browsers remember a failed dynamic import for the page's lifetime, so
@@ -41,7 +41,7 @@ onMounted(markAboutSeen);
 			<h1>See where your runs are won and lost.</h1>
 			<p class="lede">
 				aimcurve reads the stats KovaaK's already saves after every run and shows how each one unfolded: where you
-				pulled ahead, which bot cost you, and whether you are actually getting better.
+				pulled ahead, which bot cost you, and whether you are actually climbing your benchmarks.
 			</p>
 			<div class="actions">
 				<RouterLink class="cta" :to="{ name: 'data' }">Import your stats</RouterLink>
@@ -52,7 +52,7 @@ onMounted(markAboutSeen);
 
 		<div ref="walkthrough" class="walkthrough">
 			<template v-if="state === 'ready' && attempt">
-				<AboutDemo :attempt="attempt" />
+				<AboutDemo :attempt="attempt" :now="now" />
 			</template>
 			<p v-else-if="state === 'error'" class="error" role="alert">
 				The sample runs could not be loaded.

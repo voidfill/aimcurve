@@ -20,12 +20,15 @@ export function provideDemo() {
 	const state = ref<'loading' | 'ready' | 'error'>('loading');
 	/** The run About charts. */
 	const attempt = shallowRef<Attempt | null>(null);
+	/** The sample's "now": its last run, so the benchmark sheet never shows it as stale. */
+	const now = ref(0);
 
 	async function load(): Promise<void> {
 		try {
 			const [module] = await Promise.all([import('../../data/demo-snapshot.json'), loadSnapshot()]);
 			const snapshot = module.default as unknown as DemoSnapshot;
 			attempt.value = snapshot.attempts[DEMO_RUN_STEM] ?? null;
+			now.value = Math.max(...Object.values(snapshot.history).flatMap((runs) => runs.map((r) => new Date(r.startedAt).getTime())));
 			source.value = snapshotSource(snapshot);
 			// A snapshot without the pinned run would leave About on a placeholder forever.
 			state.value = attempt.value ? 'ready' : 'error';
@@ -35,5 +38,5 @@ export function provideDemo() {
 	}
 
 	void load();
-	return { state, attempt };
+	return { state, attempt, now };
 }

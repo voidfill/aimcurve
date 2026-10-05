@@ -18,6 +18,8 @@ defineProps<{
 	runWindow: number;
 	/** The candle body's height in px. */
 	size: number;
+	/** Epoch ms the tooltip measures "last played" from; now by default. */
+	now?: number;
 }>();
 
 function emptyText(row: BenchmarkRow): string | null {
@@ -36,7 +38,7 @@ function emptyText(row: BenchmarkRow): string | null {
 		:size="size"
 		:dim="row.stale !== null"
 		:name="row.name"
-		:tip="() => laneTip(row, ranks, Date.now())"
+		:tip="() => laneTip(row, ranks, now ?? Date.now())"
 	/>
 	<span role="cell"><RankPill :r="row.spread?.pb ?? null" :ranks="ranks" :label="`${row.name} PB`" /></span>
 	<span role="cell" :class="{ dim: row.stale !== null }">

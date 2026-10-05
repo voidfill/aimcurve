@@ -2,10 +2,13 @@
  * Builds the demo snapshot from a database holding the demo fixtures, through
  * the same queries the app runs. Only the snapshot test calls this; the About
  * page loads its committed output.
+ *
+ * The charted demo scenarios get everything their charts read; the benchmark
+ * beat's other scenarios only their rows and history, all ARC reads.
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
 import { pgSource } from '../data-source';
-import type { DemoSnapshot } from './snapshot';
+import { DEMO_SCENARIOS, type DemoSnapshot } from './snapshot';
 
 export async function buildSnapshot(pg: PGliteInterface): Promise<DemoSnapshot> {
 	const db = pgSource(pg);
@@ -26,9 +29,10 @@ export async function buildSnapshot(pg: PGliteInterface): Promise<DemoSnapshot> 
 		if (runs.length === 0) continue;
 		const ids = runs.map((r) => r.id);
 		snapshot.scenarios[hash] = scenario;
+		snapshot.history[scenario.id] = await db.listHistory(scenario.id);
+		if (!DEMO_SCENARIOS.some((s) => s.hash === hash)) continue;
 		snapshot.versions[scenario.name] = await db.listVersions(scenario.name);
 		snapshot.scenarioRuns[scenario.id] = runs;
-		snapshot.history[scenario.id] = await db.listHistory(scenario.id);
 		snapshot.slotStats[scenario.id] = await db.getSlotStats(scenario.id);
 		for (const run of runs) snapshot.attempts[run.fileStem] = (await db.getAttempt(run.fileStem))!;
 		for (const [id, input] of await db.getScoringInputs(ids)) snapshot.scoringInputs[id] = input;

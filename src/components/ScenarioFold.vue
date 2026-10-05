@@ -13,15 +13,20 @@ import { useSelection } from '../composables/useSelection';
 import { formatScore, timeFormat } from '../lib/run/format';
 import { kovaaksLink } from '../lib/scenario/link';
 
-const props = defineProps<{
-	name: string;
-	facts: ScenarioFacts;
-	/** The version with the most runs; null when unplayed. */
-	hash: string | null;
-	/** This difficulty's KovaaK's benchmark ID: the scenario page opens with it selected. */
-	benchmarkId: number;
-	unrated: boolean;
-}>();
+const props = withDefaults(
+	defineProps<{
+		name: string;
+		facts: ScenarioFacts;
+		/** The version with the most runs; null when unplayed. */
+		hash: string | null;
+		/** This difficulty's KovaaK's benchmark ID: the scenario page opens with it selected. */
+		benchmarkId: number;
+		unrated: boolean;
+		/** Whether to offer what to do next; off for sample data, which is not the visitor's. */
+		actions?: boolean;
+	}>(),
+	{ actions: true },
+);
 
 const { followLatest } = useSelection();
 
@@ -50,7 +55,7 @@ const runTo = computed(() => (props.hash === null ? null : { path: '/', query: {
 				<span>{{ part }}</span>
 			</template>
 		</p>
-		<div class="actions">
+		<div v-if="actions" class="actions">
 			<a :href="kovaaks" class="action kovaaks" title="Opens this scenario in Kovaak’s through Steam">Play in Kovaak’s</a>
 			<RouterLink v-if="runTo" v-slot="{ href, navigate }" :to="runTo" custom>
 				<a :href="href" class="action" title="Open Run filtered to this scenario, following the latest run" @click="followLatest($event, navigate)"

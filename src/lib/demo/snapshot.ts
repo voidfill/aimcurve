@@ -10,6 +10,7 @@
  *
  * Must not import from `src/db/`: this is what keeps PGlite out of About.
  */
+import type { Snapshot } from '../benchmarks/snapshot';
 import type { DataSource } from '../data-source';
 import type { StreamRows } from '../arc/history';
 import type { ScenarioRun } from '../run/baseline';
@@ -23,23 +24,32 @@ import type { ScoringInput } from '../scoring';
 export const DEMO_SCENARIO_HASH = '28c12fc03478e987f910709ce18a5cfa';
 
 /**
- * VT Aether Intermediate S5, About's progression chart: months of runs with a
- * steady climb through several ranks.
- */
-export const DEMO_PROGRESS_HASH = 'c4c11bf8a727b6e6c836138535bd0879';
-
-/**
  * The run About charts: it led its PB-before mid-run and finished behind, the
  * clearest "where did it slip" of the set. About's copy reads the numbers from
  * the data; the `useRunCharts` test holds the shape.
  */
 export const DEMO_RUN_STEM = 'Air Spectral Easy - Challenge - 2026.09.09-18.46.26';
 
-/** The scenarios `test/fixtures/demo/` holds every completed run of. */
+/** The scenarios About charts run by run: `test/fixtures/demo/` holds every completed run of them, with perfs. */
 export const DEMO_SCENARIOS = [
 	{ name: 'Air Spectral Easy', hash: DEMO_SCENARIO_HASH },
-	{ name: 'VT Aether Intermediate S5', hash: DEMO_PROGRESS_HASH },
 ] as const;
+
+/**
+ * About's benchmark beat: Viscose Benchmarks S2 Medium, shown as one category,
+ * Reactive Tracking: six scenarios with months of runs, small enough to read
+ * at once. Its scenarios' fixtures are CSVs only, since ARC needs only scores.
+ */
+export const DEMO_BENCHMARK_ID = 2336;
+export const DEMO_CATEGORY = 'Reactive Tracking';
+
+/** The trimmed scenario names of the demo category, from the benchmark snapshot. */
+export function demoCategoryNames(benchmarks: Snapshot): string[] {
+	const tree = benchmarks.benchmarks.find((b) => b.id === DEMO_BENCHMARK_ID)?.tree ?? null;
+	const category = tree?.find((c) => c.name === DEMO_CATEGORY);
+	if (!category) throw new Error(`benchmark ${DEMO_BENCHMARK_ID} has no category ${DEMO_CATEGORY}`);
+	return [...new Set(category.subs.flatMap((s) => s.scenarios.map((n) => n.trim())))];
+}
 
 /** JSON-shaped: object keys are strings, so ids are too. */
 export interface DemoSnapshot {

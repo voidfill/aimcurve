@@ -12,7 +12,9 @@ import { applyChunk } from '../ingest/batch';
 import { buildChunk } from '../ingest/chunk';
 import { curveFor } from '../scoring';
 import { buildSnapshot } from './build';
-import { DEMO_PROGRESS_HASH, DEMO_RUN_STEM, DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from './snapshot';
+import benchmarks from '../../data/benchmarks.json';
+import type { Snapshot } from '../benchmarks/snapshot';
+import { DEMO_RUN_STEM, DEMO_SCENARIO_HASH, type DemoSnapshot, demoCategoryNames, snapshotSource } from './snapshot';
 
 const LFS_POINTER = 'version https://git-lfs';
 
@@ -43,16 +45,20 @@ describe('demo snapshot', () => {
 		snap = snapshotSource(snapshot);
 	});
 
-	it('holds every demo fixture as a completed, charted run of a demo scenario', () => {
+	it('holds every demo fixture as a completed run, and a curve for every charted one', () => {
 		// The fixtures are completed runs only (see test/fixtures/demo/README.md),
-		// so every CSV is an attempt and every attempt has a curve.
+		// so every CSV is in a history and every charted run has a curve.
 		const n = demo.list('stats').length;
-		expect(Object.keys(snapshot.attempts)).toHaveLength(n);
-		expect(Object.keys(snapshot.scoringInputs)).toHaveLength(n);
+		const histories = Object.values(snapshot.history).reduce((sum, h) => sum + h.length, 0);
+		expect(histories).toBe(n);
 		const runs = (hash: string) => snapshot.history[snapshot.scenarios[hash]!.id]!.length;
-		expect(runs(DEMO_SCENARIO_HASH) + runs(DEMO_PROGRESS_HASH)).toBe(n);
-		// Enough history for the progression chart's median of ten to mean something.
-		expect(runs(DEMO_PROGRESS_HASH)).toBeGreaterThanOrEqual(30);
+		expect(Object.keys(snapshot.attempts)).toHaveLength(runs(DEMO_SCENARIO_HASH));
+		expect(Object.keys(snapshot.scoringInputs)).toHaveLength(runs(DEMO_SCENARIO_HASH));
+	});
+
+	it('has every scenario of the benchmark beat', () => {
+		const played = new Set(Object.values(snapshot.scenarios).map((s) => s.name.trim()));
+		expect(demoCategoryNames(benchmarks as unknown as Snapshot).filter((name) => !played.has(name))).toEqual([]);
 	});
 
 	it('has a curve for the run About charts', () => {
@@ -97,6 +103,16 @@ describe('demo snapshot', () => {
 				expect(await snap.listHistory(id)).toEqual(await db.listHistory(id));
 				expect(await snap.getSlotStats(id)).toEqual(await db.getSlotStats(id));
 			}
+		});
+
+		it('the ARC run stream and the played names', async () => {
+			const names = demoCategoryNames(benchmarks as unknown as Snapshot);
+			for (const want of [names, names.slice(0, 2), ['nope'], []]) {
+				const [a, b] = [await snap.listArcRuns(want), await db.listArcRuns(want)];
+				const byId = (s: { id: number }[]) => [...s].sort((x, y) => x.id - y.id);
+				expect({ ...a, scenarios: byId(a.scenarios) }).toEqual({ ...b, scenarios: byId(b.scenarios) });
+			}
+			expect(await snap.listPlayedNames()).toEqual(await db.listPlayedNames());
 		});
 
 		it('per-run maps, for all ids, a subset and an unknown id', async () => {

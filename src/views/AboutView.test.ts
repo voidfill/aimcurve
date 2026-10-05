@@ -14,11 +14,13 @@ import type { DataSource } from '../lib/data-source';
 import { SEEN_ABOUT_KEY } from '../lib/about';
 import { SOURCE_KEY } from '../composables/useSource';
 import snapshotJson from '../data/demo-snapshot.json';
-import { DEMO_PROGRESS_HASH, type DemoSnapshot } from '../lib/demo/snapshot';
+import type { DemoSnapshot } from '../lib/demo/snapshot';
 
 const snapshot = snapshotJson as unknown as DemoSnapshot;
 
+/** Each stub's props, the last drawn of each component, and every ProgressChart's (the sheet draws one too). */
 const received: Record<string, Record<string, unknown>> = {};
+const charts: Record<string, unknown>[] = [];
 
 function stub(name: string) {
 	return {
@@ -28,6 +30,7 @@ function stub(name: string) {
 			setup(_, { attrs }) {
 				return () => {
 					received[name] = { ...attrs };
+					if (name === 'ProgressChart') charts.push({ ...attrs });
 					return h('div', { 'data-stub': name });
 				};
 			},
@@ -52,6 +55,7 @@ afterEach(() => {
 	localStorage.clear();
 	calls.length = 0;
 	for (const name of Object.keys(received)) delete received[name];
+	charts.length = 0;
 });
 
 async function mountAbout() {
@@ -79,9 +83,10 @@ describe('AboutView', () => {
 		expect(calls).toEqual([]);
 		expect(received.UnifiedChart?.data).toBeTruthy();
 		expect(received.BotTable?.data).toBeTruthy();
-		const progress = snapshot.history[snapshot.scenarios[DEMO_PROGRESS_HASH]!.id]!;
-		expect(received.ProgressChart?.y).toEqual(progress.map((r) => r.score));
-		expect(received.ProgressChart?.['date-axis']).toBe(false);
+		// The benchmark sheet's category chart: ARC lines, no dots.
+		const chart = charts.find((c) => (c.y as unknown[]).every((v) => v === null));
+		expect((chart?.best as unknown[]).some((v) => v !== null)).toBe(true);
+		expect(chart?.['date-axis']).toBe(false);
 		app.unmount();
 	});
 
@@ -93,13 +98,15 @@ describe('AboutView', () => {
 });
 
 describe('AboutDemo', () => {
-	it('says so, instead of waiting forever, when a sample is missing', async () => {
+	it('says so, instead of waiting forever, when a sample cannot be read', async () => {
 		const { default: AboutDemo } = await import('../components/about/AboutDemo.vue');
 		const { snapshotSource } = await import('../lib/demo/snapshot');
-		const { [DEMO_PROGRESS_HASH]: _, ...scenarios } = snapshot.scenarios;
-		const source = snapshotSource({ ...snapshot, scenarios });
-		const attempt = Object.values(snapshot.attempts).find((a) => a.scenarioHash !== DEMO_PROGRESS_HASH)!;
-		const app = createApp({ render: () => h(AboutDemo, { attempt }) });
+		const source: DataSource = {
+			...snapshotSource(snapshot),
+			listArcRuns: () => Promise.reject(new Error('no sample')),
+		};
+		const attempt = Object.values(snapshot.attempts)[0]!;
+		const app = createApp({ render: () => h(AboutDemo, { attempt, now: 0 }) });
 		app.provide(SOURCE_KEY, { source: shallowRef(source), revision: ref(0) });
 		const root = document.createElement('div');
 		app.mount(root);

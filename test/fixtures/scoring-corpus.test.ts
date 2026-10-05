@@ -73,7 +73,10 @@ describe.skipIf(!raw.available)('scoring model over the full dump', () => {
 			}
 		}
 
-		expect(counts).toEqual({ clock: 2110, race: 201, unsupported: 0, killCapped: 2 });
+		// Measured on the dump of 2026-10-05. The three unsupported runs are a
+		// slowed-timescale race made to test aimcurve ("aimcurve test 1 - slowed
+		// race"): its signals disagree, and refusing it is the intended outcome.
+		expect(counts).toEqual({ clock: 2423, race: 284, unsupported: 3, killCapped: 2 });
 		expect([...kindsByHash].filter(([, kinds]) => kinds.size > 1)).toEqual([]);
 		expect(endpointMisses).toEqual([]);
 		expect(nonMonotone).toEqual([]);

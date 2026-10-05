@@ -26,18 +26,27 @@ import RowCells from './RowCells.vue';
 import SheetLegend from './SheetLegend.vue';
 import ScenarioFold from './ScenarioFold.vue';
 
-const props = defineProps<{
-	rows: readonly BenchmarkRow[];
-	ranks: readonly RankStep[];
-	/** Keys of the rows whose chart is open. */
-	open: ReadonlySet<string>;
-	chartFor: (row: BenchmarkRow, dateAxis: boolean) => RowChart | null;
-	dateAxis: boolean;
-	/** The run window, for the median pill's label. */
-	runWindow: number;
-	/** The difficulty's KovaaK's benchmark ID, for links out. */
-	benchmarkId: number;
-}>();
+const props = withDefaults(
+	defineProps<{
+		rows: readonly BenchmarkRow[];
+		ranks: readonly RankStep[];
+		/** Keys of the rows whose chart is open. */
+		open: ReadonlySet<string>;
+		chartFor: (row: BenchmarkRow, dateAxis: boolean) => RowChart | null;
+		dateAxis: boolean;
+		/** The run window, for the median pill's label. */
+		runWindow: number;
+		/** The difficulty's KovaaK's benchmark ID, for links out. */
+		benchmarkId: number;
+		/** Whether to head the sheet with the column legend at all; off for the About sample and the link card. */
+		legend?: boolean;
+		/** Whether a scenario's fold offers its actions (Play, Follow, the scenario page); off for sample data. */
+		actions?: boolean;
+		/** Epoch ms the tooltips measure "last played" from; now by default. */
+		now?: number;
+	}>(),
+	{ legend: true, actions: true },
+);
 
 const emit = defineEmits<{
 	(event: 'toggle', key: string): void;
@@ -124,7 +133,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 				sheet's own child, so it can pin under the header bar for the whole
 				sheet while the overall's row and chart scroll away beneath it.
 			-->
-			<div class="pin">
+			<div v-if="legend" class="pin">
 				<SheetLegend :ranks="ranks" :run-window="runWindow" />
 			</div>
 
@@ -152,7 +161,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 							<span class="label" :title="row.name">{{ row.name }}</span>
 							<span v-if="row.stale" class="age" :title="`Last played ${row.stale}`">{{ row.stale }}</span>
 						</span>
-						<RowCells :row="row" :ranks="ranks" :run-window="runWindow" :size="SIZES[row.level].body" />
+						<RowCells :row="row" :ranks="ranks" :run-window="runWindow" :size="SIZES[row.level].body" :now="now" />
 					</div>
 
 					<div v-if="open.has(row.key)" class="fold" role="row" :style="rowStyle(row)">
@@ -164,6 +173,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 								:hash="row.hash"
 								:benchmark-id="benchmarkId"
 								:unrated="row.state === 'unrated'"
+								:actions="actions"
 							/>
 							<ProgressChart
 								v-if="charts.get(row.key)"
