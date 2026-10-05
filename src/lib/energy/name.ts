@@ -26,11 +26,20 @@ export function rankName(r: number, ranks: readonly RankStep[]): RankName {
 	return { k, name: ranks[k - 1]!.name, color: ranks[k - 1]!.color, progress, next: ranks[k]?.name ?? null };
 }
 
-/** `Gold, 60 % to Platinum`, `Unranked, 40 % to Iron` or `Master +0.4`. */
+/**
+ * Progress as a whole percent, rounded down so 99.6 % never reads as the next
+ * rank, but with a hair of slack: `3.4 − 3` is 0.39999…, which is 40 %.
+ */
+export function percentOf(progress: number): number {
+	return Math.floor(progress * 100 + 1e-9);
+}
+
+/** `Gold, 60 % to Platinum`, `Unranked, 40 % to Iron` or `Master, 40 % past the top rank`. */
 export function describeRank(r: number, ranks: readonly RankStep[]): string {
 	const name = rankName(r, ranks);
-	if (name.next === null) return `${name.name} +${name.progress.toFixed(1)}`;
-	return `${name.name}, ${Math.floor(name.progress * 100)} % to ${name.next}`;
+	const percent = percentOf(name.progress);
+	if (name.next === null) return `${name.name}, ${percent} % past the top rank`;
+	return `${name.name}, ${percent} % to ${name.next}`;
 }
 
 /** Custom energy, whole: `100 r`. */

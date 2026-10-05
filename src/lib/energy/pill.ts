@@ -6,11 +6,11 @@
 import { chartColor, inkFor } from '../benchmarks/format';
 import type { RankStep } from '../benchmarks/snapshot';
 import { UNRANKED } from './axis';
-import { rankName } from './name';
+import { percentOf, rankName } from './name';
 
 export interface Pill {
 	name: string;
-	/** `62%`, or the overflow at the top rank: `+29`. */
+	/** `62%`: the progress to the next rank, or at the top rank how far past it. */
 	text: string;
 	/** The filled share, 0 to 1. */
 	fill: number;
@@ -25,10 +25,10 @@ export interface Pill {
 export function pill(r: number, ranks: readonly RankStep[]): Pill {
 	const name = rankName(r, ranks);
 	const color = name.color ?? UNRANKED;
-	const percent = Math.floor(name.progress * 100);
+	const percent = percentOf(name.progress);
 	return {
 		name: name.name,
-		text: name.next === null ? `+${percent}` : `${percent}%`,
+		text: `${percent}%`,
 		fill: name.progress,
 		color,
 		tint: name.color === null ? UNRANKED : chartColor(color),

@@ -57,9 +57,9 @@ describe('P8 pills', () => {
 	});
 
 	it('the top rank shows its overflow, up to the cap', () => {
-		expect(pill(4.29, ranks)).toMatchObject({ name: 'Nova', text: '+29' });
-		expect(pill(5, ranks)).toMatchObject({ name: 'Nova', text: '+100', fill: 1 });
-		expect(pill(9, ranks)).toMatchObject({ text: '+100', fill: 1 });
+		expect(pill(4.29, ranks)).toMatchObject({ name: 'Nova', text: '29%' });
+		expect(pill(5, ranks)).toMatchObject({ name: 'Nova', text: '100%', fill: 1 });
+		expect(pill(9, ranks)).toMatchObject({ text: '100%', fill: 1 });
 	});
 
 	it('gives a dark rank colour light ink over its fill', () => {

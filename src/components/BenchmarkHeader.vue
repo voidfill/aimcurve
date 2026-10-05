@@ -114,7 +114,7 @@ function number(event: Event): number {
 			</span>
 			<span class="item">fewer than {{ BODY_MIN }} runs: one tick per run</span>
 			<span class="item">categories and the overall aggregate each statistic on its own: an approximation, not a percentile</span>
-			<span class="item">pills fill toward the next rank; at the top rank, with the overflow</span>
+			<span class="item">pills fill toward the next rank; at the top rank, by how far past it</span>
 			<span class="item">faded: last played over {{ STALE_DAYS }} days ago</span>
 		</div>
 	</section>

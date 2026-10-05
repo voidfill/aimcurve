@@ -81,7 +81,7 @@ describe('E5 rank names', () => {
 	it('names Unranked, mid-ladder and the overflow', () => {
 		expect(rankName(0.4, ranks)).toMatchObject({ k: 0, name: 'Unranked', next: 'Gold' });
 		expect(describeRank(1.6, ranks)).toBe('Gold, 60 % to Platinum');
-		expect(describeRank(3.4, ranks)).toBe('Diamond +0.4');
+		expect(describeRank(3.4, ranks)).toBe('Diamond, 40 % past the top rank');
 		expect(rankName(9, ranks)).toMatchObject({ k: 3, progress: 1 });
 	});
 });
