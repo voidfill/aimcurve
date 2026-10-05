@@ -153,16 +153,14 @@ watch(
 				:runs="data.runs.length"
 				:played-s="playedS"
 				:last-played="data.runs[data.runs.length - 1]!.startedAt"
-				:kind="data.kind"
 				:pb-score="pb?.score ?? null"
 				:candidates="bench.candidates.value"
 				:selected="bench.selected.value"
-				:rank="bench.rank.value"
 				@pick="onPick"
 			/>
 
 			<ScenarioBenchmarkRow
-				v-if="bench.selected.value?.benchmark.tree"
+				v-if="bench.selected.value"
 				:benchmark-id="bench.selected.value.benchmark.id"
 				:name="data.scenario.name"
 			/>

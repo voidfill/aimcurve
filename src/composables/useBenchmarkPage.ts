@@ -142,9 +142,7 @@ export function buildRows(
 				const s = spreads[i] ?? null;
 				const thresholds = tree.thresholds[i] ?? null;
 				const unrated = thresholds === null;
-				const runs = stream.runsOf[i] ?? [];
-				let pb: number | null = null;
-				for (const e of runs) if (pb === null || stream.score[e]! > pb) pb = stream.score[e]!;
+				const { pb, runs, last } = stream.played[i]!;
 				const rank = thresholds === null ? null : rankOf(thresholds, pb ?? Number.NEGATIVE_INFINITY);
 				const next =
 					rank === null || rank.next === null || rank.nextRank === null
@@ -165,7 +163,7 @@ export function buildRows(
 					hash: stream.topHash[i] ?? null,
 					color,
 					parents,
-					facts: { pb, runs: runs.length, last: runs.length ? stream.t[runs[runs.length - 1]!]! : null, next },
+					facts: { pb, runs, last, next },
 				});
 			});
 		}
@@ -197,6 +195,14 @@ export interface BenchmarkPageOptions {
 	mode?: Ref<CoverageMode>;
 	/** Epoch ms; the stale marks are measured from it. */
 	now?: () => number;
+	/**
+	 * Read only these scenarios' runs, not the whole difficulty's: for a page
+	 * that shows one scenario's row. Its own row is exact; the aggregates and
+	 * coverage then count only these and mean nothing.
+	 */
+	only?: Ref<readonly string[]>;
+	/** Give a difficulty without a category tree a flat one (see `energyTree`), for one scenario's row. */
+	flat?: boolean;
 }
 
 /**
@@ -234,7 +240,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 		const b = benchmark.value;
 		return b === null ? [] : snapshot.value!.benchmarks.filter((o) => o.name === b.name && o.tree !== null);
 	});
-	const tree = computed(() => (index.value < 0 ? null : energyTree(snapshot.value!, index.value)));
+	const tree = computed(() => (index.value < 0 ? null : energyTree(snapshot.value!, index.value, options.flat)));
 
 	const state = ref<PageState>('loading');
 	const error = ref<string | null>(null);
@@ -262,7 +268,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 			state.value = 'loading';
 		}
 		try {
-			const rows = await handle.listEnergyRuns(t.names);
+			const rows = await handle.listEnergyRuns(options.only?.value ?? t.names);
 			if (mine !== gen) return;
 			rowsData.value = { tree: t, rows, at: now() };
 			state.value = 'ready';
@@ -274,7 +280,7 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 		}
 	}
 
-	watch([snapshot, tree, source, revision, failed], () => void load(), { immediate: true });
+	watch([snapshot, tree, source, revision, failed, () => options.only?.value], () => void load(), { immediate: true });
 
 	const stream = computed(() => {
 		const d = rowsData.value;
@@ -318,8 +324,11 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 	}
 
 	function retry(): void {
-		if (snapshot.value === null) reload();
-		else void load();
+		if (snapshot.value !== null) return void load();
+		// The snapshot failed: show the retry is under way, not the old error.
+		state.value = 'loading';
+		error.value = null;
+		reload();
 	}
 
 	return { state, error, snapshot, benchmark, family, tree, rows, coverage, chartFor, runLink, retry };

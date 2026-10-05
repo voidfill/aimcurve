@@ -75,10 +75,29 @@ export function subNode(tree: EnergyTree, s: number): number {
 	return 1 + tree.categories.length + s;
 }
 
-/** The tree of `snapshot.benchmarks[index]`, or null when it has none (E7). */
-export function energyTree(snapshot: Snapshot, index: number): EnergyTree | null {
+/**
+ * The tree of `snapshot.benchmarks[index]`, or null when it has none (E7).
+ * With `flat`, a difficulty without a tree gets one unnamed category of one
+ * unnamed subcategory holding every scenario with a ladder there: enough for
+ * a single scenario's row, though its aggregates mean nothing.
+ */
+export function energyTree(snapshot: Snapshot, index: number, flat = false): EnergyTree | null {
 	const b = snapshot.benchmarks[index];
-	if (!b || !b.tree) return null;
+	if (!b) return null;
+	if (!b.tree && !flat) return null;
+	const tree = b.tree ?? [
+		{
+			name: '',
+			color: '',
+			subs: [
+				{
+					name: '',
+					color: '',
+					scenarios: Object.keys(snapshot.scenarios).filter((name) => snapshot.scenarios[name]!.some(([i]) => i === index)),
+				},
+			],
+		},
+	];
 	const names: string[] = [];
 	const ids = new Map<string, number>();
 	const idOf = (name: string): number => {
@@ -92,7 +111,7 @@ export function energyTree(snapshot: Snapshot, index: number): EnergyTree | null
 	};
 	const categories: TreeCategory[] = [];
 	const subs: TreeSub[] = [];
-	b.tree.forEach((c, ci) => {
+	tree.forEach((c, ci) => {
 		const own: number[] = [];
 		for (const s of c.subs) {
 			own.push(subs.length);

@@ -34,6 +34,14 @@ describe('E7 energyTree', () => {
 	it('is null without a tree', () => {
 		expect(energyTree(smallSnapshot(), 0)).toBeNull();
 	});
+
+	it('flattens a difficulty without a tree on request: every scenario with a ladder there, in one group', () => {
+		const flat = energyTree(smallSnapshot(), 0, true)!;
+		expect(flat.names).toEqual(['B', 'Unrated']);
+		expect(flat.categories).toHaveLength(1);
+		expect(flat.subs.map((s) => s.name)).toEqual(['']);
+		expect(flat.thresholds[0]).toEqual([1, 2, 3]);
+	});
 });
 
 describe('E4 evaluate', () => {
