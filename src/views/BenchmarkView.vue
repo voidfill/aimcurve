@@ -108,7 +108,7 @@ watch(
 		<template v-else>
 			<BenchmarkHeader
 				v-model:mode="mode"
-				v-model:run-window="runWindow"
+				:run-window="runWindow"
 				v-model:axis="axis"
 				:benchmark="benchmark"
 				:family="family"

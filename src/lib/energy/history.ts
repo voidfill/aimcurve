@@ -38,43 +38,66 @@ export interface RunStream {
 	runId: Int32Array;
 	t: Float64Array;
 	score: Float64Array;
-	/** Per scenario index, its runs in order: indices into the stream. */
+	/** Per scenario index, its runs in order: indices into the stream. Empty for an unrated one. */
 	runsOf: number[][];
-	/** Per scenario index, the hash with the most runs; null when unplayed. */
+	/** Per scenario index, the hash with the most runs; null when unplayed. Unrated ones included. */
 	topHash: (string | null)[];
+	/** Per scenario index, what was played, unrated ones included: they have runs, just no ladder. */
+	played: ScenarioPlayed[];
 }
 
-/** Narrows the stream to the tree's rated scenarios and maps them to scenario indices. */
+export interface ScenarioPlayed {
+	runs: number;
+	/** The best score; null when unplayed. */
+	pb: number | null;
+	/** The last run's `started_at`, epoch ms; null when unplayed. */
+	last: number | null;
+}
+
+/**
+ * Maps the stream to scenario indices. Only rated scenarios' runs are events
+ * (the energy needs a ladder); every scenario of the tree counts towards what
+ * was played and its most-played hash.
+ */
 export function toStream(tree: EnergyTree, rows: StreamRows): RunStream {
 	const index = new Map(tree.names.map((name, i) => [name, i]));
 	const sidOf = new Map<number, number>();
 	const hashOf = new Map<number, string>();
 	for (const s of rows.scenarios) {
 		const i = index.get(s.name);
-		if (i !== undefined && tree.thresholds[i] !== null) {
-			sidOf.set(s.id, i);
-			hashOf.set(s.id, s.hash);
-		}
+		if (i === undefined) continue;
+		sidOf.set(s.id, i);
+		hashOf.set(s.id, s.hash);
 	}
 	const n = rows.scenarioId.length;
 	const keep: number[] = [];
-	for (let e = 0; e < n; e++) if (sidOf.has(rows.scenarioId[e]!) && Number.isFinite(rows.score[e]!)) keep.push(e);
+	const played: ScenarioPlayed[] = tree.names.map(() => ({ runs: 0, pb: null, last: null }));
+	const hashRuns = tree.names.map(() => new Map<string, number>());
+	for (let e = 0; e < n; e++) {
+		const scenario = rows.scenarioId[e]!;
+		const i = sidOf.get(scenario);
+		const score = rows.score[e]!;
+		if (i === undefined || !Number.isFinite(score)) continue;
+		const p = played[i]!;
+		p.runs++;
+		if (p.pb === null || score > p.pb) p.pb = score;
+		p.last = rows.t[e]!;
+		const hash = hashOf.get(scenario)!;
+		hashRuns[i]!.set(hash, (hashRuns[i]!.get(hash) ?? 0) + 1);
+		if (tree.thresholds[i] !== null) keep.push(e);
+	}
 	const sid = new Int32Array(keep.length);
 	const runId = new Int32Array(keep.length);
 	const t = new Float64Array(keep.length);
 	const score = new Float64Array(keep.length);
 	const runsOf: number[][] = tree.names.map(() => []);
-	const hashRuns = tree.names.map(() => new Map<string, number>());
 	keep.forEach((e, j) => {
-		const scenario = rows.scenarioId[e]!;
-		const i = sidOf.get(scenario)!;
+		const i = sidOf.get(rows.scenarioId[e]!)!;
 		sid[j] = i;
 		runId[j] = rows.runId[e]!;
 		t[j] = rows.t[e]!;
 		score[j] = rows.score[e]!;
 		runsOf[i]!.push(j);
-		const hash = hashOf.get(scenario)!;
-		hashRuns[i]!.set(hash, (hashRuns[i]!.get(hash) ?? 0) + 1);
 	});
 	const topHash = hashRuns.map((counts) => {
 		let best: string | null = null;
@@ -82,7 +105,7 @@ export function toStream(tree: EnergyTree, rows: StreamRows): RunStream {
 		for (const [hash, count] of counts) if (count > most) [best, most] = [hash, count];
 		return best;
 	});
-	return { sid, runId, t, score, runsOf, topHash };
+	return { sid, runId, t, score, runsOf, topHash, played };
 }
 
 export type EnergyInput = 'pb' | 'form';

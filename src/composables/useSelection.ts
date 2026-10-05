@@ -46,6 +46,8 @@ export interface SelectionApi {
 	selectAttempt: (stem: string) => void;
 	/** Drop the inspection, resume following, clear the new-attempt indicator. */
 	resumeLatest: () => void;
+	/** Follow a link into Run that follows latest: a plain click re-baselines the newest run. */
+	followLatest: (event: MouseEvent, navigate: (e?: MouseEvent) => unknown) => void;
 	setFilter: (hash: string | null) => void;
 }
 
@@ -99,6 +101,13 @@ function create(): SelectionApi {
 		// it pauses following even when the target happens to be the newest run.
 		selectAttempt: (stem: string) => {
 			void router.push(linkTo(stem));
+		},
+		// A plain click on a link into Run that follows latest in a new filter: the
+		// newest run there is re-baselined. A modified click (a new tab) leaves this
+		// tab's following alone.
+		followLatest: (event: MouseEvent, navigate: (e?: MouseEvent) => unknown) => {
+			if (!(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) latestSeen.value = null;
+			navigate(event);
 		},
 		// `replace`: resuming is undoing a selection, not a new place.
 		resumeLatest: () => {

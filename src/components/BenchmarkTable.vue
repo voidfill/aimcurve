@@ -45,6 +45,9 @@ const emit = defineEmits<{
 }>();
 
 
+/** No session breaks on this page's charts; one array, so a re-render is not a change. */
+const NO_BREAKS: readonly number[] = [];
+
 /** Body height, pill height and pill font size per level, as in the approved board. */
 const SIZES = {
 	overall: { body: 14, pill: 28, font: 13.5 },
@@ -170,7 +173,7 @@ function onOpen(row: BenchmarkRow, index: number): void {
 								:best="charts.get(row.key)!.best"
 								:median="charts.get(row.key)!.median"
 								:median-full="charts.get(row.key)!.medianFull"
-								:breaks="[]"
+								:breaks="NO_BREAKS"
 								:colors="charts.get(row.key)!.colors"
 								:highlight="null"
 								:ranks="charts.get(row.key)!.ranks"

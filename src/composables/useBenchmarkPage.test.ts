@@ -23,6 +23,7 @@ function source(runs: Run[]): DataSource {
 		{ id: 2, name: 'B', hash: 'b1' },
 		{ id: 3, name: 'B', hash: 'b2' },
 		{ id: 4, name: 'C', hash: 'c' },
+		{ id: 5, name: 'Unrated', hash: 'u' },
 	];
 	return {
 		listEnergyRuns: async (): Promise<StreamRows> => {
@@ -92,6 +93,16 @@ describe('P2 row model', () => {
 		expect(by.get('s0')!.parents).toEqual(['overall', 'c0']);
 		expect(by.get('c0')!.color).toBe('#c00');
 		expect(by.get('overall')!.color).toBeNull();
+	});
+
+	it('counts an unrated scenario as played, though it has no energy', async () => {
+		const { api } = mount(458, [...played, { scenario: 5, score: 7, at: NOW - DAY }]);
+		await vi.waitFor(() => expect(api.state.value).toBe('ready'));
+		const unrated = api.rows.value.find((r) => r.name === 'Unrated')!;
+		expect(unrated.state).toBe('unrated');
+		expect(unrated.facts).toMatchObject({ runs: 1, pb: 7 });
+		expect(unrated.hash).toBe('u');
+		expect(unrated.spread).toBeNull();
 	});
 
 	it('gives an unnamed subcategory no row, but keeps its scenarios', async () => {

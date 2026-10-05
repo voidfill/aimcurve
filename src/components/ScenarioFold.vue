@@ -23,7 +23,7 @@ const props = defineProps<{
 	unrated: boolean;
 }>();
 
-const { latestSeen } = useSelection();
+const { followLatest } = useSelection();
 
 const parts = computed(() => {
 	const f = props.facts;
@@ -40,11 +40,6 @@ const parts = computed(() => {
 const kovaaks = computed(() => kovaaksLink(props.name));
 const runTo = computed(() => (props.hash === null ? null : { path: '/', query: { scenario: props.hash } }));
 
-/** As the scenario page's Play in Run: follow latest in a new filter, so the next run is picked up live. */
-function follow(event: MouseEvent, navigate: (e?: MouseEvent) => unknown): void {
-	if (!(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) latestSeen.value = null;
-	navigate(event);
-}
 </script>
 
 <template>
@@ -58,7 +53,7 @@ function follow(event: MouseEvent, navigate: (e?: MouseEvent) => unknown): void 
 		<div class="actions">
 			<a :href="kovaaks" class="action kovaaks" title="Opens this scenario in Kovaak’s through Steam">Play in Kovaak’s</a>
 			<RouterLink v-if="runTo" v-slot="{ href, navigate }" :to="runTo" custom>
-				<a :href="href" class="action" title="Open Run filtered to this scenario, following the latest run" @click="follow($event, navigate)"
+				<a :href="href" class="action" title="Open Run filtered to this scenario, following the latest run" @click="followLatest($event, navigate)"
 					>Follow in Run</a
 				>
 			</RouterLink>

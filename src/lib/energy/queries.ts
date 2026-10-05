@@ -7,13 +7,20 @@ import type { PGliteInterface } from '@electric-sql/pglite';
 import type { StreamRows } from './history';
 
 /**
+ * A scenario name trimmed as JavaScript's `trim()` does it, every kind of
+ * whitespace at either end: the snapshot's names were trimmed that way, and
+ * SQL's own `trim` strips only spaces.
+ */
+const TRIMMED = (column: string) => `regexp_replace(${column}, '^[\\s\u00a0\ufeff]+|[\\s\u00a0\ufeff]+$', '', 'g')`;
+
+/**
  * Every complete scored run of every scenario whose trimmed name is in
  * `names`, ordered by `started_at, id`. Scenarios are matched by trimmed
  * name, so all hashes of a name come along.
  */
 export async function listEnergyRuns(pg: PGliteInterface, names: readonly string[]): Promise<StreamRows> {
 	const scenarios = await pg.query<{ id: number; name: string; hash: string }>(
-		`select id, trim(name) as name, hash from scenario where trim(name) = any($1::text[])`,
+		`select id, ${TRIMMED('name')} as name, hash from scenario where ${TRIMMED('name')} = any($1::text[])`,
 		[[...names]],
 	);
 	const ids = scenarios.rows.map((s) => s.id);
@@ -51,7 +58,7 @@ export async function listEnergyRuns(pg: PGliteInterface, names: readonly string
 export async function listPlayedNames(pg: PGliteInterface): Promise<Set<string>> {
 	const result = await pg.query<{ name: string }>(
 		`
-		select distinct trim(s.name) as name
+		select distinct ${TRIMMED('s.name')} as name
 		from scenario s
 		where exists (select 1 from run r where r.scenario_id = s.id and r.kind = 'complete' and r.score is not null)
 		`,

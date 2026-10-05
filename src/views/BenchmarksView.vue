@@ -5,12 +5,20 @@
  * its difficulties one per line, with what has been played.
  */
 import { useBenchmarkIndex } from '../composables/useBenchmarkPage';
+import { useDb } from '../composables/useDb';
 
 const { families, error } = useBenchmarkIndex();
+const { error: dbError } = useDb();
 </script>
 
 <template>
 	<div class="benchmarks">
+		<section v-if="dbError" class="notice danger" role="alert">
+			<h1>What you played can't be read</h1>
+			<p>The local database could not be opened. The benchmarks are listed, but nothing shows as played.</p>
+			<p>{{ dbError.message }}</p>
+			<RouterLink :to="{ name: 'data' }">Open Data to retry</RouterLink>
+		</section>
 		<section v-if="error" class="notice danger" role="alert">
 			<h1>The benchmarks could not be read</h1>
 			<p>{{ error }}</p>

@@ -14,7 +14,8 @@ import { computed } from 'vue';
 import type { SnapshotBenchmark } from '../lib/benchmarks/snapshot';
 import { type Coverage, type CoverageMode, isFull } from '../lib/energy/aggregate';
 import { STALE_MS } from '../composables/useBenchmarkPage';
-import { type ChartAxis, RUN_WINDOWS } from '../composables/useChartSettings';
+import type { ChartAxis } from '../composables/useChartSettings';
+import RunWindowSelect from './RunWindowSelect.vue';
 import { BODY_MIN } from '../lib/energy/spread';
 
 const STALE_DAYS = STALE_MS / 86_400_000;
@@ -23,10 +24,11 @@ const props = defineProps<{
 	benchmark: SnapshotBenchmark;
 	family: readonly SnapshotBenchmark[];
 	coverage: Coverage | null;
+	/** The run window, for the legend's wording; set by `RunWindowSelect`. */
+	runWindow: number;
 }>();
 
 const mode = defineModel<CoverageMode>('mode', { required: true });
-const runWindow = defineModel<number>('runWindow', { required: true });
 const axis = defineModel<ChartAxis>('axis', { required: true });
 
 const coverageText = computed(() => {
@@ -37,9 +39,6 @@ const coverageText = computed(() => {
 	return mode.value === 'strict' ? `strict · ${played}/${total} scenarios, the rest count as 0` : `provisional · ${played}/${total} scenarios`;
 });
 
-function number(event: Event): number {
-	return Number((event.target as HTMLSelectElement).value);
-}
 </script>
 
 <template>
@@ -85,15 +84,7 @@ function number(event: Event): number {
 					strict
 				</button>
 			</div>
-			<label
-				class="select"
-				title="How many of each scenario's latest runs count: the candle, the median pill and form, the charts' white line. Shared with the scenario page."
-			>
-				<span>runs</span>
-				<select :value="runWindow" @change="runWindow = number($event)">
-					<option v-for="n in RUN_WINDOWS" :key="n" :value="n">last {{ n }}</option>
-				</select>
-			</label>
+			<RunWindowSelect />
 			<div class="segment" role="group" aria-label="Chart x axis">
 				<button type="button" :class="{ on: axis === 'attempt' }" :aria-pressed="axis === 'attempt'" @click="axis = 'attempt'">
 					runs
@@ -258,37 +249,6 @@ h1 {
 	color: var(--color-text);
 	background: var(--color-surface-raised);
 	box-shadow: inset 0 1px 0 var(--color-accent);
-}
-
-.select {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	font: 500 10px/1 var(--font-mono);
-	text-transform: uppercase;
-	letter-spacing: 0.14em;
-	color: var(--color-text-faint);
-}
-
-.select select {
-	padding: 4px 6px;
-	border: 1px solid var(--color-border-strong);
-	border-radius: 3px;
-	background: transparent;
-	color: var(--color-text-muted);
-	font: 400 11.5px/1.2 var(--font-mono);
-	letter-spacing: 0;
-	text-transform: none;
-	cursor: pointer;
-}
-
-.select select:hover {
-	border-color: var(--color-accent);
-}
-
-.select option {
-	background: var(--color-surface);
-	color: var(--color-text);
 }
 
 .legend {
