@@ -13,6 +13,7 @@ import { formatValue, timeFormat } from '../lib/run/format';
 import { formatPlayed, type ResultKind } from '../lib/scenario/format';
 import { isNewestVersion, kovaaksLink, type ScenarioVersion, shortHash, versionLabel } from '../lib/scenario/link';
 import type { Scenario } from '../lib/scenario/queries';
+import { FORM_WINDOWS, useFormWindow } from '../composables/useChartSettings';
 import { useSelection } from '../composables/useSelection';
 
 const props = defineProps<{
@@ -33,6 +34,7 @@ const emit = defineEmits<{ (event: 'pick', benchmarkId: number | null): void }>(
 
 const router = useRouter();
 const { latestSeen } = useSelection();
+const formWindow = useFormWindow();
 
 const meta = computed(() => [
 	`${formatValue(props.runs)} completed ${props.runs === 1 ? 'run' : 'runs'}`,
@@ -135,6 +137,12 @@ function onPick(event: Event): void {
 			</p>
 		</div>
 		<div class="actions">
+			<label class="setting" title="Form, the chart's typical line, is the median of this many latest runs. Shared with the Benchmarks page.">
+				<span>form</span>
+				<select :value="formWindow" @change="formWindow = Number(($event.target as HTMLSelectElement).value)">
+					<option v-for="n in FORM_WINDOWS" :key="n" :value="n">last {{ n }}</option>
+				</select>
+			</label>
 			<RouterLink v-slot="{ href, navigate }" :to="playTo" custom>
 				<a :href="href" class="action primary" @click="play($event, navigate)">Play in Run</a>
 			</RouterLink>
@@ -257,7 +265,40 @@ h1 {
 .actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: 8px;
+}
+
+.setting {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-right: 6px;
+	font: 500 10px/1 var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	color: var(--color-text-faint);
+}
+
+.setting select {
+	padding: 4px 6px;
+	border: 1px solid var(--color-border-strong);
+	border-radius: 3px;
+	background: transparent;
+	color: var(--color-text-muted);
+	font: 400 11.5px/1.2 var(--font-mono);
+	letter-spacing: 0;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.setting select:hover {
+	border-color: var(--color-accent);
+}
+
+.setting option {
+	background: var(--color-surface);
+	color: var(--color-text);
 }
 
 .action {

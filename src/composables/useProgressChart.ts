@@ -25,6 +25,8 @@ export interface ProgressChartOptions {
 	/** The highlighted config group, or null. */
 	group: Ref<number | null>;
 	dateAxis: Ref<boolean>;
+	/** `N`, the typical line's window (P13 of the benchmarks page design); 10 when absent. */
+	formWindow?: Ref<number>;
 }
 
 export interface ProgressChartApi {
@@ -44,6 +46,7 @@ export interface ProgressChartApi {
 
 export function useProgressChart(data: Ref<ScenarioData>, options: ProgressChartOptions): ProgressChartApi {
 	const { activeTab, bots, bench, group, dateAxis } = options;
+	const formWindow = computed(() => options.formWindow?.value ?? 10);
 	const runs = computed(() => data.value.runs);
 	const kind = computed(() => data.value.kind);
 	const race = computed(() => kind.value.kind === 'race');
@@ -77,7 +80,7 @@ export function useProgressChart(data: Ref<ScenarioData>, options: ProgressChart
 	const lines = computed(() => {
 		const s = series.value;
 		if (s === null) return null;
-		const m = rollingMedian(s.y, 10);
+		const m = rollingMedian(s.y, formWindow.value);
 		return { best: pbSteps(s.y, 'higher'), median: m.value, full: m.full };
 	});
 
@@ -149,7 +152,7 @@ export function useProgressChart(data: Ref<ScenarioData>, options: ProgressChart
 			if (best != null) rows.push({ label: 'best pace so far', value: formatResult(best, kind.value), tone: 'base' });
 		}
 		const median = l.median[i];
-		if (median != null) rows.push({ label: l.full[i] ? 'median of last 10' : 'median so far', value: formatResult(median, kind.value) });
+		if (median != null) rows.push({ label: l.full[i] ? `median of last ${formWindow.value}` : 'median so far', value: formatResult(median, kind.value) });
 		rows.push({ label: `config ${g.label}`, value: formatSens(g.config) });
 		return {
 			head: `#${i + 1} · ${timeFormat.format(new Date(run.startedAt))}`,

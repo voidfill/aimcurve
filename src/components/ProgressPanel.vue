@@ -5,12 +5,12 @@
  * legend. Opening a bot tab for the first time asks for bot values.
  */
 import { computed, ref, toRef, watch } from 'vue';
-import { useStorage } from '@vueuse/core';
 import type { Candidate } from '../lib/benchmarks/pick';
 import { formatValue } from '../lib/run/format';
 import type { BotSeries } from '../lib/scenario/bots';
 import { NEUTRAL } from '../lib/scenario/config';
 import type { HistoryRun } from '../lib/scenario/queries';
+import { useChartAxis, useFormWindow } from '../composables/useChartSettings';
 import { useProgressChart } from '../composables/useProgressChart';
 import type { BotState, ScenarioData } from '../composables/useScenario';
 import ProgressChart from './ProgressChart.vue';
@@ -41,8 +41,9 @@ watch(tab, (key) => {
 	if (key !== OVERALL) emit('load-bots');
 });
 
-const axis = useStorage<'attempt' | 'date'>('aimcurve.scenario-axis', 'attempt', localStorage);
+const axis = useChartAxis();
 const dateAxis = computed(() => axis.value === 'date');
+const formWindow = useFormWindow();
 
 const runs = computed(() => props.data.runs);
 const race = computed(() => props.data.kind.kind === 'race');
@@ -57,6 +58,7 @@ const { x, breaks, colors, highlight, series, lines, ranks, formatY, tipFor, cha
 		bench: toRef(props, 'bench'),
 		group: toRef(props, 'group'),
 		dateAxis,
+		formWindow,
 	},
 );
 
@@ -132,7 +134,10 @@ const anyNeutral = computed(() => props.data.groups.some((g) => g.color === null
 				<span v-if="anyNeutral"><i :style="{ background: NEUTRAL }" aria-hidden="true"></i>older configs</span>
 			</span>
 			<span><b class="amber" aria-hidden="true"></b>best so far</span>
-			<span><b class="white" aria-hidden="true"></b>median of last 10 (fades in over the first 10 runs)</span>
+			<span
+				><b class="white" aria-hidden="true"></b>median of last {{ formWindow }} (fades in over the first {{ formWindow }}
+				runs)</span
+			>
 			<span v-if="breaks.length > 0"><b class="rule" aria-hidden="true"></b>new session</span>
 			<span class="coverage">drag to zoom · ctrl+scroll zooms · shift+drag or drag an axis pans · Escape resets</span>
 			<span v-if="coverage" class="coverage">{{ coverage }}</span>
