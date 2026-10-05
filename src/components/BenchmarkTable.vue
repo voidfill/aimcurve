@@ -136,9 +136,13 @@ function onOpen(row: BenchmarkRow, index: number): void {
 		</svg>
 
 		<div class="sheet" role="table" aria-label="Benchmark sheet">
-			<div v-for="block in blocks" :key="block.key" class="block" :class="{ hero: block.key === 'overall' }" role="rowgroup">
-				<!-- The column legend heads the overall's box: the overall's own row is the first one it labels. -->
-				<div v-if="block.key === 'overall'" class="grid head" role="row">
+			<!--
+				The column legend reads as the top of the overall's box, but is the
+				sheet's own child, so it can pin under the header bar for the whole
+				sheet while the overall's row and chart scroll away beneath it.
+			-->
+			<div class="pin">
+				<div class="grid head" role="row">
 					<span role="columnheader">Benchmark</span>
 					<span class="axis" role="columnheader">
 						<span v-for="c in columns" :key="c.name" :style="{ color: c.tint }">{{ c.name }}</span>
@@ -146,6 +150,9 @@ function onOpen(row: BenchmarkRow, index: number): void {
 					<span role="columnheader">PB</span>
 					<span role="columnheader">Median · last {{ runWindow }}</span>
 				</div>
+			</div>
+
+			<div v-for="block in blocks" :key="block.key" class="block" :class="{ hero: block.key === 'overall' }" role="rowgroup">
 				<template v-for="row in block.rows" :key="row.key">
 					<div
 						class="grid row"
@@ -223,8 +230,15 @@ function onOpen(row: BenchmarkRow, index: number): void {
 </template>
 
 <style scoped>
-.scroll {
-	overflow-x: auto;
+/*
+ * Below the sheet's minimum width it scrolls sideways in its own box. Only
+ * there: a scrolling box would become the column legend's sticky container,
+ * and it would no longer pin to the page.
+ */
+@media (max-width: 820px) {
+	.scroll {
+		overflow-x: auto;
+	}
 }
 
 .defs {
@@ -235,6 +249,10 @@ function onOpen(row: BenchmarkRow, index: number): void {
 }
 
 .sheet {
+	/* The one vertical spacing between the legend and every box. */
+	--sheet-space: 10px;
+	/* One corner radius for the legend and every box: half the legend's height, so it stays a full pill. */
+	--sheet-radius: 15px;
 	min-width: 760px;
 }
 
@@ -246,9 +264,45 @@ function onOpen(row: BenchmarkRow, index: number): void {
 	padding: 0 12px;
 }
 
+/*
+ * The column legend: a long pill of its own that pins 5 px under the header
+ * bar for the whole sheet. Behind it, one blur layer spans the gap up to the
+ * bar, the pill itself, and a band below that fades out, so rows read as
+ * passing under it rather than being cut off. The fade is as tall as the
+ * sheet's one spacing, so at rest it ends at the overall box's edge rather
+ * than blurring into it. The blur sits on the wrapper,
+ * not the pill: an element with a backdrop filter only blurs its own content
+ * for anything inside it.
+ */
+.pin {
+	--gap: 5px;
+	--fade: var(--sheet-space);
+	position: sticky;
+	top: calc(var(--bar-h, 0px) + var(--gap));
+	z-index: 2;
+	margin-bottom: var(--sheet-space);
+}
+
+.pin::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: calc(-1 * var(--gap));
+	bottom: calc(-1 * var(--fade));
+	backdrop-filter: blur(6px);
+	mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
+	pointer-events: none;
+}
+
 .head {
+	position: relative;
 	height: 30px;
-	border-bottom: 1px solid var(--color-border);
+	border-radius: var(--sheet-radius);
+	background: rgb(20 25 32 / 0.85);
+	box-shadow:
+		inset 0 0 0 1px var(--color-border),
+		0 4px 14px rgb(0 0 0 / 0.45);
 	font: 400 11px/1 var(--font-mono);
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
@@ -273,8 +327,8 @@ function onOpen(row: BenchmarkRow, index: number): void {
 
 /* Containment: the overall's hero band, then one raised block per category. */
 .block {
-	margin-bottom: 8px;
-	border-radius: 6px;
+	margin-bottom: var(--sheet-space);
+	border-radius: var(--sheet-radius);
 	overflow: hidden;
 	background: #13171b;
 	box-shadow: inset 0 0 0 1px var(--color-border);
@@ -402,7 +456,8 @@ function onOpen(row: BenchmarkRow, index: number): void {
 .fold-cell {
 	background: var(--color-plot);
 	border: 1px solid var(--color-border);
-	border-radius: 3px;
+	/* Nested in a box: a smaller radius, so its corners sit inside the box's. */
+	border-radius: calc(var(--sheet-radius) - 6px);
 	padding: 8px 8px 4px 0;
 }
 

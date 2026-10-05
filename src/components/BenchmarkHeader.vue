@@ -3,6 +3,12 @@
  * The difficulty page's header (P1, P2 of the benchmarks page design): the
  * way back to the index, the benchmark and its difficulties, coverage, the
  * settings and a legend for the candle and the pills.
+ *
+ * Three siblings, not one box, so the middle one can pin: the bar with the
+ * name and every setting sticks to the top of the page scroller (pure CSS,
+ * `position: sticky`), while the back link above it and the coverage and
+ * legend below it scroll away. Its height is `--bar-h`, which the sheet's
+ * column legend pins beneath.
  */
 import { computed } from 'vue';
 import type { SnapshotBenchmark } from '../lib/benchmarks/snapshot';
@@ -37,30 +43,26 @@ function number(event: Event): number {
 </script>
 
 <template>
-	<section class="header" aria-labelledby="benchmark-heading">
-		<div class="title">
-			<RouterLink class="back" :to="{ name: 'benchmarks' }">← Benchmarks</RouterLink>
-			<div class="name">
-				<h1 id="benchmark-heading">{{ benchmark.name }}</h1>
-				<nav v-if="family.length > 1" class="difficulties" aria-label="Difficulty">
-					<RouterLink
-						v-for="d in family"
-						:key="d.id"
-						:to="{ name: 'benchmark', params: { id: d.id } }"
-						:class="{ on: d.id === benchmark.id }"
-						:aria-current="d.id === benchmark.id ? 'page' : undefined"
-						>{{ d.difficulty }}</RouterLink
-					>
-				</nav>
-				<span v-else class="single">{{ benchmark.difficulty }}</span>
-				<span
-					class="chip"
-					title="aimcurve's own balanced score per difficulty: 100 per rank step, scenarios averaged per subcategory, then shifted geometric means. Not Voltaic's or Evxl's energy."
-					>Custom energy</span
-				>
-			</div>
-			<p v-if="coverageText" class="coverage">{{ coverageText }}</p>
-		</div>
+	<RouterLink class="back" :to="{ name: 'benchmarks' }">← Benchmarks</RouterLink>
+
+	<div class="bar">
+		<h1 id="benchmark-heading" :title="benchmark.name">{{ benchmark.name }}</h1>
+		<nav v-if="family.length > 1" class="difficulties" aria-label="Difficulty">
+			<RouterLink
+				v-for="d in family"
+				:key="d.id"
+				:to="{ name: 'benchmark', params: { id: d.id } }"
+				:class="{ on: d.id === benchmark.id }"
+				:aria-current="d.id === benchmark.id ? 'page' : undefined"
+				>{{ d.difficulty }}</RouterLink
+			>
+		</nav>
+		<span v-else class="single">{{ benchmark.difficulty }}</span>
+		<span
+			class="chip"
+			title="aimcurve's own balanced score per difficulty: 100 per rank step, scenarios averaged per subcategory, then shifted geometric means. Not Voltaic's or Evxl's energy."
+			>Custom energy</span
+		>
 
 		<div class="settings">
 			<div class="segment" role="group" aria-label="Coverage">
@@ -99,7 +101,10 @@ function number(event: Event): number {
 				<button type="button" :class="{ on: axis === 'date' }" :aria-pressed="axis === 'date'" @click="axis = 'date'">date</button>
 			</div>
 		</div>
+	</div>
 
+	<div class="details">
+		<p v-if="coverageText" class="coverage">{{ coverageText }}</p>
 		<div class="legend">
 			<span class="item">
 				<svg viewBox="0 0 92 14" width="92" height="14" aria-hidden="true">
@@ -117,26 +122,34 @@ function number(event: Event): number {
 			<span class="item">pills fill toward the next rank; at the top rank, by how far past it</span>
 			<span class="item">faded: last played over {{ STALE_DAYS }} days ago</span>
 		</div>
-	</section>
+	</div>
 </template>
 
 <style scoped>
-.header {
+/* Pinned: it sticks to the top of the page scroller, over the page's own background. */
+.bar {
+	position: sticky;
+	top: 0;
+	z-index: 3;
 	display: flex;
-	flex-wrap: wrap;
-	align-items: flex-end;
-	justify-content: space-between;
-	gap: var(--space-3) 26px;
-	padding-bottom: 12px;
+	align-items: center;
+	gap: 14px;
+	height: var(--bar-h);
+	margin: 0 -18px;
+	padding: 0 18px;
+	background: var(--color-bg);
 	border-bottom: 1px solid var(--color-border);
 }
 
-.title {
-	min-width: 0;
-	flex: 1 1 420px;
+.details {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .back {
+	/* Close to the bar it leads into: most of the page's 10 px gap is taken back. */
+	margin-bottom: -8px;
 	font: 400 11.5px/1 var(--font-mono);
 	color: var(--color-text-faint);
 	text-decoration: none;
@@ -146,15 +159,11 @@ function number(event: Event): number {
 	color: var(--color-text);
 }
 
-.name {
-	margin-top: 8px;
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px 14px;
-}
-
 h1 {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-weight: 500;
 	font-size: 25px;
 	letter-spacing: -0.015em;
@@ -163,7 +172,7 @@ h1 {
 
 .difficulties {
 	display: flex;
-	flex-wrap: wrap;
+	flex: none;
 	border: 1px solid var(--color-border);
 	border-radius: 3px;
 	overflow: hidden;
@@ -190,6 +199,12 @@ h1 {
 	box-shadow: inset 0 1px 0 var(--color-accent);
 }
 
+.single,
+.chip {
+	flex: none;
+	white-space: nowrap;
+}
+
 .single {
 	font: 400 12px/1 var(--font-mono);
 	color: var(--color-text-muted);
@@ -207,14 +222,14 @@ h1 {
 }
 
 .coverage {
-	margin-top: 6px;
 	font: 400 11.5px/1.2 var(--font-mono);
 	color: var(--color-text-faint);
 }
 
 .settings {
+	margin-left: auto;
+	flex: none;
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px 12px;
 }
@@ -277,7 +292,6 @@ h1 {
 }
 
 .legend {
-	flex: 1 1 100%;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 18px;

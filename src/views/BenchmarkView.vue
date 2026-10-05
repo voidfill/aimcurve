@@ -116,6 +116,8 @@ watch(
 
 <style scoped>
 .benchmark {
+	/* The pinned bar's height; the sheet's column legend pins right under it. */
+	--bar-h: 52px;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
