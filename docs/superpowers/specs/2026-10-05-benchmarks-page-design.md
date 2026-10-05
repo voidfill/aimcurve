@@ -148,6 +148,12 @@ the E3 rules (mean for subcategories, `G` above) and the page's coverage mode
 (E4). The result is labelled in the legend as an approximation: the p10 of a
 category is the aggregate of its scenarios' p10s, not a percentile of anything.
 
+The candle still never inverts. For each scenario, worst ≤ p10 ≤ median ≤ p90
+≤ PB: the all-time PB is at least the window's best, which is at least its p90.
+Mean and `G` are both non-decreasing in every argument, so aggregating each
+statistic keeps that order at every level, in both coverage modes (strict adds
+the same zeros to every statistic).
+
 The median pill and the candle use this `W`-run window. The form line in the
 charts (P11) uses the form window (P13). They are different quantities with
 different names.
@@ -163,7 +169,10 @@ different names.
 | PB | dot with a dark outline | rank of PB |
 
 Unranked uses the neutral `#8b9299`. Rank colours come from the benchmark, as
-everywhere (B7).
+everywhere (B7). Every candle part and the lane hatch (P7) go through
+`chartColor` (`src/lib/benchmarks/format.ts`), as the chart's rank bands do. It
+clamps lightness for the dark surface, so dark rank colours (Nova `#7900FF`,
+for example) stay visible.
 
 ### P7. The lane background is a per-rank hatch
 
@@ -187,8 +196,15 @@ Each pill:
 - shows the rank name on the left and progress on the right ("62%");
 - at the top rank, fills with the overflow `r − n` and shows "+29";
 - for Unranked, is neutral grey and fills toward rank 1;
-- inverts its text to dark ink where the fill passes under it (two layered
-  copies of the text, the top one clipped to the fill).
+- inverts its text where the fill passes under it (two layered copies of the
+  text, the top one clipped to the fill).
+
+Colours:
+- **Unfilled part:** the background, outline and text use `chartColor` of the
+  rank colour, so they stay readable on the dark page.
+- **Fill:** the rank colour as is.
+- **Text over the fill:** `inkFor(fill)`, black or white by contrast. A
+  fixed dark ink would fail on dark rank colours.
 
 The pill has a fixed width, so pills line up down the table.
 
@@ -218,22 +234,55 @@ axis resets the zoom.
 
 ### P11. Scenario charts merge every hash; aggregate charts plot custom energy
 
-**Scenario charts** reuse the scenario page's progression chart (S5): runs as
-dots, the PB step and the rolling median over the form window (P13), with the
-rank bands of **this**
-difficulty (not the stored B4 pick).
-- Energy matches scenarios by trimmed name (E8), so the chart shows the runs of
-  every scenario hash with that name, merged in time order.
-- The row's icon link opens the scenario page of the hash with the most runs.
+Both kinds of chart render with the existing `ProgressChart.vue`. It is a
+prop-driven uPlot renderer (`x`, `y`, `best`, `median`, `medianFull`, `breaks`,
+`colors`, `ranks`, `formatY`, `tipFor`), with zoom, rank bands (`paintRanks`)
+and the tooltip built in.
 
-**Aggregate charts** (subcategory, category, overall) plot custom energy on y:
-- the PB energy as a step line (`#f0b23f`, as the scenario chart's PB);
-- the E6 form energy, over the form window (P13), as a line (`#e8ebee`, as the
-  scenario chart's median);
-- rank bands and threshold labels from E5;
-- no dots in v1. One point per run event comes from the history pass (E8).
+The page does **not** reuse `useProgressChart` or `ProgressPanel`: they are
+built around one scenario hash, its config groups and its bot tabs. Instead, new
+pure builders in `src/lib/energy/chart.ts` produce the renderer's props.
 
-The chart header names the level's rule: "mean of its scenarios", or "shifted
+**Scenario charts:**
+- **Runs:** every complete run of every scenario hash with that trimmed name,
+  merged in time order, because energy matches by name (E8). They come from the
+  E8 run stream, so no extra query is needed.
+- **x:** per P10.
+- **y:** the run's score.
+- **best:** the PB step line.
+- **median:** `rollingMedian(y, N)` over the form window (P13), with
+  `medianFull` from the same call.
+- **colors:** each dot in the colour of its rank on **this** difficulty's
+  ladder (`rankOf`, then `chartColor`), not the scenario page's config-group
+  colours.
+- **ranks:** this difficulty's thresholds, not the stored B4 pick.
+- **breaks:** none in v1, because the run stream carries no session (see
+  Parked).
+- **Tooltip:** date and time, score, rank with progress, and Δ to the PB before
+  the run.
+- **Click:** opens Run inspecting that run, as on the scenario page.
+- **Race scenarios:** plotted in score units, the ladder's units (B5), and
+  labelled as score. The scenario page's flipped time axis for races is not
+  repeated here in v1.
+- **Link:** the row's icon link opens the scenario page of the hash with the
+  most runs.
+
+**Aggregate charts** (subcategory, category, overall) plot custom energy:
+- **x:** per P10, one point per run event in the node (E8).
+- **y:** all null, so there are no dots in v1.
+- **best:** PB energy as the step line, drawn in the renderer's PB colour.
+- **median:** E6 form energy over the form window (P13), with `medianFull` all
+  true.
+- **ranks:** the difficulty's rank steps with thresholds `100, 200, …, n × 100`.
+  Custom energy is `100 r`, so the bands sit on the rank boundaries.
+- **formatY:** whole energy.
+- **Tooltip:** date, PB and form energy with rank names (E5), and coverage.
+
+The renderer fits y from its uPlot data, which includes the two lines. The
+implementer checks that this behaves with an all-null `y`, and adjusts the fit
+if it does not.
+
+The chart's title names the level's rule: "mean of its scenarios", or "shifted
 geometric mean of its subcategories / categories".
 
 ### P12. Pure modules, one composable, components per part
@@ -242,28 +291,45 @@ New pure modules in `src/lib/energy/`, next to E9's:
 - `spread.ts`: the window and its statistics for one scenario (P5), and their
   aggregation through a tree with a coverage mode;
 - `axis.ts`: the lane domain and column layout for `n` ranks (P4);
-- `pill.ts`: `r` → pill text, fill fraction and colours (P8).
+- `pill.ts`: `r` → pill text, fill fraction and colours (P8);
+- `chart.ts`: the `ProgressChart` props for a scenario row and for an aggregate
+  row (P11).
 
 The composable `useBenchmarkPage` joins the snapshot tree, the E8 run stream,
 the history pass and the spread statistics into one row model per node, plus
-the chart series for open rows.
+the chart props for open rows.
 
-Components:
-- `BenchmarkHeader.vue`
-- `BenchmarkTable.vue`
-- `CandleLane.vue`
-- `RankPill.vue`
-- `EnergyChart.vue`, the aggregate chart. Scenario rows mount the existing
-  progression chart.
+Views and components:
+- `BenchmarksView.vue`, the index (P1);
+- `BenchmarkView.vue`, one difficulty;
+- `BenchmarkHeader.vue`;
+- `BenchmarkTable.vue`;
+- `CandleLane.vue`;
+- `RankPill.vue`;
+- the existing `ProgressChart.vue` for every chart (P11).
+
+**Nav:** the Benchmarks tab follows the Scenarios tab's pattern in
+`AppHeader.vue`. It remembers the last benchmarks route the way
+`useDirectoryRoute` remembers the last Scenarios route.
+
+**Index query:** the index's "n/m played" needs only the set of trimmed scenario
+names with at least one complete run. That is one small query, matched against
+each difficulty's tree.
 
 The spread statistics come from the same ordered run stream as the history pass
 (E8): the end state of each scenario's last `W` scores. No new query is needed.
 Changing `W` reruns only this step.
 
-**Live updates:** the page is reactive. When runs are ingested (a manual import
-or the watched folder), the existing change notification reruns the query, the
-history pass and the spread step (E8). Rows, pills and open charts then update
-in place, with no reload and no lost fold state.
+**Live updates:** the page is reactive, the same way the scenario page is.
+- `useSource()` exposes `revision`, which is bumped when runs are ingested,
+  whether by manual import or from the watched folder.
+- `useScenario` reloads by watching `[hash, source, revision]`.
+- `useBenchmarkPage` does the same with `[id, source, revision]`, rerunning the
+  query, the history pass and the spread step.
+
+Rows, pills and open charts update in place, with no reload and no lost fold
+state. The form window and the candle window are watched too: `N` reruns the
+history pass, and `W` reruns only the spread step.
 
 ### P13. One form window setting, shared with the scenario page
 
@@ -295,7 +361,8 @@ recent runs, while `N` describes how quickly form reacts. They default to 20 and
 - `spread`:
   - window of exactly `W`, of fewer, of 1, for `W` = 10, 20 and 50;
   - percentiles against hand-computed values, including interpolation;
-  - worst ≤ p10 ≤ median ≤ p90 ≤ PB;
+  - worst ≤ p10 ≤ median ≤ p90 ≤ PB, for scenarios and for every aggregate in
+    both modes;
   - fewer than 5 runs → no body;
   - aggregation per statistic in provisional and strict modes, equal at full
     coverage;
@@ -328,10 +395,41 @@ recent runs, while `N` describes how quickly form reacts. They default to 20 and
   - tree order and levels;
   - unplayed and unrated rows;
   - provisional coverage text.
-- Charts:
+- Charts (`chart.ts`):
   - runs-axis counts per node;
   - date axis uses `started_at`;
-  - the axis toggle is shared with the scenario page.
+  - the axis toggle is shared with the scenario page;
+  - a scenario chart merges two hashes of one name in time order;
+  - dot colours follow this difficulty's ladder;
+  - the median follows `N`;
+  - aggregate thresholds are `100 … n × 100`, and `y` is all null.
+- Pill colours: a dark rank colour gets light ink over its fill (`inkFor`).
+
+## Implementation order
+
+There is no separate plan document. This order keeps every step testable on its
+own:
+
+1. **Snapshot v2** (E7).
+   - Extend the generator's Evxl types with categories, subcategories,
+     `scenarioCount` and colours, and build the tree in `buildSnapshot`.
+   - Change `Snapshot.version` to `2`, including the check in `serialize` that
+     keeps `generatedAt` stable.
+   - Update the `version: 1` fixtures in `pick.test.ts`,
+     `useBenchmarkRank.test.ts` and `directory.test.ts`.
+   - Regenerate `benchmarks.json`.
+   - The rank badge must not change behaviour.
+2. **Energy core** (E2–E5): `rank.ts`, `aggregate.ts`, `name.ts` and their tests.
+3. **History pass** (E8, E9): `history.ts`, the bench, and `N` as an argument.
+4. **The form window setting** (P13) on the scenario page: `rollingMedian`
+   already takes a window; `useProgressChart` passes `N` in place of `10`.
+5. **Queries:** the run stream (E8) and the played-names query (P12).
+6. **Page modules:** `spread.ts`, `axis.ts`, `pill.ts`, `chart.ts`.
+7. **Routes, nav and index** (P1).
+8. **The difficulty page:** header, table, candle lane, pills and fold-open
+   charts.
+9. **Preview assets**, if the About page or screenshots should show the new page
+   (`docs/preview-assets.md`).
 
 ## How we got here
 
@@ -429,6 +527,11 @@ basics, date with a switch to runs (P10), and park the rest.
   Measuring against each scenario's own form also makes it meaningful for
   aggregates.
 - **Session-end dots** on aggregate charts, coloured by rank.
+- **Session breaks** on this page's charts. The run stream would need each run's
+  session from `run_session`, a window view over all runs, so it is left out of
+  v1.
+- **Race scenarios as time:** the scenario page's flipped completion-time axis
+  on this page's scenario charts.
 - **Session candles** on aggregate charts. Note the bias: a mixed-scenario
   candle reflects which scenarios were played.
 - **Markers:** coverage changes ("+ Aether, 14/18") and rank-ups.

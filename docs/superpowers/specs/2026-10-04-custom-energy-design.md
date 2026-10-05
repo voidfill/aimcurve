@@ -324,7 +324,9 @@ the main cost:
   (overall, each category, each subcategory) and for both inputs, plus the event
   times and coverage. Every chart reads these arrays, so switching or adding a
   display needs no new query.
-- **Refresh:** the existing change notification reruns the query and the pass.
+- **Refresh:** the composable watches `revision` from `useSource()`, as
+  `useScenario` does. It is bumped on every ingest, and reruns the query and the
+  pass.
   Appending only new runs is possible later, if ever needed.
 
 ### E9. Pure functions in `src/lib/energy/`, with a performance budget
