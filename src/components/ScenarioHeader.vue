@@ -8,13 +8,14 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatGap, inkFor } from '../lib/benchmarks/format';
 import type { Candidate } from '../lib/benchmarks/pick';
-import { rankOf, type RankResult } from '../lib/benchmarks/rank';
+import type { RankResult } from '../lib/benchmarks/rank';
 import { formatValue, timeFormat } from '../lib/run/format';
 import { formatPlayed, type ResultKind } from '../lib/scenario/format';
 import { isNewestVersion, kovaaksLink, type ScenarioVersion, shortHash, versionLabel } from '../lib/scenario/link';
 import type { Scenario } from '../lib/scenario/queries';
 import { RUN_WINDOWS, useRunWindow } from '../composables/useChartSettings';
 import { useSelection } from '../composables/useSelection';
+import BenchmarkPicker from './BenchmarkPicker.vue';
 
 const props = defineProps<{
 	scenario: Scenario;
@@ -62,41 +63,23 @@ function onVersion(event: Event): void {
 	if (hash !== props.scenario.hash) void router.push({ name: 'scenario', params: { hash } });
 }
 
-const NO_BENCHMARK = 'none';
-
-function rankName(c: Candidate, k: number): string {
-	return k < 0 ? 'Unranked' : c.benchmark.ranks[k]!.name;
-}
-
-/** B6's badge, gap and choice, for the PB. */
-const benchmark = computed(() => {
-	if (props.candidates.length === 0) return null;
+/**
+ * B6's badge and gap, for the PB. Only for a benchmark without a sheet: one
+ * with a sheet shows the scenario's benchmark row under the header instead.
+ */
+const badge = computed(() => {
 	const c = props.selected;
 	const r = props.rank;
-	const score = props.pbScore;
-	const options = props.candidates.map((o) => ({
-		value: String(o.benchmark.id),
-		text:
-			`${o.benchmark.name} · ${o.benchmark.difficulty}` +
-			(score === null ? '' : ` — ${rankName(o, rankOf(o.thresholds, score).k)}`) +
-			(o.isDefault ? ' (default)' : ''),
-	}));
-	options.push({ value: NO_BENCHMARK, text: 'None' });
-	if (c === null) return { value: NO_BENCHMARK, badge: null, gap: null, options };
-	const color = r !== null && r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
+	if (c === null || r === null || c.benchmark.tree !== null) return null;
+	const color = r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
 	const kind = props.kind.kind === 'unknown' ? null : props.kind.kind;
 	return {
-		value: String(c.benchmark.id),
-		badge: r === null ? null : { name: rankName(c, r.k), color, ink: color === null ? null : inkFor(color) },
-		gap: r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
-		options,
+		name: r.k < 0 ? 'Unranked' : c.benchmark.ranks[r.k]!.name,
+		color,
+		ink: color === null ? null : inkFor(color),
+		gap: r.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
 	};
 });
-
-function onPick(event: Event): void {
-	const value = (event.target as HTMLSelectElement).value;
-	emit('pick', value === NO_BENCHMARK ? null : Number(value));
-}
 </script>
 
 <template>
@@ -111,22 +94,18 @@ function onPick(event: Event): void {
 						<option v-for="v in versions" :key="v.hash" :value="v.hash">{{ versionLabel(v) }}</option>
 					</select>
 				</label>
-				<div v-if="benchmark" class="benchmark">
-					<span class="pb-label">PB</span>
-					<span
-						v-if="benchmark.badge"
-						class="badge"
-						:class="{ unranked: benchmark.badge.color === null }"
-						:style="benchmark.badge.color ? { background: benchmark.badge.color, color: benchmark.badge.ink! } : undefined"
-						>{{ benchmark.badge.name }}</span
-					>
-					<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
-					<label class="chip">
-						<span class="sr-only">Benchmark</span>
-						<select :value="benchmark.value" @change="onPick">
-							<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
-						</select>
-					</label>
+				<div v-if="candidates.length > 0" class="benchmark">
+					<template v-if="badge">
+						<span class="pb-label">PB</span>
+						<span
+							class="badge"
+							:class="{ unranked: badge.color === null }"
+							:style="badge.color ? { background: badge.color, color: badge.ink! } : undefined"
+							>{{ badge.name }}</span
+						>
+						<span v-if="badge.gap" class="gap">{{ badge.gap }}</span>
+					</template>
+					<BenchmarkPicker :candidates="candidates" :selected="selected" :score="pbScore" @pick="emit('pick', $event)" />
 				</div>
 			</div>
 			<p class="meta">

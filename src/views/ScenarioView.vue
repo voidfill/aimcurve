@@ -13,6 +13,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PbCard from '../components/PbCard.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import RecentRuns from '../components/RecentRuns.vue';
+import ScenarioBenchmarkRow from '../components/ScenarioBenchmarkRow.vue';
 import ScenarioHeader from '../components/ScenarioHeader.vue';
 import { useBenchmarkRank } from '../composables/useBenchmarkRank';
 import { useDb } from '../composables/useDb';
@@ -158,6 +159,12 @@ watch(
 				:selected="bench.selected.value"
 				:rank="bench.rank.value"
 				@pick="onPick"
+			/>
+
+			<ScenarioBenchmarkRow
+				v-if="bench.selected.value?.benchmark.tree"
+				:benchmark-id="bench.selected.value.benchmark.id"
+				:name="data.scenario.name"
 			/>
 
 			<ProgressPanel

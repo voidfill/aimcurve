@@ -7,7 +7,7 @@
  * Which charts are open is page state, not persisted: the overall starts open,
  * an import keeps whatever is open, and another difficulty starts over.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import BenchmarkHeader from '../components/BenchmarkHeader.vue';
 import BenchmarkTable from '../components/BenchmarkTable.vue';
@@ -32,8 +32,24 @@ const dateAxis = computed(() => axis.value === 'date');
 const page = useBenchmarkPage(id, { mode, runWindow });
 const { state, error, snapshot, benchmark, family, tree, rows, coverage } = page;
 
-const open = ref(new Set<string>(['overall']));
-watch(id, () => (open.value = new Set(['overall'])));
+/** `?open=<row key>`: a link into the sheet at one row, which starts open instead of the overall. */
+function initialOpen(): Set<string> {
+	const value = route.query.open;
+	const key = Array.isArray(value) ? value[0] : value;
+	return new Set([typeof key === 'string' && key !== '' ? key : 'overall']);
+}
+
+const open = ref(initialOpen());
+watch(id, () => (open.value = initialOpen()));
+
+/* A linked row is brought into view once the sheet has drawn it. */
+const stopReveal = watch(rows, async (list) => {
+	const key = route.query.open;
+	if (typeof key !== 'string' || list.length === 0) return;
+	stopReveal();
+	await nextTick();
+	document.querySelector(`[data-row="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'start' });
+});
 
 function toggle(key: string): void {
 	const next = new Set(open.value);
