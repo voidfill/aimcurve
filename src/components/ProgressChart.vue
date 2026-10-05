@@ -334,14 +334,35 @@ function onKey(event: KeyboardEvent): void {
 	if (handled) event.preventDefault();
 }
 
+/** The gap between the cursor and the tooltip's near edge, CSS px. */
+const TIP_GAP = 16;
+
+/**
+ * The tooltip's rendered width, measured: it varies with its content, and a
+ * guessed width put a flipped tooltip back over the cursor.
+ */
+const tipEl = ref<HTMLElement | null>(null);
+const tipWidth = ref(262);
+useResizeObserver(tipEl, (entries) => {
+	const width = entries[0]?.borderBoxSize?.[0]?.inlineSize ?? tipEl.value?.offsetWidth;
+	if (width) tipWidth.value = width;
+});
+
+/**
+ * Right of the cursor while it fits, else left of it. A flipped tooltip is
+ * anchored by its right edge, so whatever its width it never covers the cursor.
+ */
 const tip = computed(() => {
 	const i = idx.value;
 	if (i === null || i < 0 || i >= props.x.length) return null;
 	const content = props.tipFor(i);
 	if (content === null) return null;
 	const width = (plot.value?.bbox.width ?? 0) / uPlot.pxRatio;
-	const flip = cursorLeft.value > width - 280;
-	return { ...content, left: flip ? cursorLeft.value - 262 : cursorLeft.value + 16 };
+	const flip = cursorLeft.value + TIP_GAP + tipWidth.value > width;
+	return {
+		...content,
+		style: flip ? { right: `${width - cursorLeft.value + TIP_GAP}px` } : { left: `${cursorLeft.value + TIP_GAP}px` },
+	};
 });
 </script>
 
@@ -356,7 +377,7 @@ const tip = computed(() => {
 		@pointerdown="root?.focus({ preventScroll: true })"
 	>
 		<Teleport v-if="over" :to="over">
-			<div v-if="tip" class="tip" :style="{ left: `${tip.left}px` }" aria-live="polite">
+			<div v-if="tip" ref="tipEl" class="tip" :style="tip.style" aria-live="polite">
 				<div class="tip-head">
 					<span class="tip-at">{{ tip.head }}</span>
 					<span v-if="tip.sub" class="tip-sub">{{ tip.sub }}</span>
