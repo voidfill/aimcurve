@@ -155,13 +155,13 @@ describe('L6 URL', () => {
 describe('L8 benchmark select', () => {
 	const ranks = (names: string[]) => names.map((name, i) => ({ name, color: `#00000${i}` }));
 	const snapshot = {
-		version: 1,
+		version: 2,
 		generatedAt: '2026-09-01T00:00:00.000Z',
 		benchmarks: [
-			{ id: 10, name: 'Voltaic S5', difficulty: 'Novice', ranks: ranks(['Iron', 'Bronze']) },
-			{ id: 11, name: 'Voltaic S5', difficulty: 'Intermediate', ranks: ranks(['Platinum', 'Diamond']) },
-			{ id: 20, name: 'Other', difficulty: 'All', ranks: ranks(['Seal', 'Master']) },
-			{ id: 30, name: 'Unplayed', difficulty: 'All', ranks: ranks(['X']) },
+			{ id: 10, name: 'Voltaic S5', difficulty: 'Novice', color: '', ranks: ranks(['Iron', 'Bronze']), tree: null },
+			{ id: 11, name: 'Voltaic S5', difficulty: 'Intermediate', color: '', ranks: ranks(['Platinum', 'Diamond']), tree: null },
+			{ id: 20, name: 'Other', difficulty: 'All', color: '', ranks: ranks(['Seal', 'Master']), tree: null },
+			{ id: 30, name: 'Unplayed', difficulty: 'All', color: '', ranks: ranks(['X']), tree: null },
 		],
 		scenarios: {
 			Pasu: [

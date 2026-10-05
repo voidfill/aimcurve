@@ -4,11 +4,11 @@ import type { Snapshot } from '../lib/benchmarks/snapshot';
 import { useBenchmarkRank } from './useBenchmarkRank';
 
 const snapshot: Snapshot = {
-	version: 1,
+	version: 2,
 	generatedAt: '2026-09-25T00:00:00Z',
 	benchmarks: [
-		{ id: 10, name: 'A S2', difficulty: 'Medium', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }] },
-		{ id: 20, name: 'A S1', difficulty: 'Medium', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }] },
+		{ id: 10, name: 'A S2', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
+		{ id: 20, name: 'A S1', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
 	],
 	scenarios: {
 		Pasu: [
