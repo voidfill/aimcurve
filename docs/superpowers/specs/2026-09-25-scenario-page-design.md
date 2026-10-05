@@ -141,7 +141,7 @@ scatter can carry: the first three dark slots of the dataviz reference palette
 - **PB line:** a step line of the best result so far.
 - **Typical line:** a rolling median of the last `N` completed runs, drawn
   thicker than the PB line. `N` is the shared form window (5, 10 or 20, default
-  10; [benchmarks page P13](2026-10-05-benchmarks-page-design.md)), set from a
+  10; [the Benchmarks pages](../../benchmarks.md#settings)), set from a
   select in the chart header. The first `N − 1` points use the runs available,
   and are drawn lighter until the window is full.
 - **Direction:** up is always better. A race plots completion time
