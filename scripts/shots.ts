@@ -6,7 +6,7 @@
  *   public/og.png            #/dev/card, the whole 1200×630 viewport
  *   docs/images/pace.png     About's pace chart   ([data-shot="pace"])
  *   docs/images/bots.png     About's bot table    ([data-shot="bots"])
- *   docs/images/progress.png About's progression ([data-shot="progress"])
+ *   docs/images/benchmark.png About's benchmark sheet ([data-shot="benchmark"])
  *
  * Needs `pnpm dev` running (or BASE_URL). Chrome is found at its usual install
  * path, or set CHROME. Uses a throwaway profile, so it never touches your data.
@@ -76,8 +76,8 @@ try {
 	await shoot('[data-shot="og"]', 'public/og.png');
 
 	// Tall enough that every panel is on screen; the page scrolls in `main`, not the window.
-	await open('#/about', 1200, 3200, `document.querySelectorAll('[data-shot] canvas').length === 2 && !!document.querySelector('[data-shot="bots"]')`);
-	for (const name of ['pace', 'bots', 'progress']) await shoot(`[data-shot="${name}"]`, `docs/images/${name}.png`);
+	await open('#/about', 1200, 4400, `document.querySelectorAll('[data-shot] canvas').length === 2 && !!document.querySelector('[data-shot="bots"]')`);
+	for (const name of ['pace', 'bots', 'benchmark']) await shoot(`[data-shot="${name}"]`, `docs/images/${name}.png`);
 } finally {
 	browser.kill();
 	await new Promise((r) => setTimeout(r, 500));

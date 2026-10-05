@@ -6,7 +6,9 @@
  *
  * For each demo scenario it copies the CSV of every completed run and the
  * `.perf` written with it, and nothing else, so every demo fixture is a
- * charted run. See docs/preview-assets.md for the whole refresh.
+ * charted run. For the benchmark beat's scenarios (every version of each
+ * name) it copies only the CSVs: ARC needs nothing but scores, and the perfs
+ * would only grow LFS. See docs/preview-assets.md for the whole refresh.
  */
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +19,9 @@ import { pgSource } from '../data-source';
 import { applyChunk } from '../ingest/batch';
 import { buildChunk } from '../ingest/chunk';
 import { parseFilenameTime } from '../ingest/classify';
-import { DEMO_SCENARIOS } from './snapshot';
+import benchmarks from '../../data/benchmarks.json';
+import type { Snapshot } from '../benchmarks/snapshot';
+import { DEMO_SCENARIOS, demoCategoryNames } from './snapshot';
 
 /** A perf is written within a second or so of its CSV (see curated/README.md). */
 const PAIR_MS = 2000;
@@ -26,7 +30,9 @@ describe.runIf(import.meta.env.MODE === 'gen-demo-fixtures')('gen:demo-fixtures'
 	it('copies every completed run of the demo scenarios from raw/', async () => {
 		expect(raw.available, 'test/fixtures/raw/ is missing: copy an install’s stats/ and performances/ into it').toBe(true);
 		const ofDemo = (name: string) => DEMO_SCENARIOS.some((s) => name.startsWith(`${s.name} - `));
-		const stats = raw.list('stats').filter(ofDemo);
+		const arcNames = demoCategoryNames(benchmarks as unknown as Snapshot);
+		const ofArc = (name: string) => arcNames.includes(name.split(' - Challenge - ')[0]!.trim());
+		const stats = raw.list('stats').filter((name) => ofDemo(name) || ofArc(name));
 		const perfs = raw.list('performances').filter(ofDemo);
 
 		const { pg } = await makeTestDb();
@@ -41,7 +47,14 @@ describe.runIf(import.meta.env.MODE === 'gen-demo-fixtures')('gen:demo-fixtures'
 			expect(scenario, `${name} (${hash}) is not in raw/`).not.toBeNull();
 			completed.push(...(await db.listHistory(scenario!.id)).map((r) => r.fileStem));
 		}
-		const times = completed.map((stem) => parseFilenameTime(stem)!.getTime());
+		const charted = completed.length;
+		const versions = await pg.query<{ hash: string }>('select hash from scenario where trim(name) = any($1::text[])', [arcNames]);
+		for (const { hash } of versions.rows) {
+			if (DEMO_SCENARIOS.some((s) => s.hash === hash)) continue;
+			const scenario = (await db.getScenario(hash))!;
+			completed.push(...(await db.listHistory(scenario.id)).map((r) => r.fileStem));
+		}
+		const times = completed.slice(0, charted).map((stem) => parseFilenameTime(stem)!.getTime());
 		const paired = (perf: string) => {
 			const t = parseFilenameTime(perf)!.getTime();
 			return times.some((c) => Math.abs(c - t) <= PAIR_MS);
@@ -55,7 +68,7 @@ describe.runIf(import.meta.env.MODE === 'gen-demo-fixtures')('gen:demo-fixtures'
 		for (const perf of perfs.filter(paired)) copyFileSync(join(raw.dir, 'performances', perf), join(demo.dir, 'performances', perf));
 
 		const copied = readdirSync(join(demo.dir, 'stats')).length;
-		process.stdout.write(`demo fixtures: ${copied} runs, ${readdirSync(join(demo.dir, 'performances')).length} perfs\n`);
+		process.stdout.write(`demo fixtures: ${copied} runs (${charted} charted), ${readdirSync(join(demo.dir, 'performances')).length} perfs\n`);
 		expect(copied).toBe(completed.length);
 	});
 });

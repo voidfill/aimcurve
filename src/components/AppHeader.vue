@@ -12,9 +12,10 @@
  *
  * The Scenarios link likewise points at the last directory location, so the
  * search and sort survive a trip into a scenario. It is also the active tab on
- * scenario pages, which sit under the directory (L1 of its design). Sessions
- * and Benchmarks are later slices and are deliberately absent rather than
- * present and dead.
+ * scenario pages, which sit under the directory (L1 of its design). The
+ * Benchmarks link works the same way over the index and its difficulty pages.
+ * Sessions is a later slice and is deliberately absent rather than present
+ * and dead.
  *
  * About is a quiet text link beside the data control, not a tab: it is where
  * first-time visitors land, not a place regulars work in. The GitHub mark
@@ -23,6 +24,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import ImportButton from './ImportButton.vue';
+import { useBenchmarksRoute } from '../composables/useBenchmarksRoute';
 import { useDirectoryRoute } from '../composables/useScenarioDirectory';
 import { useSelection } from '../composables/useSelection';
 import { GITHUB_MARK_PATH, REPO_URL } from '../lib/links';
@@ -30,9 +32,13 @@ import { GITHUB_MARK_PATH, REPO_URL } from '../lib/links';
 const route = useRoute();
 const { rememberedRunRoute } = useSelection();
 const { rememberedRoute: rememberedScenariosRoute } = useDirectoryRoute();
+const rememberedBenchmarksRoute = useBenchmarksRoute();
+/** From a difficulty page, the tab goes up to the index; from elsewhere, back to where Benchmarks was left. */
+const benchmarksTo = computed(() => (route.name === 'benchmark' ? { name: 'benchmarks' } : rememberedBenchmarksRoute.value));
 
 const onRun = computed(() => route.name === 'run');
 const onScenarios = computed(() => route.name === 'scenarios' || route.name === 'scenario');
+const onBenchmarks = computed(() => route.name === 'benchmarks' || route.name === 'benchmark');
 const onAbout = computed(() => route.name === 'about');
 </script>
 
@@ -60,6 +66,16 @@ const onAbout = computed(() => route.name === 'about');
 					:aria-current="onScenarios ? 'page' : undefined"
 					@click="navigate"
 					><span>Scenarios</span></a
+				>
+			</RouterLink>
+			<RouterLink v-slot="{ href, navigate }" :to="benchmarksTo" custom>
+				<a
+					:href="href"
+					class="tab"
+					:class="{ active: onBenchmarks }"
+					:aria-current="onBenchmarks ? 'page' : undefined"
+					@click="navigate"
+					><span>Benchmarks</span></a
 				>
 			</RouterLink>
 		</nav>

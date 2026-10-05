@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
 import { useBenchmarkRank } from './useBenchmarkRank';
 
 const snapshot: Snapshot = {
-	version: 1,
+	version: 2,
 	generatedAt: '2026-09-25T00:00:00Z',
 	benchmarks: [
-		{ id: 10, name: 'A S2', difficulty: 'Medium', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }] },
-		{ id: 20, name: 'A S1', difficulty: 'Medium', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }] },
+		{ id: 10, name: 'A S2', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
+		{ id: 20, name: 'A S1', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
 	],
 	scenarios: {
 		Pasu: [
@@ -87,5 +87,16 @@ describe('useBenchmarkRank none', () => {
 		expect(api.rank.value).toBeNull();
 		api.setPick(10);
 		expect(api.selected.value?.benchmark.id).toBe(10);
+	});
+
+	it('shows a preferred candidate over the stored pick, without storing it', async () => {
+		const picks = ref<Record<string, number | null>>({ Pasu: 20 });
+		const preferred = ref<number | null>(10);
+		const api = useBenchmarkRank(ref('Pasu'), ref(150), { load: async () => snapshot, picks, preferred });
+		await vi.waitFor(() => expect(api.selected.value?.benchmark.id).toBe(10));
+		expect(picks.value).toEqual({ Pasu: 20 });
+		preferred.value = 999;
+		await nextTick();
+		expect(api.selected.value?.benchmark.id).toBe(20);
 	});
 });

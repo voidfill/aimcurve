@@ -13,6 +13,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PbCard from '../components/PbCard.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import RecentRuns from '../components/RecentRuns.vue';
+import ScenarioBenchmarkRow from '../components/ScenarioBenchmarkRow.vue';
 import ScenarioHeader from '../components/ScenarioHeader.vue';
 import { useBenchmarkRank } from '../composables/useBenchmarkRank';
 import { useDb } from '../composables/useDb';
@@ -53,10 +54,27 @@ const runsSincePb = computed(() => {
 	return at < 0 ? 0 : runs.length - 1 - at;
 });
 
+/** `?bench=`: the benchmark a Benchmarks page linked from, shown until another is picked. */
+const linkedBench = computed(() => {
+	const value = route.query.bench;
+	const id = Number(Array.isArray(value) ? value[0] : value);
+	return Number.isInteger(id) ? id : null;
+});
+
 const bench = useBenchmarkRank(
 	computed(() => data.value?.scenario.name ?? null),
 	computed(() => pb.value?.score ?? null),
+	{ preferred: linkedBench },
 );
+
+/** A pick is the visitor's own choice: it is stored, and the link's preselection steps aside. */
+function onPick(benchmarkId: number | null): void {
+	bench.setPick(benchmarkId);
+	if (linkedBench.value !== null) {
+		const { bench: _, ...query } = route.query;
+		void router.replace({ query });
+	}
+}
 
 function rankFor(score: number): { name: string; color: string | null } | null {
 	const c = bench.selected.value;
@@ -135,12 +153,16 @@ watch(
 				:runs="data.runs.length"
 				:played-s="playedS"
 				:last-played="data.runs[data.runs.length - 1]!.startedAt"
-				:kind="data.kind"
 				:pb-score="pb?.score ?? null"
 				:candidates="bench.candidates.value"
 				:selected="bench.selected.value"
-				:rank="bench.rank.value"
-				@pick="bench.setPick"
+				@pick="onPick"
+			/>
+
+			<ScenarioBenchmarkRow
+				v-if="bench.selected.value"
+				:benchmark-id="bench.selected.value.benchmark.id"
+				:name="data.scenario.name"
 			/>
 
 			<ProgressPanel

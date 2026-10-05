@@ -9,8 +9,9 @@
  */
 import { computed } from 'vue';
 import { formatGap, inkFor } from '../lib/benchmarks/format';
+import BenchmarkPicker from './BenchmarkPicker.vue';
 import type { Candidate } from '../lib/benchmarks/pick';
-import { rankOf, type RankResult } from '../lib/benchmarks/rank';
+import type { RankResult } from '../lib/benchmarks/rank';
 import type { Baseline } from '../lib/run/baseline';
 import type { Attempt } from '../lib/run/queries';
 import type { RunCurve } from '../lib/scoring';
@@ -58,46 +59,23 @@ function rankName(c: Candidate, k: number): string {
 	return k < 0 ? 'Unranked' : c.benchmark.ranks[k]!.name;
 }
 
-function benchmarkName(c: Candidate): string {
-	return `${c.benchmark.name} · ${c.benchmark.difficulty}`;
-}
-
-/** The select's value for no benchmark. */
-const NO_BENCHMARK = 'none';
-
-/** B6: the rank badge, the gap to the next rank, and the benchmark choice. */
+/** B6: the rank badge and the gap to the next rank; the choice is `BenchmarkPicker`'s. */
 const benchmark = computed(() => {
 	if (props.candidates.length === 0) return null;
 	const c = props.selected;
 	const r = props.rank;
-	const score = props.attempt.score;
-	const options = props.candidates.map((o) => ({
-		value: String(o.benchmark.id),
-		text:
-			benchmarkName(o) +
-			(score === null ? '' : ` — ${rankName(o, rankOf(o.thresholds, score).k)}`) +
-			(o.isDefault ? ' (default)' : ''),
-	}));
-	options.push({ value: NO_BENCHMARK, text: 'None' });
 	// None picked: only the choice remains.
-	if (c === null) return { value: NO_BENCHMARK, badge: null, gap: null, options };
+	if (c === null) return { badge: null, gap: null };
 	const color = r !== null && r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
 	const kind = props.current?.params.kind ?? null;
 	// While the analysis loads, a race is not known to be one yet: its gap would
 	// show in points first and switch to seconds.
 	const settled = props.baseline !== null;
 	return {
-		value: String(c.benchmark.id),
 		badge: r === null ? null : { name: rankName(c, r.k), color, ink: color === null ? null : inkFor(color) },
 		gap: settled && r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
-		options,
 	};
 });
-
-function onPick(event: Event): void {
-	const value = (event.target as HTMLSelectElement).value;
-	emit('pick', value === NO_BENCHMARK ? null : Number(value));
-}
 
 const NONE: Record<Extract<Baseline, { kind: 'none' }>['reason'], string> = {
 	'first-run': 'first run',
@@ -166,12 +144,7 @@ const delta = computed(() => {
 							>{{ benchmark.badge.name }}</span
 						>
 						<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
-						<label class="chip">
-							<span class="sr-only">Benchmark</span>
-							<select :value="benchmark.value" @change="onPick">
-								<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
-							</select>
-						</label>
+						<BenchmarkPicker :candidates="candidates" :selected="selected" :score="attempt.score" @pick="emit('pick', $event)" />
 					</template>
 				</div>
 			</div>
@@ -281,6 +254,7 @@ h1 {
 	align-items: center;
 	gap: 8px;
 	max-width: 100%;
+	min-width: 0;
 	white-space: nowrap;
 	min-height: 22px;
 	line-height: 1;
@@ -305,34 +279,6 @@ h1 {
 
 .gap {
 	font-variant-numeric: tabular-nums;
-	color: var(--color-text);
-}
-
-.chip {
-	display: flex;
-	min-width: 0;
-}
-
-.chip select {
-	min-width: 0;
-	max-width: min(100%, 56ch);
-	text-overflow: ellipsis;
-	height: 22px;
-	padding: 2px 6px;
-	border: 1px solid var(--color-border-strong);
-	border-radius: 3px;
-	background: transparent;
-	color: var(--color-text-muted);
-	font: inherit;
-	cursor: pointer;
-}
-
-.chip select:hover {
-	border-color: var(--color-accent);
-}
-
-.chip option {
-	background: var(--color-surface);
 	color: var(--color-text);
 }
 

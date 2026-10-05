@@ -26,7 +26,15 @@ router.afterEach((to, from) => {
 		document.title = 'Scenarios — aimcurve';
 		return;
 	}
-	// The Scenario view names the tab after its scenario once it has loaded.
+	if (to.name === 'benchmarks') {
+		document.title = 'Benchmarks — aimcurve';
+		return;
+	}
+	// The Scenario and Benchmark views name the tab once they have loaded.
+	if (to.name === 'benchmark') {
+		document.title = 'Benchmark — aimcurve';
+		return;
+	}
 	if (to.name === 'scenario') {
 		document.title = 'Scenario — aimcurve';
 		return;

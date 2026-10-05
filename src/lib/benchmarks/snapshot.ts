@@ -12,16 +12,31 @@
 /* Upstream payloads (only the fields read)                            */
 /* ------------------------------------------------------------------ */
 
+export interface EvxlSubcategory {
+	subcategoryName: string;
+	scenarioCount: number;
+	color?: string;
+}
+
+export interface EvxlCategory {
+	categoryName: string;
+	color?: string;
+	subcategories?: EvxlSubcategory[];
+}
+
 export interface EvxlDifficulty {
 	difficultyName: string;
 	kovaaksBenchmarkId: number;
 	/** Rank name → colour; key order is the ladder order. */
 	rankColors: Record<string, string>;
+	/** Category and subcategory names in benchmark order; no scenario names. */
+	categories?: EvxlCategory[];
 }
 
 export interface EvxlBenchmark {
 	benchmarkName: string;
 	hidden?: boolean;
+	color?: string;
 	difficulties: EvxlDifficulty[];
 }
 
@@ -43,19 +58,39 @@ export interface RankStep {
 	color: string;
 }
 
+export interface SnapshotSubcategory {
+	name: string;
+	color: string;
+	/** Trimmed scenario names, in benchmark order. */
+	scenarios: string[];
+}
+
+export interface SnapshotCategory {
+	name: string;
+	color: string;
+	subs: SnapshotSubcategory[];
+}
+
 export interface SnapshotBenchmark {
 	/** KovaaK's benchmark ID: stable across regenerations. */
 	id: number;
 	name: string;
 	difficulty: string;
+	/** The Evxl benchmark colour. */
+	color: string;
 	ranks: RankStep[];
+	/**
+	 * The category tree, or null when Evxl's
+	 * scenario counts do not add up to KovaaK's scenarios.
+	 */
+	tree: SnapshotCategory[] | null;
 }
 
 /** An index into `benchmarks`, and that benchmark's thresholds for the scenario. */
 export type SnapshotCandidate = [index: number, thresholds: number[]];
 
 export interface Snapshot {
-	version: 1;
+	version: 2;
 	generatedAt: string;
 	/** Evxl index order: benchmarks as listed, then difficulties as listed. */
 	benchmarks: SnapshotBenchmark[];
@@ -68,6 +103,8 @@ export interface Built {
 	scenarios: Record<string, SnapshotCandidate[]>;
 	/** Deterministic upstream data problems that were skipped, for the run summary. */
 	skipped: string[];
+	/** Included difficulties whose category tree could not be built, for the run summary. */
+	treeless: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +161,7 @@ function ladderProblem(thresholds: readonly number[]): string | null {
 export function buildSnapshot(index: readonly EvxlBenchmark[], responses: ReadonlyMap<number, KovaaksResponse>): Built {
 	const benchmarks: SnapshotBenchmark[] = [];
 	const skipped: string[] = [];
+	const treeless: string[] = [];
 	/** Per included benchmark: its sort key. */
 	const keys: { familyOrder: number; season: number; position: number }[] = [];
 	const familyOrder = new Map<string, number>();
@@ -146,9 +184,12 @@ export function buildSnapshot(index: readonly EvxlBenchmark[], responses: Readon
 			}
 
 			const scenarios = new Map<string, number[]>();
+			/** Every scenario key in response order, trimmed: the tree's slots. */
+			const flat: string[] = [];
 			for (const category of Object.values(responses.get(id)?.categories ?? {})) {
 				for (const [raw, scenario] of Object.entries(category?.scenarios ?? {})) {
 					const trimmed = raw.trim();
+					flat.push(trimmed);
 					if (scenarios.has(trimmed)) continue;
 					scenarios.set(trimmed, toNumbers(scenario.rank_maxes ?? []));
 				}
@@ -171,12 +212,17 @@ export function buildSnapshot(index: readonly EvxlBenchmark[], responses: Readon
 			}
 			if (usable.length === 0) continue;
 
+			const tree = buildTree(difficulty.categories ?? [], flat);
+			if (tree === null) treeless.push(`${where}: Evxl's scenario counts do not add up to its ${flat.length} scenarios`);
+
 			const i = benchmarks.length;
 			benchmarks.push({
 				id,
 				name,
 				difficulty: difficulty.difficultyName,
+				color: benchmark.color ?? '',
 				ranks: rankNames.map((rank) => ({ name: rank, color: difficulty.rankColors[rank]! })),
+				tree,
 			});
 			keys.push({ familyOrder: familyOrder.get(family)!, season, position: at });
 			for (const [scenario, thresholds] of usable) {
@@ -194,7 +240,30 @@ export function buildSnapshot(index: readonly EvxlBenchmark[], responses: Readon
 	};
 	const scenarios: Record<string, SnapshotCandidate[]> = {};
 	for (const name of [...byScenario.keys()].sort(byCodeUnit)) scenarios[name] = byScenario.get(name)!.sort(order);
-	return { benchmarks, scenarios, skipped };
+	return { benchmarks, scenarios, skipped, treeless };
+}
+
+/**
+ * Slices KovaaK's scenarios, in response order, by Evxl's scenario counts in
+ * Evxl's order. Null when the counts do not add up to the scenarios, or
+ * when there are no categories.
+ */
+function buildTree(categories: readonly EvxlCategory[], flat: readonly string[]): SnapshotCategory[] | null {
+	const total = categories.reduce(
+		(sum, c) => sum + (c.subcategories ?? []).reduce((s, sub) => s + (Number.isInteger(sub.scenarioCount) && sub.scenarioCount >= 0 ? sub.scenarioCount : Number.NaN), 0),
+		0,
+	);
+	if (categories.length === 0 || total !== flat.length) return null;
+	let at = 0;
+	return categories.map((c) => ({
+		name: c.categoryName.trim(),
+		color: c.color ?? '',
+		subs: (c.subcategories ?? []).map((sub) => {
+			const scenarios = flat.slice(at, at + sub.scenarioCount);
+			at += sub.scenarioCount;
+			return { name: sub.subcategoryName.trim(), color: sub.color ?? '', scenarios };
+		}),
+	}));
 }
 
 function byCodeUnit(a: string, b: string): number {
@@ -224,10 +293,10 @@ export function serialize(built: Pick<Built, 'benchmarks' | 'scenarios'>, previo
 	if (previous !== null) {
 		try {
 			const old = JSON.parse(previous) as Snapshot;
-			if (old.version === 1 && typeof old.generatedAt === 'string' && body(old) === content) generatedAt = old.generatedAt;
+			if (old.version === 2 && typeof old.generatedAt === 'string' && body(old) === content) generatedAt = old.generatedAt;
 		} catch {
 			// An unreadable previous file is simply replaced.
 		}
 	}
-	return `{\n\t"version": 1,\n\t"generatedAt": ${JSON.stringify(generatedAt)},\n${content}`;
+	return `{\n\t"version": 2,\n\t"generatedAt": ${JSON.stringify(generatedAt)},\n${content}`;
 }

@@ -9,7 +9,7 @@ import { makeTestDb } from '../../test/helpers/db';
 import { demo } from '../../test/helpers/fixtures';
 import snapshotJson from '../data/demo-snapshot.json';
 import { type DataSource, pgSource } from '../lib/data-source';
-import { DEMO_PROGRESS_HASH, DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from '../lib/demo/snapshot';
+import { DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from '../lib/demo/snapshot';
 import { applyChunk } from '../lib/ingest/batch';
 import { buildChunk } from '../lib/ingest/chunk';
 import { type ScenarioApi, useScenario } from './useScenario';
@@ -43,7 +43,6 @@ describe('useScenario', () => {
 
 	it.each([
 		['the run scenario', DEMO_SCENARIO_HASH],
-		['the progression scenario', DEMO_PROGRESS_HASH],
 	])('loads %s from the snapshot exactly as from the database', async (_, hash) => {
 		const fromDb = await load(pgSource(pg), hash);
 		const fromSnapshot = await load(snapshotSource(snapshot), hash);

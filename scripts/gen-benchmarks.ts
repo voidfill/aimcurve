@@ -92,3 +92,7 @@ if (built.skipped.length > 0) {
 	console.log(`Skipped ${built.skipped.length}:`);
 	for (const line of built.skipped) console.log(`  ${line}`);
 }
+if (built.treeless.length > 0) {
+	console.log(`No category tree for ${built.treeless.length}:`);
+	for (const line of built.treeless) console.log(`  ${line}`);
+}

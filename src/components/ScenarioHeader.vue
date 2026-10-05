@@ -1,19 +1,19 @@
 <script setup lang="ts">
 /**
  * The scenario page header (S3 of the scenario page design): name, short hash
- * and version switcher, the PB's benchmark rank, a meta line, then Play in Run
+ * and version switcher, the benchmark picker, a meta line, then Play in Run
  * and Open in Kovaak's.
  */
 import { computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { formatGap, inkFor } from '../lib/benchmarks/format';
+import { useRoute, useRouter } from 'vue-router';
 import type { Candidate } from '../lib/benchmarks/pick';
-import { rankOf, type RankResult } from '../lib/benchmarks/rank';
 import { formatValue, timeFormat } from '../lib/run/format';
-import { formatPlayed, type ResultKind } from '../lib/scenario/format';
+import { formatPlayed } from '../lib/scenario/format';
 import { isNewestVersion, kovaaksLink, type ScenarioVersion, shortHash, versionLabel } from '../lib/scenario/link';
 import type { Scenario } from '../lib/scenario/queries';
 import { useSelection } from '../composables/useSelection';
+import BenchmarkPicker from './BenchmarkPicker.vue';
+import RunWindowSelect from './RunWindowSelect.vue';
 
 const props = defineProps<{
 	scenario: Scenario;
@@ -21,18 +21,15 @@ const props = defineProps<{
 	runs: number;
 	playedS: number;
 	lastPlayed: string;
-	kind: ResultKind;
 	pbScore: number | null;
 	candidates: readonly Candidate[];
 	selected: Candidate | null;
-	/** The PB's rank in the selected benchmark. */
-	rank: RankResult | null;
 }>();
 
 const emit = defineEmits<{ (event: 'pick', benchmarkId: number | null): void }>();
 
 const router = useRouter();
-const { latestSeen } = useSelection();
+const route = useRoute();
 
 const meta = computed(() => [
 	`${formatValue(props.runs)} completed ${props.runs === 1 ? 'run' : 'runs'}`,
@@ -42,11 +39,7 @@ const meta = computed(() => [
 
 const playTo = computed(() => ({ path: '/', query: { scenario: props.scenario.hash } }));
 
-/** Play in Run follows latest in a new filter, so the newest run is re-baselined. */
-function play(event: MouseEvent, navigate: (e?: MouseEvent) => unknown): void {
-	if (!(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) latestSeen.value = null;
-	navigate(event);
-}
+const { followLatest } = useSelection();
 
 const kovaaks = computed(() => kovaaksLink(props.scenario.name));
 const kovaaksTitle = computed(() =>
@@ -57,44 +50,11 @@ const kovaaksTitle = computed(() =>
 
 function onVersion(event: Event): void {
 	const hash = (event.target as HTMLSelectElement).value;
-	if (hash !== props.scenario.hash) void router.push({ name: 'scenario', params: { hash } });
+	// Another version of the same scenario keeps the benchmark a sheet linked with.
+	const bench = route.query.bench;
+	if (hash !== props.scenario.hash) void router.push({ name: 'scenario', params: { hash }, query: bench ? { bench } : {} });
 }
 
-const NO_BENCHMARK = 'none';
-
-function rankName(c: Candidate, k: number): string {
-	return k < 0 ? 'Unranked' : c.benchmark.ranks[k]!.name;
-}
-
-/** B6's badge, gap and choice, for the PB. */
-const benchmark = computed(() => {
-	if (props.candidates.length === 0) return null;
-	const c = props.selected;
-	const r = props.rank;
-	const score = props.pbScore;
-	const options = props.candidates.map((o) => ({
-		value: String(o.benchmark.id),
-		text:
-			`${o.benchmark.name} · ${o.benchmark.difficulty}` +
-			(score === null ? '' : ` — ${rankName(o, rankOf(o.thresholds, score).k)}`) +
-			(o.isDefault ? ' (default)' : ''),
-	}));
-	options.push({ value: NO_BENCHMARK, text: 'None' });
-	if (c === null) return { value: NO_BENCHMARK, badge: null, gap: null, options };
-	const color = r !== null && r.k >= 0 ? c.benchmark.ranks[r.k]!.color : null;
-	const kind = props.kind.kind === 'unknown' ? null : props.kind.kind;
-	return {
-		value: String(c.benchmark.id),
-		badge: r === null ? null : { name: rankName(c, r.k), color, ink: color === null ? null : inkFor(color) },
-		gap: r?.gap != null && r.nextRank !== null ? formatGap(r.gap, c.benchmark.ranks[r.nextRank]!.name, kind) : null,
-		options,
-	};
-});
-
-function onPick(event: Event): void {
-	const value = (event.target as HTMLSelectElement).value;
-	emit('pick', value === NO_BENCHMARK ? null : Number(value));
-}
 </script>
 
 <template>
@@ -109,22 +69,8 @@ function onPick(event: Event): void {
 						<option v-for="v in versions" :key="v.hash" :value="v.hash">{{ versionLabel(v) }}</option>
 					</select>
 				</label>
-				<div v-if="benchmark" class="benchmark">
-					<span class="pb-label">PB</span>
-					<span
-						v-if="benchmark.badge"
-						class="badge"
-						:class="{ unranked: benchmark.badge.color === null }"
-						:style="benchmark.badge.color ? { background: benchmark.badge.color, color: benchmark.badge.ink! } : undefined"
-						>{{ benchmark.badge.name }}</span
-					>
-					<span v-if="benchmark.gap" class="gap">{{ benchmark.gap }}</span>
-					<label class="chip">
-						<span class="sr-only">Benchmark</span>
-						<select :value="benchmark.value" @change="onPick">
-							<option v-for="option in benchmark.options" :key="option.value" :value="option.value">{{ option.text }}</option>
-						</select>
-					</label>
+				<div v-if="candidates.length > 0" class="benchmark">
+					<BenchmarkPicker :candidates="candidates" :selected="selected" :score="pbScore" @pick="emit('pick', $event)" />
 				</div>
 			</div>
 			<p class="meta">
@@ -135,8 +81,9 @@ function onPick(event: Event): void {
 			</p>
 		</div>
 		<div class="actions">
+			<RunWindowSelect />
 			<RouterLink v-slot="{ href, navigate }" :to="playTo" custom>
-				<a :href="href" class="action primary" @click="play($event, navigate)">Play in Run</a>
+				<a :href="href" class="action primary" @click="followLatest($event, navigate)">Play in Run</a>
 			</RouterLink>
 			<a :href="kovaaks" class="action kovaaks" :title="kovaaksTitle">Open in Kovaak’s</a>
 		</div>
@@ -193,30 +140,6 @@ h1 {
 	color: var(--color-text-muted);
 }
 
-.pb-label {
-	font: 500 10px/1 var(--font-mono);
-	text-transform: uppercase;
-	letter-spacing: 0.16em;
-	color: var(--color-text-faint);
-}
-
-.badge {
-	padding: 3px 7px;
-	border-radius: 3px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-}
-
-.badge.unranked {
-	border: 1px solid var(--color-border-strong);
-	color: var(--color-text-muted);
-}
-
-.gap {
-	font-variant-numeric: tabular-nums;
-	color: var(--color-text);
-}
-
 .chip select {
 	max-width: min(100%, 56ch);
 	padding: 2px 6px;
@@ -257,6 +180,7 @@ h1 {
 .actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: 8px;
 }
 

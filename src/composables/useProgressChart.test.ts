@@ -5,6 +5,7 @@ import snapshotJson from '../data/demo-snapshot.json';
 import { candidates } from '../lib/benchmarks/pick';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
 import { DEMO_SCENARIO_HASH, type DemoSnapshot, snapshotSource } from '../lib/demo/snapshot';
+import { rollingMedian } from '../lib/scenario/series';
 import { useProgressChart } from './useProgressChart';
 import { type ScenarioData, useScenario } from './useScenario';
 import { SOURCE_KEY } from './useSource';
@@ -25,7 +26,7 @@ describe('useProgressChart', () => {
 		data = ref(api.data.value!) as Ref<ScenarioData>;
 	});
 
-	function overall(dateAxis: boolean) {
+	function overall(dateAxis: boolean, formWindow?: number) {
 		const name = data.value.scenario.name;
 		const bench = candidates(benchmarksJson as unknown as Snapshot, name)[0]!;
 		return effectScope().run(() =>
@@ -35,6 +36,7 @@ describe('useProgressChart', () => {
 				bench: ref(bench),
 				group: ref(null),
 				dateAxis: ref(dateAxis),
+				...(formWindow === undefined ? {} : { formWindow: ref(formWindow) }),
 			}),
 		)!;
 	}
@@ -63,5 +65,18 @@ describe('useProgressChart', () => {
 		expect(first.rows).toContainEqual({ label: 'vs PB before', value: 'first run' });
 		const later = c.tipFor(5)!;
 		expect(later.rows.map((r) => r.label)).toEqual(expect.arrayContaining(['time', 'rank', 'vs PB before']));
+	});
+
+	it('takes its typical line over the form window N, 10 by default', () => {
+		const scores = data.value.runs.map((r) => r.score);
+		expect(overall(false).lines.value!.median).toEqual(rollingMedian(scores, 10).value);
+		for (const n of [5, 20]) {
+			const lines = overall(false, n).lines.value!;
+			expect(lines.median).toEqual(rollingMedian(scores, n).value);
+			// The lighter first points: the window fills after N scored runs.
+			expect(lines.full.indexOf(true)).toBe(n - 1);
+		}
+		const tip = overall(false, 5).tipFor(10)!;
+		expect(tip.rows.map((r) => r.label)).toContain('median of last 5');
 	});
 });

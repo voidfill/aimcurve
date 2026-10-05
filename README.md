@@ -4,7 +4,7 @@
 
 aimcurve reads the stats KovaaK's already saves after every run and shows how each one
 unfolded: where you pulled ahead, which bot cost you, and whether you are actually
-getting better. It runs entirely in your browser.
+climbing your benchmarks. It runs entirely in your browser.
 
 **[Open aimcurve →](https://voidfill.github.io/aimcurve/)**
 
@@ -23,11 +23,14 @@ with the biggest losses marked. Hover a row to light its encounters up on the ch
 
 ![The per-bot splits table](docs/images/bots.png)
 
-**Whether you are improving.** Every run of a scenario over time: each run a dot, your
-best so far and the median of your last ten as lines, so one lucky run cannot fake
-progress.
+**Whether you are climbing your benchmarks.** Every scenario, subcategory and category of a
+benchmark difficulty on one rank axis. Each row's candle is your last runs, worst to
+best with the median marked, next to your PB, so you see how reliably you reach a rank,
+not only whether you once did. Any row folds open into its history. Categories combine
+into ARC, aimcurve's own rank composite, which is not Voltaic's, Evxl's or any official
+score.
 
-![66 runs of one scenario over three months, the median climbing from about 2000 to 2800](docs/images/progress.png)
+![One category of a benchmark sheet: each scenario's recent runs as a candle on the rank axis, with PB and median rank pills](docs/images/benchmark.png)
 
 ## How to use it
 

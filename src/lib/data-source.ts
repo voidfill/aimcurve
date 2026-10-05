@@ -4,10 +4,12 @@
  * them from a bundled snapshot (`snapshotSource` in `lib/demo`), so its charts
  * render without opening the database.
  *
- * Only what `useRunAnalysis` and `useScenario` need is here. Everything else
+ * Only what `useRunAnalysis`, `useScenario` and the Benchmarks page need is here. Everything else
  * stays a plain query over `pg`.
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
+import type { StreamRows } from './arc/history';
+import { getRunLink, listArcRuns, listPlayedNames, type RunLink } from './arc/queries';
 import type { ScenarioRun } from './run/baseline';
 import type { KillDetail, SlotStats } from './run/bots';
 import { type Attempt, getAttempt, getKillDetail, getScoringInputs, getSlotStats, listScenarioRuns } from './run/queries';
@@ -24,6 +26,9 @@ export interface DataSource {
 	getScenario(hash: string): Promise<Scenario | null>;
 	listVersions(name: string): Promise<ScenarioVersion[]>;
 	listHistory(scenarioId: number): Promise<HistoryRun[]>;
+	listArcRuns(names: readonly string[]): Promise<StreamRows>;
+	listPlayedNames(): Promise<Set<string>>;
+	getRunLink(runId: number): Promise<RunLink | null>;
 }
 
 export function pgSource(pg: PGliteInterface): DataSource {
@@ -36,5 +41,8 @@ export function pgSource(pg: PGliteInterface): DataSource {
 		getScenario: (hash) => getScenario(pg, hash),
 		listVersions: (name) => listVersions(pg, name),
 		listHistory: (scenarioId) => listHistory(pg, scenarioId),
+		listArcRuns: (names) => listArcRuns(pg, names),
+		listPlayedNames: () => listPlayedNames(pg),
+		getRunLink: (runId) => getRunLink(pg, runId),
 	};
 }

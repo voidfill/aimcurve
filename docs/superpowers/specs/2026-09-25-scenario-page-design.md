@@ -139,9 +139,11 @@ scatter can carry: the first three dark slots of the dataviz reference palette
   Switching between attempt and date resets the zoom.
 - **Dots:** one per completed run, coloured by config group (S4).
 - **PB line:** a step line of the best result so far.
-- **Typical line:** a rolling median of the last 10 completed runs, drawn
-  thicker than the PB line. The first 9 points use the runs available, and are
-  drawn lighter until the window is full.
+- **Typical line:** a rolling median of the last `N` completed runs, drawn
+  thicker than the PB line. `N` is the shared form window (5, 10 or 20, default
+  10; [the Benchmarks pages](../../benchmarks.md#settings)), set from a
+  select in the chart header. The first `N − 1` points use the runs available,
+  and are drawn lighter until the window is full.
 - **Direction:** up is always better. A race plots completion time
   (`B − score`, as in Run R1) on a flipped axis, labelled in seconds.
 - **Rank bands:** painted behind the dots when the scenario is mapped, with the

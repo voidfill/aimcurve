@@ -12,16 +12,21 @@ This is how to refresh them. Design background:
 | `test/fixtures/demo/` | every completed run of the demo scenarios in `test/fixtures/raw/` | `pnpm gen:demo-fixtures` |
 | `src/data/demo-snapshot.json` | the demo fixtures, through the real ingest and queries | `pnpm gen:demo` |
 | `public/og.png` | the dev-only `#/dev/card` route | `pnpm shots` |
-| `docs/images/{pace,bots,progress}.png` | the About page's `[data-shot]` panels | `pnpm shots` |
+| `docs/images/{pace,bots,benchmark}.png` | the About page's `[data-shot]` panels | `pnpm shots` |
 
 The demo scenarios are `DEMO_SCENARIOS` in `src/lib/demo/snapshot.ts`:
 
 - **Air Spectral Easy**: About's pace chart and bot table show one of its runs,
   `DEMO_RUN_STEM`, picked because it led its PB-before mid-run and finished
   behind. The About copy reads those numbers from the data.
-- **VT Aether Intermediate S5** (`DEMO_PROGRESS_HASH`): About's progression
-  chart, picked for its steady climb. Drawn by attempt, not date, because its
-  runs cluster into stretches months apart.
+About's third beat, the benchmark sheet, is one category of one difficulty, `DEMO_BENCHMARK_ID`
+and `DEMO_CATEGORY` (Viscose Benchmarks S2 Medium, Reactive Tracking): one
+category, because a whole difficulty is too much at once. Its scenarios come
+from the benchmark snapshot, every version of each name. Their fixtures are
+CSVs only, without `.perf`s: ARC needs nothing but scores, and the perfs would
+only grow LFS. The snapshot holds just their scenario rows and history. The
+sheet's "now" is the sample's last run, so nothing in it turns stale as the
+sample ages.
 
 ## Full refresh
 
@@ -38,7 +43,8 @@ After new runs in the author's KovaaK's install, or changing a demo scenario:
    ```
 
 2. **`pnpm gen:demo-fixtures`** rewrites `test/fixtures/demo/` with the
-   completed runs of each demo scenario and their `.perf` files. Resets are
+   completed runs of each demo scenario and their `.perf` files, and the
+   completed runs of the benchmark sheet's scenarios as CSVs alone. Resets are
    left out, because the real ingest decides what counts as completed. It runs
    in vitest (the ingest needs Vite), in its own mode; `pnpm test` skips it.
 

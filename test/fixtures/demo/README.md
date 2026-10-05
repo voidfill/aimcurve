@@ -1,12 +1,13 @@
 # Demo fixtures
 
-The About page's sample data, each run's `.csv` and `.perf` copied unchanged
+The About page's sample data, each run's `.csv` (and for charted runs its `.perf`) copied unchanged
 from a real install. Tracked with Git LFS, like `curated/`.
 
 - Every completed **Air Spectral Easy** run: the pace chart and bot table
   show one of them (`DEMO_RUN_STEM`).
-- Every completed **VT Aether Intermediate S5** run: the progression chart,
-  chosen for its steady climb.
+- Every completed run of the six scenarios of Viscose Benchmarks S2 Medium's
+  **Reactive Tracking** category: the benchmark sheet. CSVs only; ARC needs
+  nothing but scores.
 
 Resets are left out; they are not runs. The set is written by
 `pnpm gen:demo-fixtures` from `../raw/`, never by hand; see

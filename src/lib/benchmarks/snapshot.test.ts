@@ -119,6 +119,70 @@ describe('B2 buildSnapshot', () => {
 	});
 });
 
+describe('category tree', () => {
+	const sub = (name: string, scenarioCount: number) => ({ subcategoryName: name, scenarioCount, color: `#${name}` });
+	function treed(categories: EvxlBenchmark['difficulties'][number]['categories']): EvxlBenchmark {
+		return {
+			benchmarkName: 'X',
+			color: '#02A2DA',
+			difficulties: [{ difficultyName: 'D', kovaaksBenchmarkId: 1, rankColors: two, categories }],
+		};
+	}
+	const four = response({ ' A ': [1, 2], B: [1, 2] }, { C: [1, 2], D: [1, 2] });
+
+	it('slices the scenarios by count in Evxl order, with Evxl names and colours', () => {
+		const built = buildSnapshot(
+			[treed([
+				{ categoryName: 'Clicking', color: '#c00', subcategories: [sub('Dynamic', 1), sub('Static', 2)] },
+				{ categoryName: 'Tracking', color: '#15c', subcategories: [sub('Precise', 1)] },
+			])],
+			new Map([[1, four]]),
+		);
+		expect(built.benchmarks[0]!.color).toBe('#02A2DA');
+		expect(built.benchmarks[0]!.tree).toEqual([
+			{ name: 'Clicking', color: '#c00', subs: [
+				{ name: 'Dynamic', color: '#Dynamic', scenarios: ['A'] },
+				{ name: 'Static', color: '#Static', scenarios: ['B', 'C'] },
+			] },
+			{ name: 'Tracking', color: '#15c', subs: [{ name: 'Precise', color: '#Precise', scenarios: ['D'] }] },
+		]);
+		expect(built.treeless).toEqual([]);
+	});
+
+	it('gives a count mismatch no tree and lists it, but keeps the ladders', () => {
+		const built = buildSnapshot([treed([{ categoryName: 'C', subcategories: [sub('S', 3)] }])], new Map([[1, four]]));
+		expect(built.benchmarks[0]!.tree).toBeNull();
+		expect(built.treeless).toHaveLength(1);
+		expect(built.treeless[0]).toContain('4 scenarios');
+		expect(Object.keys(built.scenarios)).toEqual(['A', 'B', 'C', 'D']);
+	});
+
+	it('gives negative counts no tree, even when they add up', () => {
+		const built = buildSnapshot(
+			[treed([{ categoryName: 'C', subcategories: [sub('S', 3), sub('T', -1), sub('U', 2)] }])],
+			new Map([[1, four]]),
+		);
+		expect(built.benchmarks[0]!.tree).toBeNull();
+	});
+
+	it('keeps a repeated subcategory name as two entries', () => {
+		const built = buildSnapshot(
+			[treed([{ categoryName: 'C', subcategories: [sub('S', 2), sub('S', 2)] }])],
+			new Map([[1, four]]),
+		);
+		expect(built.benchmarks[0]!.tree![0]!.subs.map((s) => [s.name, s.scenarios])).toEqual([
+			['S', ['A', 'B']],
+			['S', ['C', 'D']],
+		]);
+	});
+
+	it('is deterministic', () => {
+		const index = [treed([{ categoryName: 'C', subcategories: [sub('S', 4)] }])];
+		const a = serialize(buildSnapshot(index, new Map([[1, four]])), null, 'now');
+		expect(serialize(buildSnapshot(index, new Map([[1, four]])), a, 'later')).toBe(a);
+	});
+});
+
 describe('B3 serialize', () => {
 	const built = buildSnapshot([bench('X', 1)], new Map([[1, response({ A: [1, 2.5], B: [3, 4] })]]));
 
@@ -126,10 +190,10 @@ describe('B3 serialize', () => {
 		const text = serialize(built, null, '2026-09-25T00:00:00Z');
 		expect(text.split('\n')).toEqual([
 			'{',
-			'\t"version": 1,',
+			'\t"version": 2,',
 			'\t"generatedAt": "2026-09-25T00:00:00Z",',
 			'\t"benchmarks": [',
-			'\t\t{"id":1,"name":"X","difficulty":"D1","ranks":[{"name":"Gold","color":"#000000"},{"name":"Diamond","color":"#000001"}]}',
+			'\t\t{"id":1,"name":"X","difficulty":"D1","color":"","ranks":[{"name":"Gold","color":"#000000"},{"name":"Diamond","color":"#000001"}],"tree":null}',
 			'\t],',
 			'\t"scenarios": {',
 			'\t\t"A": [[0,[1,2.5]]],',

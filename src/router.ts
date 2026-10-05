@@ -11,6 +11,8 @@ export const router = createRouter({
 		{ path: '/about', name: 'about', component: () => import('./views/AboutView.vue') },
 		{ path: '/scenarios', name: 'scenarios', component: () => import('./views/ScenariosView.vue') },
 		{ path: '/scenario/:hash', name: 'scenario', component: () => import('./views/ScenarioView.vue') },
+		{ path: '/benchmarks', name: 'benchmarks', component: () => import('./views/BenchmarksView.vue') },
+		{ path: '/benchmark/:id', name: 'benchmark', component: () => import('./views/BenchmarkView.vue') },
 		// The link-preview image's source (D7 of the About design); never shipped.
 		...(import.meta.env.DEV
 			? [{ path: '/dev/card', name: 'dev-card', component: () => import('./views/dev/CardView.vue') }]
