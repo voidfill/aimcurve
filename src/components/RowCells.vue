@@ -7,6 +7,7 @@
  */
 import type { BenchmarkRow } from '../composables/useBenchmarkPage';
 import type { RankStep } from '../lib/benchmarks/snapshot';
+import { laneTip } from '../lib/energy/tip';
 import CandleLane from './CandleLane.vue';
 import RankPill from './RankPill.vue';
 
@@ -35,6 +36,7 @@ function emptyText(row: BenchmarkRow): string | null {
 		:size="size"
 		:dim="row.stale !== null"
 		:name="row.name"
+		:tip="() => laneTip(row, ranks, Date.now())"
 	/>
 	<span role="cell"><RankPill :r="row.spread?.pb ?? null" :ranks="ranks" :label="`${row.name} PB`" /></span>
 	<span role="cell" :class="{ dim: row.stale !== null }">

@@ -20,7 +20,7 @@ import {
 } from '../lib/energy/aggregate';
 import { rankOf } from '../lib/benchmarks/rank';
 import { aggregateChart, type RowChart, scenarioChart } from '../lib/energy/chart';
-import { historyPass, type RunStream, type StreamRows, toStream } from '../lib/energy/history';
+import { historyPass, nodeScenarios, type RunStream, type StreamRows, toStream } from '../lib/energy/history';
 import type { RunLink } from '../lib/energy/queries';
 import { aggregateSpread, BODY_MIN, type Spread, spreadPass } from '../lib/energy/spread';
 import { errorText } from '../lib/error';
@@ -56,6 +56,8 @@ export interface BenchmarkRow {
 	parents: string[];
 	/** A scenario's concrete numbers for its fold; null on an aggregate. */
 	facts: ScenarioFacts | null;
+	/** An aggregate's rated scenarios played, and in total; null on a scenario. */
+	played: [played: number, total: number] | null;
 }
 
 /** What a scenario's fold states before its chart: scores, not ranks. */
@@ -68,6 +70,12 @@ export interface ScenarioFacts {
 	last: number | null;
 	/** The next rank above the PB on this difficulty's ladder; null at the top or unrated. */
 	next: { name: string; at: number; gap: number | null } | null;
+	/** The candle's statistics as scores; null unless played and rated. */
+	scores: Spread | null;
+	/** Runs in the window. */
+	window: number;
+	/** The rank thresholds on this difficulty; null when unrated. */
+	ladder: readonly number[] | null;
 }
 
 export type PageState = 'loading' | 'ready' | 'missing' | 'error';
@@ -117,7 +125,12 @@ export function buildRows(
 		color,
 		parents,
 		facts: null,
+		played: playedIn(node),
 	});
+	const playedIn = (node: number): [number, number] => {
+		const inside = [...nodeScenarios(tree, node)];
+		return [inside.filter((i) => stream.runsOf[i]!.length > 0).length, inside.length];
+	};
 	const rows: BenchmarkRow[] = [
 		aggregate(
 			'overall',
@@ -163,7 +176,8 @@ export function buildRows(
 					hash: stream.topHash[i] ?? null,
 					color,
 					parents,
-					facts: { pb, runs, last, next },
+					facts: { pb, runs, last, next, scores: s?.scores ?? null, window: s?.runs ?? 0, ladder: thresholds },
+					played: null,
 				});
 			});
 		}

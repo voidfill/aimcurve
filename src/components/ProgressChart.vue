@@ -18,6 +18,7 @@ import { useChartZoom } from '../composables/useChartZoom';
 import { paintRanks, type RankLadder } from '../lib/benchmarks/paint';
 import { yBounds } from '../lib/run/chart-data';
 import { NEUTRAL } from '../lib/scenario/config';
+import TipCard from './TipCard.vue';
 
 export interface ProgressTip {
 	head: string;
@@ -341,10 +342,10 @@ const TIP_GAP = 16;
  * The tooltip's rendered width, measured: it varies with its content, and a
  * guessed width put a flipped tooltip back over the cursor.
  */
-const tipEl = ref<HTMLElement | null>(null);
+const tipEl = ref<InstanceType<typeof TipCard> | null>(null);
 const tipWidth = ref(262);
 useResizeObserver(tipEl, (entries) => {
-	const width = entries[0]?.borderBoxSize?.[0]?.inlineSize ?? tipEl.value?.offsetWidth;
+	const width = entries[0]?.borderBoxSize?.[0]?.inlineSize ?? (tipEl.value?.$el as HTMLElement | undefined)?.offsetWidth;
 	if (width) tipWidth.value = width;
 });
 
@@ -377,16 +378,7 @@ const tip = computed(() => {
 		@pointerdown="root?.focus({ preventScroll: true })"
 	>
 		<Teleport v-if="over" :to="over">
-			<div v-if="tip" ref="tipEl" class="tip" :style="tip.style" aria-live="polite">
-				<div class="tip-head">
-					<span class="tip-at">{{ tip.head }}</span>
-					<span v-if="tip.sub" class="tip-sub">{{ tip.sub }}</span>
-				</div>
-				<div v-for="row in tip.rows" :key="row.label" class="tip-row">
-					<span class="tip-label">{{ row.label }}</span>
-					<span class="tip-value" :class="row.tone">{{ row.value }}</span>
-				</div>
-			</div>
+			<TipCard v-if="tip" ref="tipEl" class="at" :tip="tip" :style="tip.style" />
 			<button
 				v-if="zoom.zoomed.value"
 				type="button"
@@ -415,75 +407,9 @@ const tip = computed(() => {
 	outline-offset: 2px;
 }
 
-.tip {
+.at {
 	position: absolute;
 	top: 12px;
-	z-index: 2;
-	min-width: 230px;
-	padding: 10px 12px;
-	background: #12161a;
-	border: 1px solid #2b3238;
-	border-radius: 3px;
-	box-shadow: 0 6px 22px rgb(0 0 0 / 0.55);
-	pointer-events: none;
-}
-
-.tip-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 14px;
-	padding-bottom: 8px;
-	margin-bottom: 8px;
-	border-bottom: 1px solid var(--color-border);
-	font: 400 11px/1 var(--font-mono);
-}
-
-.tip-at {
-	font-weight: 500;
-	font-size: 12px;
-	color: var(--color-text-strong);
-}
-
-.tip-sub {
-	color: var(--color-text-muted);
-}
-
-.tip-row {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 18px;
-	padding: 2.5px 0;
-}
-
-.tip-label {
-	font: 400 11px/1.3 var(--font-mono);
-	color: var(--color-text-muted);
-	white-space: nowrap;
-}
-
-.tip-value {
-	font: 400 11.5px/1.3 var(--font-mono);
-	font-variant-numeric: tabular-nums;
-	color: var(--color-text);
-	white-space: nowrap;
-}
-
-.tip-value.strong {
-	color: var(--color-text-strong);
-}
-
-.tip-value.base {
-	color: #d8bd86;
-}
-
-.tip-value.ahead {
-	color: var(--color-ahead);
-}
-
-.tip-value.behind {
-	color: var(--color-behind);
 }
 
 .chart :deep(.u-over) {

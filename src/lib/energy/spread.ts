@@ -29,6 +29,8 @@ export interface ScenarioSpread extends Spread {
 	window: number[];
 	/** The last run's `started_at`, epoch ms. */
 	last: number;
+	/** The same statistics as scores, for the tooltip: a rank past either end of the ladder has no score. */
+	scores: Spread;
 }
 
 /** Linear interpolation between closest ranks: position `(len − 1) × p` of `sorted`. */
@@ -74,6 +76,7 @@ export function spreadPass(tree: EnergyTree, stream: RunStream, W: number): (Sce
 			runs: s.runs,
 			window: scores.map(r),
 			last: stream.t[runs[runs.length - 1]!]!,
+			scores: { worst: s.worst, p10: s.p10, median: s.median, p90: s.p90, pb },
 		};
 	});
 }

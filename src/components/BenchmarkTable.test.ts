@@ -37,6 +37,7 @@ function row(over: Partial<BenchmarkRow>): BenchmarkRow {
 		color: '#CC0000',
 		parents: ['overall', 'c0'],
 		facts: null,
+		played: null,
 		...over,
 	};
 }

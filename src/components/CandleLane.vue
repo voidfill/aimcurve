@@ -9,15 +9,22 @@
  * spanning several ranks shows each. The median is white and the PB dot the
  * solid colour of the rank it reaches.
  *
+ * Hovering the lane shows `tip()`, the numbers behind the candle, in the progress
+ * charts' card: under the lane (over it near the window's bottom), beside the
+ * pointer and flipped to its left near the right edge. Touch shows none.
+ *
  * The tints are plain HTML behind the SVG. The gradient is each lane's own: a user-space gradient's
  * percentages resolve against the SVG it is defined in.
  */
-import { computed, useId } from 'vue';
+import { computed, ref, useId } from 'vue';
+import { useEventListener, useResizeObserver } from '@vueuse/core';
 import type { RankStep } from '../lib/benchmarks/snapshot';
 import { chartColor } from '../lib/benchmarks/format';
 import { bandOpacity, laneColorAt, laneColumns, laneGradient, lanePosition } from '../lib/energy/axis';
 import { describeRank } from '../lib/energy/name';
 import type { Spread } from '../lib/energy/spread';
+import type { ProgressTip } from './ProgressChart.vue';
+import TipCard from './TipCard.vue';
 
 const props = defineProps<{
 	ranks: readonly RankStep[];
@@ -31,6 +38,8 @@ const props = defineProps<{
 	size: number;
 	dim: boolean;
 	name: string;
+	/** The tooltip's content, asked for only while hovered; null for none. */
+	tip: () => ProgressTip | null;
 }>();
 
 const H = 26;
@@ -64,6 +73,39 @@ const candle = computed(() => {
 
 const ticks = computed(() => props.ticks.map((r) => ({ x: x(r), color: laneColorAt(r, props.ranks) })));
 
+/** The gap between the pointer or lane and the tooltip, CSS px. */
+const TIP_GAP = 16;
+
+const pointer = ref<{ x: number; lane: DOMRect } | null>(null);
+const tipEl = ref<InstanceType<typeof TipCard> | null>(null);
+const tipSize = ref({ width: 262, height: 200 });
+useResizeObserver(tipEl, (entries) => {
+	const box = entries[0]?.borderBoxSize?.[0];
+	if (box) tipSize.value = { width: box.inlineSize, height: box.blockSize };
+});
+
+function onMove(event: PointerEvent): void {
+	if (event.pointerType === 'touch') return void (pointer.value = null);
+	pointer.value = { x: event.clientX, lane: (event.currentTarget as HTMLElement).getBoundingClientRect() };
+}
+
+// The tooltip is placed in the viewport, so a scroll would leave it behind.
+useEventListener(window, 'scroll', () => (pointer.value = null), { passive: true, capture: true });
+
+const content = computed(() => (pointer.value === null ? null : props.tip()));
+
+const tipStyle = computed(() => {
+	const p = pointer.value;
+	if (p === null || content.value === null) return null;
+	const { width, height } = tipSize.value;
+	const flip = p.x + TIP_GAP + width > window.innerWidth;
+	const above = p.lane.bottom + 8 + height > window.innerHeight;
+	return {
+		...(flip ? { right: `${window.innerWidth - p.x + TIP_GAP}px` } : { left: `${p.x + TIP_GAP}px` }),
+		...(above ? { bottom: `${window.innerHeight - p.lane.top + 8}px` } : { top: `${p.lane.bottom + 8}px` }),
+	};
+});
+
 const label = computed(() => {
 	const s = props.spread;
 	if (s === null) return `${props.name}: ${props.empty ?? 'no runs'}`;
@@ -74,7 +116,7 @@ const label = computed(() => {
 </script>
 
 <template>
-	<div class="lane">
+	<div class="lane" @pointermove="onMove" @pointerleave="pointer = null">
 		<div class="bands" aria-hidden="true">
 			<span v-for="c in columns" :key="c.name" :style="{ background: c.fill }"></span>
 		</div>
@@ -117,6 +159,9 @@ const label = computed(() => {
 			</g>
 		</svg>
 		<span v-if="empty" class="empty">{{ empty }}</span>
+		<Teleport to="body">
+			<TipCard v-if="content && tipStyle" ref="tipEl" class="lane-tip" :tip="content" :style="tipStyle" />
+		</Teleport>
 	</div>
 </template>
 
@@ -137,6 +182,11 @@ const label = computed(() => {
 
 .bands span {
 	flex: 1;
+}
+
+.lane-tip {
+	position: fixed;
+	z-index: 50;
 }
 
 svg {
