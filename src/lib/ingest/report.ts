@@ -6,9 +6,9 @@
  * clear. That is the reason there is no `ingest_failure` table.
  */
 export interface IngestReport {
-	/** Files the source listed. */
+	/** Run files (Stats CSVs and perfs) the source listed; anything else is ignored. */
 	scanned: number;
-	/** Files excluded from ingest because their stem was known or their suffix was unsupported. */
+	/** Run files excluded from ingest because their stem was already imported. */
 	skipped: number;
 	runs: number;
 	aborts: number;

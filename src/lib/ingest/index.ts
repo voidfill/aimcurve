@@ -57,13 +57,12 @@ export async function ingest(
 	const chunkSize = options.chunkSize ?? 200;
 	const build = options.build ?? inlineBuilder;
 
-	const entries = await source.list();
+	// Only run files count: a folder snapshot lists everything in the KovaaK's
+	// folder, and its configs and logs are neither scanned nor "already imported".
+	const entries = (await source.list()).filter((entry) => isStats(entry.name) || isPerf(entry.name));
 	const known = await knownStems(pg);
 	const work = entries
-		.filter((entry) =>
-			(isStats(entry.name) && !known.csv.has(fileStem(entry.name))) ||
-			(isPerf(entry.name) && !known.perf.has(fileStem(entry.name))),
-		)
+		.filter((entry) => !(isStats(entry.name) ? known.csv : known.perf).has(fileStem(entry.name)))
 		// Sorted by filename timestamp so a CSV and its perf — written 1.6 ms
 		// apart — land in the same chunk except at a boundary. D7's end-of-pass
 		// retry covers the boundary.

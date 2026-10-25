@@ -57,9 +57,8 @@ export interface ImportState {
 	 * nothing leaves it alone, so an actionable report is never erased by the
 	 * ten-second fallback cadence.
 	 *
-	 * Its counts are not what they look like: `runs` includes resets, `aborts`
-	 * are unattributed files, and `skipped` combines already-known stems with
-	 * unsupported suffixes.
+	 * Its counts are not what they look like: `runs` includes resets, and
+	 * `aborts` are unattributed files.
 	 */
 	report: IngestReport | null;
 	/**
