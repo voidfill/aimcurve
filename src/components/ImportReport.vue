@@ -3,9 +3,8 @@
  * What the last import pass did, at a glance.
  *
  * The headline numbers are the three a user acts on. The rest are not what
- * their names suggest — `aborts` is files that matched no attempt, `skipped`
- * mixes already-imported stems with unsupported types — so they are spelled out
- * inside the disclosure rather than shown as bare figures.
+ * their names suggest — `aborts` is files that matched no attempt — so they are
+ * spelled out inside the disclosure rather than shown as bare figures.
  *
  * A missing performance file is not a broken import: the attempt is still a
  * complete result, only its within-run detail is unavailable. That is why

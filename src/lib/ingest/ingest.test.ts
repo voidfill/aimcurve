@@ -34,6 +34,23 @@ describe('ingest over the curated fixtures', () => {
 		expect(second.perfsMatched).toBe(0);
 	});
 
+	it('counts neither scanned nor already imported a file that is not a run', async () => {
+		// A webkitdirectory pick of the whole KovaaK's folder hands over its
+		// configs, playlists and logs too.
+		const pg = await freshDb();
+		const base = curatedSource();
+		const withOthers: FileSource = {
+			async list() {
+				const others = ['GameUserSettings.ini', 'Voltaic S5.json'].map((name) => ({ name, open: async () => new File([''], name) }));
+				return [...(await base.list()), ...others];
+			},
+		};
+		const runFiles = curated.list('stats').length + curated.list('performances').length;
+		const report = await ingest(withOthers, pg);
+		expect(report.scanned).toBe(runFiles);
+		expect(report.skipped).toBe(0);
+	});
+
 	it('names a corrupt file and imports everything else', async () => {
 		const pg = await freshDb();
 		const base = curatedSource();
