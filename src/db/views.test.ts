@@ -104,6 +104,7 @@ describe('tick and kill column alignment', () => {
 				pause_count: null,
 				distance_traveled: null,
 				mbs_points: null,
+				deaths: null,
 			},
 			{
 				run_id: 1,
@@ -122,6 +123,7 @@ describe('tick and kill column alignment', () => {
 				pause_count: null,
 				distance_traveled: null,
 				mbs_points: null,
+				deaths: null,
 			},
 			{
 				run_id: 1,
@@ -140,6 +142,7 @@ describe('tick and kill column alignment', () => {
 				pause_count: null,
 				distance_traveled: null,
 				mbs_points: null,
+				deaths: null,
 			},
 		]);
 

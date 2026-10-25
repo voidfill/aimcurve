@@ -7,8 +7,8 @@ const snapshot: Snapshot = {
 	version: 2,
 	generatedAt: '2026-09-25T00:00:00Z',
 	benchmarks: [
-		{ id: 10, name: 'A S2', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
-		{ id: 20, name: 'A S1', difficulty: 'Medium', color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
+		{ id: 10, name: 'A S2', difficulty: 'Medium', sharecode: null, color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
+		{ id: 20, name: 'A S1', difficulty: 'Medium', sharecode: null, color: '', ranks: [{ name: 'Gold', color: '#CAB148' }, { name: 'Diamond', color: '#B9F2FF' }], tree: null },
 	],
 	scenarios: {
 		Pasu: [

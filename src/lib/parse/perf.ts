@@ -16,12 +16,13 @@ export class PerfError extends Error {
 }
 
 /**
- * The 13 event types observed in the corpus, in `run_series` column order.
+ * The 14 event types observed, in `run_series` column order. `deaths` came
+ * last, first seen in tf2_denial, a scenario where the player can die.
  *
- * Fields 9, 16, 17 and 18 (`deaths`, `targetSize`, `targetSpeed`,
- * `randomSensScale`) are deliberately absent: they have never been observed, so
- * they have no column, and encountering one raises rather than being dropped.
- * Adding one is a migration plus a reingest.
+ * Fields 16, 17 and 18 (`targetSize`, `targetSpeed`, `randomSensScale`) are
+ * deliberately absent: they have never been observed, so they have no column,
+ * and encountering one raises rather than being dropped. Adding one is a
+ * migration plus a reingest.
  */
 export const TICK_METRICS = [
 	'shotsFired',
@@ -37,6 +38,7 @@ export const TICK_METRICS = [
 	'pauseCount',
 	'distanceTraveled',
 	'mbsPoints',
+	'deaths',
 ] as const;
 
 export type TickMetric = (typeof TICK_METRICS)[number];

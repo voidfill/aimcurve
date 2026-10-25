@@ -13,6 +13,14 @@ export function kovaaksLink(name: string): string {
 	return `steam://run/824270/?action=jump-to-scenario;name=${encodeURIComponent(name)};mode=challenge`;
 }
 
+/**
+ * Kovaak's playlist deep link, by share code: the form Evxl's own play button
+ * uses. Kovaak's opens the playlist, and downloads it first if needed.
+ */
+export function kovaaksPlaylistLink(sharecode: string): string {
+	return `steam://run/824270/?action=jump-to-playlist;sharecode=${encodeURIComponent(sharecode)}`;
+}
+
 export interface ScenarioVersion {
 	id: number;
 	hash: string;
