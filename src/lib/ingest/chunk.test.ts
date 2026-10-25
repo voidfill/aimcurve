@@ -47,6 +47,21 @@ describe('classify', () => {
 		expect(classify(name, csv)).toMatchObject({ kind: 'reset', startedAt: null, startMs: null, durationS: null });
 	});
 
+	// Tests run in Europe/Berlin, where both days are 25 or 23 hours long.
+	it.each([
+		['the clocks go back', '2026.10.25'],
+		['the clocks go forward', '2026.03.29'],
+	])('resolves Challenge Start on the wall clock on the day %s', (_, day) => {
+		const source = curated.list('stats').find((n) => n.includes('Air Pure Medium') && n.includes('18.44.15'))!;
+		const csv = parseStatsCsv(curated.text('stats', source));
+		csv.settings.challengeStart = '16:02:10.243';
+
+		const timing = classify(source.replace('2026.09.18-18.44.15', `${day}-16.03.10`), csv);
+		expect(timing.kind).toBe('complete');
+		expect([timing.startedAt!.getHours(), timing.startedAt!.getMinutes()]).toEqual([16, 2]);
+		expect(timing.durationS).toBeCloseTo(60.756, 3);
+	});
+
 	it('strips the suffix to a stem shared by a CSV and its perf', () => {
 		expect(fileStem('Air Pure Medium - Challenge - 2026.09.18-18.44.15 Stats.csv'))
 			.toBe('Air Pure Medium - Challenge - 2026.09.18-18.44.15');

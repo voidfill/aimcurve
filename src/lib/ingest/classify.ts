@@ -75,12 +75,14 @@ export function classify(name: string, csv: StatsCsv): Timing {
 		return { kind: 'abort', writtenAt, startedAt: null, startMs: null, durationS: null };
 	}
 
-	const midnight = new Date(second.getFullYear(), second.getMonth(), second.getDate());
-	let startedAt = new Date(midnight.getTime() + startMs);
+	// Local wall-clock fields, not midnight + startMs: on a day the clocks change,
+	// local midnight is 23 or 25 hours from the next, and the sum is an hour off.
+	const onDay = (offset: number) => new Date(second.getFullYear(), second.getMonth(), second.getDate() + offset, 0, 0, 0, startMs);
+	let startedAt = onDay(0);
 	// `Challenge Start` has no date, so the date comes from the filename — which
 	// is the *write* time. A run starting at 23:59:40 is written the next day.
 	// No fixture exercises this; docs/ingest.md lists it as an open gap.
-	if (startedAt.getTime() - writtenAt.getTime() > 60_000) startedAt = new Date(startedAt.getTime() - 86_400_000);
+	if (startedAt.getTime() - writtenAt.getTime() > 60_000) startedAt = onDay(-1);
 
 	const durationMs = writtenAt.getTime() - startedAt.getTime();
 	// A reset file is stamped with the *next* attempt's start but written now,

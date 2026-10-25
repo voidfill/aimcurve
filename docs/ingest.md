@@ -335,6 +335,11 @@ Treat them as attempts, not runs.
 - **A run straddling midnight.** `Challenge Start` has no date, so the date comes
   from the filename — which is the *write* time. A run starting at 23:59:40 needs a
   rollover branch that no fixture exercises.
+
+  The time of day is resolved on the local wall clock (`new Date(y, m, d, 0, 0, 0,
+  ms)`), never as local midnight plus `ms`: on a day the clocks change, midnight is
+  23 or 25 hours from the next. Adding was an hour off on 2026-10-25, so every run
+  that day spanned an hour and all but the first overlapped it.
 - **A partial on a click-heavy scenario.** Every partial captured is a tracking
   scenario, so "resets carry few kill rows" is observed here, not proven. A 10-second
   reset on a clicking scenario should carry ~10 kill rows and be worth reading.
