@@ -6,16 +6,16 @@ select s.run_id, (x.ord - 1)::smallint as tick_no,
        x.t, x.shots_fired, x.shots_hit, x.shots_missed, x.damage_done,
        x.damage_possible, x.score, x.kills, x.overshots,
        x.player_damage_taken, x.reloads, x.pause_count,
-       x.distance_traveled, x.mbs_points
+       x.distance_traveled, x.mbs_points, x.deaths
 from run_series s,
      unnest(s.t, s.shots_fired, s.shots_hit, s.shots_missed, s.damage_done,
             s.damage_possible, s.score, s.kills, s.overshots,
             s.player_damage_taken, s.reloads, s.pause_count,
-            s.distance_traveled, s.mbs_points)
+            s.distance_traveled, s.mbs_points, s.deaths)
      with ordinality as x(t, shots_fired, shots_hit, shots_missed, damage_done,
                           damage_possible, score, kills, overshots,
                           player_damage_taken, reloads, pause_count,
-                          distance_traveled, mbs_points, ord);
+                          distance_traveled, mbs_points, deaths, ord);
 
 -- One row per kill. t_offset is null for a reset, where offsets against
 -- Challenge Start are meaningless; inter-kill deltas from at_ms are not.

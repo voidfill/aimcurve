@@ -22,7 +22,11 @@ export interface Timing {
 	writtenAt: Date;
 	/** `Challenge Start` resolved to an instant. Null unless complete. */
 	startedAt: Date | null;
-	/** The same instant as ms since local midnight. Null unless complete. */
+	/**
+	 * `Challenge Start` as read off the wall clock, in ms. Not the time elapsed
+	 * since local midnight: the two differ by an hour on a clock-change day.
+	 * Null unless complete.
+	 */
 	startMs: number | null;
 	durationS: number | null;
 }
@@ -42,7 +46,7 @@ export function isPerf(name: string): boolean {
 	return name.endsWith(PERF_SUFFIX);
 }
 
-/** `HH:MM:SS.mmm` -> ms since local midnight. */
+/** `HH:MM:SS.mmm` -> its wall-clock reading in ms. */
 export function clockToMs(clock: string): number | null {
 	const parts = CLOCK.exec(clock.trim());
 	if (!parts) return null;
@@ -56,12 +60,30 @@ export function parseFilenameTime(name: string): Date | null {
 	return new Date(+parts[1]!, +parts[2]! - 1, +parts[3]!, +parts[4]!, +parts[5]!, +parts[6]!);
 }
 
+/**
+ * Every instant at which the local clock reads `ms` on the given date: one on
+ * most days, two in the hour repeated when the clocks go back, and none in the
+ * hour skipped when they go forward, where JavaScript's own reading stands in.
+ */
+export function wallClockInstants(year: number, month: number, day: number, ms: number): Date[] {
+	const naive = new Date(year, month, day, 0, 0, 0, ms);
+	// The reading as if it were UTC; each offset in force around it is a candidate.
+	const asUtc = Date.UTC(year, month, day, 0, 0, 0, ms);
+	const offsets = new Set([-1, 1].map((d) => new Date(naive.getTime() + d * 86_400_000).getTimezoneOffset()));
+	const found = [...offsets]
+		.map((offset) => ({ offset, at: new Date(asUtc + offset * 60_000) }))
+		.filter(({ offset, at }) => at.getTimezoneOffset() === offset)
+		.map(({ at }) => at)
+		.sort((a, b) => a.getTime() - b.getTime());
+	return found.length > 0 ? found : [naive];
+}
+
 export function classify(name: string, csv: StatsCsv): Timing {
 	const second = parseFilenameTime(name);
 	if (!second) throw new Error(`filename carries no timestamp: ${name}`);
 	// The file is written at some point *within* that second, so the interval
 	// ends at the end of it. run.written_at holds the same value.
-	const writtenAt = new Date(second.getTime() + 999);
+	let writtenAt = new Date(second.getTime() + 999);
 
 	// An abort has no scenario identity at all, so there is nothing to join and
 	// nothing to attribute. Its tell is the empty field, never the interval: an
@@ -75,14 +97,27 @@ export function classify(name: string, csv: StatsCsv): Timing {
 		return { kind: 'abort', writtenAt, startedAt: null, startMs: null, durationS: null };
 	}
 
-	// Local wall-clock fields, not midnight + startMs: on a day the clocks change,
-	// local midnight is 23 or 25 hours from the next, and the sum is an hour off.
-	const onDay = (offset: number) => new Date(second.getFullYear(), second.getMonth(), second.getDate() + offset, 0, 0, 0, startMs);
-	let startedAt = onDay(0);
-	// `Challenge Start` has no date, so the date comes from the filename — which
-	// is the *write* time. A run starting at 23:59:40 is written the next day.
-	// No fixture exercises this; docs/ingest.md lists it as an open gap.
-	if (startedAt.getTime() - writtenAt.getTime() > 60_000) startedAt = onDay(-1);
+	// Both times are wall-clock readings, so each can be more than one instant
+	// (see "Clock changes" in docs/ingest.md). `Challenge Start` also has no date:
+	// it comes from the filename, which is the *write* time, so a run starting at
+	// 23:59:40 is written the next day. Of every pairing, the shortest interval
+	// wins, as long as the start is at most a minute after the write (a reset).
+	// A tie, which only the repeated hour produces, keeps the earliest.
+	const [y, m, d] = [second.getFullYear(), second.getMonth(), second.getDate()];
+	const writeMs = (second.getHours() * 3600 + second.getMinutes() * 60 + second.getSeconds()) * 1000 + 999;
+	let best: { startedAt: Date; writtenAt: Date } | null = null;
+	for (const written of wallClockInstants(y, m, d, writeMs)) {
+		for (const day of [d, d - 1]) {
+			for (const started of wallClockInstants(y, m, day, startMs)) {
+				const span = written.getTime() - started.getTime();
+				if (span < -60_000) continue;
+				if (best === null || span < best.writtenAt.getTime() - best.startedAt.getTime()) best = { startedAt: started, writtenAt: written };
+			}
+		}
+	}
+	// Yesterday's reading is always at least 23 hours before the write.
+	const { startedAt } = best!;
+	writtenAt = best!.writtenAt;
 
 	const durationMs = writtenAt.getTime() - startedAt.getTime();
 	// A reset file is stamped with the *next* attempt's start but written now,

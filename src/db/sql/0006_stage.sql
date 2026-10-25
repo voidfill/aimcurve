@@ -119,7 +119,8 @@ create unlogged table stage_tick (
   reloads             integer,
   pause_count         integer,
   distance_traveled   real,
-  mbs_points          real
+  mbs_points          real,
+  deaths              integer
 );
 
 create unlogged table stage_unattributed (

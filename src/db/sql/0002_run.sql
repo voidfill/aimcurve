@@ -12,7 +12,7 @@ create table run (
 
   kind        run_kind    not null,
   started_at  timestamptz,           -- Challenge Start; null unless complete
-  start_ms    integer,               -- same instant as ms since local midnight
+  start_ms    integer,               -- Challenge Start as a wall-clock reading in ms (not elapsed since midnight)
   written_at  timestamptz not null,  -- filename timestamp, end of second
   duration_s  real,                  -- null unless complete
 
