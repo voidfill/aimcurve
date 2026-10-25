@@ -36,6 +36,10 @@ scrolling (pure CSS, `position: sticky`; its height is `--bar-h`):
   with a sheet);
 - the **ARC** chip, which opens a short explainer of what ARC is and that it is
   not Voltaic's, Evxl's or any official number;
+- **Play in Kovaak's**, the difficulty's benchmark playlist through Steam
+  (`steam://run/824270/?action=jump-to-playlist;sharecode=<code>`, the link
+  Evxl's own play button uses). The share code comes from Evxl into the
+  snapshot; a difficulty without one has no button;
 - the settings: provisional or strict coverage, the run window, and the charts'
   runs / date axis.
 

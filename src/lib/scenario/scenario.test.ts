@@ -10,7 +10,7 @@ import { getKillDetail, getScoringInputs, getSlotStats } from '../run/queries';
 import { curveFor, killTimes, type ScoringInput } from '../scoring';
 import { botSeries, botTabs } from './bots';
 import { CONFIG_COLORS, configGroups, configKey, type SensConfig } from './config';
-import { isNewestVersion, kovaaksLink, versionLabel } from './link';
+import { isNewestVersion, kovaaksLink, kovaaksPlaylistLink, versionLabel } from './link';
 import { getScenario, type HistoryRun, listHistory, listScenarios, listVersions } from './queries';
 import { pbSteps, rollingMedian, sessionBreaks } from './series';
 
@@ -64,6 +64,9 @@ describe('S1 and S7 links', () => {
 		expect(kovaaksLink('voxTS Pure')).toBe('steam://run/824270/?action=jump-to-scenario;name=voxTS%20Pure;mode=challenge');
 		expect(kovaaksLink('SYW (Smooth Your Wrist) #5')).toBe(
 			'steam://run/824270/?action=jump-to-scenario;name=SYW%20(Smooth%20Your%20Wrist)%20%235;mode=challenge',
+		);
+		expect(kovaaksPlaylistLink('KovaaKsQuestingSunsetorangeSmg')).toBe(
+			'steam://run/824270/?action=jump-to-playlist;sharecode=KovaaKsQuestingSunsetorangeSmg',
 		);
 	});
 
