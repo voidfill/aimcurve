@@ -39,15 +39,26 @@ describe('parsePerf', () => {
 		expect(anyNull).toBe(true);
 	});
 
-	it('raises on an event type outside the 13 observed', () => {
-		// `deaths` is field 9: never observed, and adding it is a migration.
+	it('reads player deaths into their own column', () => {
+		// `deaths` is field 9, first seen in tf2_denial, where the player can die.
 		const bytes = new Uint8Array([
 			0x0a, 0x00, // header {}
-			0x12, 0x07, // events[0] { (7 bytes: 5 for the fixed32, 2 for the empty submessage)
-			0x0d, 0x00, 0x00, 0x00, 0x00, //   timestamp = 0.0
-			0x4a, 0x00, //   deaths {}
+			0x12, 0x09, // events[0] { (9 bytes: 5 for the fixed32, 4 for the submessage)
+			0x0d, 0x00, 0x00, 0x80, 0x3f, //   timestamp = 1.0
+			0x4a, 0x02, 0x08, 0x01, //   deaths { count: 1 }
 		]);
-		expect(() => parsePerf(bytes)).toThrow(/deaths/);
+		expect(parsePerf(bytes).ticks).toMatchObject({ t: [1], metrics: { deaths: [1], kills: null } });
+	});
+
+	it('raises on an event type outside the 14 observed', () => {
+		// `targetSize` is field 16: never observed, and adding it is a migration.
+		const bytes = new Uint8Array([
+			0x0a, 0x00, // header {}
+			0x12, 0x08, // events[0] { (8 bytes: 5 for the fixed32, 3 for the empty submessage)
+			0x0d, 0x00, 0x00, 0x00, 0x00, //   timestamp = 0.0
+			0x82, 0x01, 0x00, //   targetSize {}
+		]);
+		expect(() => parsePerf(bytes)).toThrow(/targetSize/);
 	});
 });
 

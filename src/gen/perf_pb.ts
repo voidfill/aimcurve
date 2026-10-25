@@ -345,7 +345,8 @@ export const KillsSchema: GenMessage<Kills> = /*@__PURE__*/
 
 /**
  * Vendor: "Player deaths."
- * Never observed — `Deaths:` is 0 in every paired CSV. [vendor]
+ * Never observed in the original corpus; first seen in tf2_denial (2026-10-12), where the player can die:
+ * 5 events of count 1 against `Deaths: 5`.
  *
  * @generated from message aimcurve.v1.Deaths
  */
