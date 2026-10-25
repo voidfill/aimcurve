@@ -22,6 +22,7 @@ import { STALE_MS } from '../composables/useBenchmarkPage';
 import type { ChartAxis } from '../composables/useChartSettings';
 import RunWindowSelect from './RunWindowSelect.vue';
 import { BODY_MIN } from '../lib/arc/spread';
+import { kovaaksPlaylistLink } from '../lib/scenario/link';
 
 const STALE_DAYS = STALE_MS / 86_400_000;
 
@@ -45,6 +46,8 @@ async function toggleExplainer(): Promise<void> {
 	await nextTick();
 	explainerEl.value?.scrollIntoView({ block: 'nearest' });
 }
+
+const playlist = computed(() => (props.benchmark.sharecode === null ? null : kovaaksPlaylistLink(props.benchmark.sharecode)));
 
 const coverageText = computed(() => {
 	const c = props.coverage;
@@ -83,6 +86,9 @@ const coverageText = computed(() => {
 		>
 			ARC
 		</button>
+		<a v-if="playlist" :href="playlist" class="play" title="Opens this difficulty’s benchmark playlist in Kovaak’s through Steam"
+			>Play in Kovaak’s</a
+		>
 
 		<div class="settings">
 			<div class="segment" role="group" aria-label="Coverage">
@@ -251,6 +257,24 @@ h1 {
 .chip.on {
 	border-color: var(--color-accent);
 	color: var(--color-text);
+}
+
+/* Kovaak's own orange, as on the scenario page's way out to the game. */
+.play {
+	--kovaaks: #ff8a1f;
+	flex: none;
+	padding: 4px 9px;
+	border: 1px solid var(--kovaaks);
+	border-radius: 3px;
+	font: 500 11px/1.2 var(--font-mono);
+	color: var(--kovaaks);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.play:hover {
+	background: color-mix(in srgb, var(--kovaaks) 14%, transparent);
+	color: #ffb066;
 }
 
 .explainer {

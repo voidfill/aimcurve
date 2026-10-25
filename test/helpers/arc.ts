@@ -23,7 +23,7 @@ export function syntheticSnapshot(categories = 3, subs = 3, per = 2): Snapshot {
 	return {
 		version: 2,
 		generatedAt: '',
-		benchmarks: [{ id: 458, name: 'Voltaic S5', difficulty: 'Intermediate', color: '#02A2DA', ranks, tree }],
+		benchmarks: [{ id: 458, name: 'Voltaic S5', difficulty: 'Intermediate', sharecode: null, color: '#02A2DA', ranks, tree }],
 		scenarios,
 	};
 }
@@ -45,11 +45,12 @@ export function smallSnapshot(): Snapshot {
 		version: 2,
 		generatedAt: '',
 		benchmarks: [
-			{ id: 1, name: 'Other', difficulty: 'x', color: '', ranks, tree: null },
+			{ id: 1, name: 'Other', difficulty: 'x', sharecode: null, color: '', ranks, tree: null },
 			{
 				id: 458,
 				name: 'Voltaic S5',
 				difficulty: 'Intermediate',
+				sharecode: null,
 				color: '#02A2DA',
 				ranks,
 				tree: [
