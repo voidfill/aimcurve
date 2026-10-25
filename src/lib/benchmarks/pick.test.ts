@@ -6,8 +6,8 @@ const snapshot: Snapshot = {
 	version: 2,
 	generatedAt: '2026-09-25T00:00:00Z',
 	benchmarks: [
-		{ id: 10, name: 'Viscose Benchmarks S2', difficulty: 'Medium', color: '', ranks: [], tree: null },
-		{ id: 20, name: 'Viscose Benchmarks', difficulty: 'Medium', color: '', ranks: [], tree: null },
+		{ id: 10, name: 'Viscose Benchmarks S2', difficulty: 'Medium', sharecode: null, color: '', ranks: [], tree: null },
+		{ id: 20, name: 'Viscose Benchmarks', difficulty: 'Medium', sharecode: null, color: '', ranks: [], tree: null },
 	],
 	scenarios: {
 		Pasu: [

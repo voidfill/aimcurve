@@ -27,6 +27,8 @@ export interface EvxlCategory {
 export interface EvxlDifficulty {
 	difficultyName: string;
 	kovaaksBenchmarkId: number;
+	/** The difficulty's KovaaK's playlist share code; missing, empty or "MANUAL" when there is none. */
+	sharecode?: string;
 	/** Rank name → colour; key order is the ladder order. */
 	rankColors: Record<string, string>;
 	/** Category and subcategory names in benchmark order; no scenario names. */
@@ -76,6 +78,8 @@ export interface SnapshotBenchmark {
 	id: number;
 	name: string;
 	difficulty: string;
+	/** The KovaaK's playlist share code, for the play-playlist deep link; null when Evxl has none. */
+	sharecode: string | null;
 	/** The Evxl benchmark colour. */
 	color: string;
 	ranks: RankStep[];
@@ -129,7 +133,15 @@ function label(benchmark: string, difficulty: string, id: number): string {
 	return `${benchmark} · ${difficulty} (${id})`;
 }
 
-const NUMERIC = /^\s*-?\d+(?:\.\d+)?\s*$/;
+/** A KovaaK's share code ("KovaaKsQuestingSunsetorangeSmg"); anything else, such as Evxl's "MANUAL", is none. */
+const SHARECODE = /^KovaaKs[A-Za-z0-9]+$/;
+
+function shareCode(raw: string | undefined): string | null {
+	const trimmed = raw?.trim() ?? '';
+	return SHARECODE.test(trimmed) ? trimmed : null;
+}
+
+const NUMERIC =/^\s*-?\d+(?:\.\d+)?\s*$/;
 
 /**
  * Thresholds as numbers. Some benchmarks send them as numeric strings
@@ -220,6 +232,7 @@ export function buildSnapshot(index: readonly EvxlBenchmark[], responses: Readon
 				id,
 				name,
 				difficulty: difficulty.difficultyName,
+				sharecode: shareCode(difficulty.sharecode),
 				color: benchmark.color ?? '',
 				ranks: rankNames.map((rank) => ({ name: rank, color: difficulty.rankColors[rank]! })),
 				tree,

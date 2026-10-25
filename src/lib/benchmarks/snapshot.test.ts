@@ -48,6 +48,14 @@ describe('B2 buildSnapshot', () => {
 		expect(built.scenarios).toEqual({ A: [[0, [3, 4]]] });
 	});
 
+	it('keeps a KovaaK’s share code and drops a missing or "MANUAL" one', () => {
+		const index = bench('X', 1, 2, 3);
+		index.difficulties[0]!.sharecode = ' KovaaKsQuestingSunsetorangeSmg ';
+		index.difficulties[1]!.sharecode = 'MANUAL';
+		const built = buildSnapshot([index], new Map([1, 2, 3].map((id) => [id, response({ A: [1, 2] })])));
+		expect(built.benchmarks.map((b) => b.sharecode)).toEqual(['KovaaKsQuestingSunsetorangeSmg', null, null]);
+	});
+
 	it('skips a rank-count mismatch and an empty difficulty', () => {
 		const built = buildSnapshot([bench('X', 1, 2, 3)], new Map([
 			[1, response({ A: [1, 2, 3] })],
@@ -193,7 +201,7 @@ describe('B3 serialize', () => {
 			'\t"version": 2,',
 			'\t"generatedAt": "2026-09-25T00:00:00Z",',
 			'\t"benchmarks": [',
-			'\t\t{"id":1,"name":"X","difficulty":"D1","color":"","ranks":[{"name":"Gold","color":"#000000"},{"name":"Diamond","color":"#000001"}],"tree":null}',
+			'\t\t{"id":1,"name":"X","difficulty":"D1","sharecode":null,"color":"","ranks":[{"name":"Gold","color":"#000000"},{"name":"Diamond","color":"#000001"}],"tree":null}',
 			'\t],',
 			'\t"scenarios": {',
 			'\t\t"A": [[0,[1,2.5]]],',
