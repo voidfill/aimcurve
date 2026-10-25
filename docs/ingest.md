@@ -318,6 +318,32 @@ They carry real signal that completed runs cannot:
 
 Treat them as attempts, not runs.
 
+## Clock changes
+
+Both times a CSV carries are local wall-clock readings with no offset: the
+filename's write time and `Challenge Start`. Resolving them is where the clock
+changes bite.
+
+- **Never midnight plus the time of day.** On a clock-change day local midnight
+  is 23 or 25 hours from the next, so the sum is an hour off. It was, on
+  2026-10-25: every run that day spanned an hour, and all but the first were
+  rejected by `no_overlapping_runs`. On the spring day a run came out ~23 hours.
+- **A reading can be two instants, or none.** When the clocks go back, 02:00–03:00
+  happens twice; when they go forward, it never happens. `wallClockInstants` lists
+  every instant that reads a given time, trying each UTC offset in force that day.
+- **The shortest interval wins.** `classify` pairs every candidate write with every
+  candidate start (that day and the day before) and keeps the shortest interval
+  whose start is at most a minute after the write, a reset's slack. A run is
+  minutes long, never an hour, so this settles a run crossing the change and a run
+  started in the second pass but written after 03:00.
+- **What it cannot settle.** A run started and written inside the repeated hour
+  gives the same interval on either pass. The earlier is taken, so a second-pass
+  run can overlap a first-pass one. Only the `.perf`'s `challenge_start_utc`
+  could decide it, and a CSV is classified without its `.perf`.
+- **`start_ms` is a reading, not elapsed time.** It is `Challenge Start` in ms as
+  the clock showed it. On a clock-change day it is an hour off from the time
+  elapsed since midnight, so never add it to midnight.
+
 ## Known gaps
 
 - **Two files written in the same second.** If a player resets twice inside one
@@ -333,8 +359,10 @@ Treat them as attempts, not runs.
   corpus does show is the weaker cross-scenario version: among files whose names
   differ, no two were ever written in the same second.
 - **A run straddling midnight.** `Challenge Start` has no date, so the date comes
-  from the filename — which is the *write* time. A run starting at 23:59:40 needs a
-  rollover branch that no fixture exercises.
+  from the filename — which is the *write* time. A run starting at 23:59:40 takes
+  the previous day; the rule is unit-tested, but no captured file exercises it.
+- **A run inside the repeated hour.** See [Clock changes](#clock-changes): from the
+  CSV alone it is undecidable which pass of the hour a run belongs to.
 - **A partial on a click-heavy scenario.** Every partial captured is a tracking
   scenario, so "resets carry few kill rows" is observed here, not proven. A 10-second
   reset on a clicking scenario should carry ~10 kill rows and be worth reading.

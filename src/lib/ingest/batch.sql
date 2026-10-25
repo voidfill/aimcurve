@@ -153,7 +153,7 @@ on conflict (perf_file_stem) do nothing;
 
 insert into run_series (run_id, t, shots_fired, shots_hit, shots_missed, damage_done,
                         damage_possible, score, kills, overshots, player_damage_taken,
-                        reloads, pause_count, distance_traveled, mbs_points)
+                        reloads, pause_count, distance_traveled, mbs_points, deaths)
 select rp.run_id,
        array_agg(st.t order by st.idx),
        case when count(st.shots_fired)         = 0 then null else array_agg(st.shots_fired         order by st.idx) end,
@@ -168,7 +168,8 @@ select rp.run_id,
        case when count(st.reloads)             = 0 then null else array_agg(st.reloads             order by st.idx) end,
        case when count(st.pause_count)         = 0 then null else array_agg(st.pause_count         order by st.idx) end,
        case when count(st.distance_traveled)   = 0 then null else array_agg(st.distance_traveled   order by st.idx) end,
-       case when count(st.mbs_points)          = 0 then null else array_agg(st.mbs_points          order by st.idx) end
+       case when count(st.mbs_points)          = 0 then null else array_agg(st.mbs_points          order by st.idx) end,
+       case when count(st.deaths)              = 0 then null else array_agg(st.deaths              order by st.idx) end
 from stage_tick st
 join run_perf rp on rp.perf_file_stem = st.perf_file_stem
 group by rp.run_id

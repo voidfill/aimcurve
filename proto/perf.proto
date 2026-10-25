@@ -174,7 +174,8 @@ message ScoreDelta { float delta = 1; }
 message Kills { int32 count = 1; }
 
 // Vendor: "Player deaths."
-// Never observed — `Deaths:` is 0 in every paired CSV. [vendor]
+// Never observed in the original corpus; first seen in tf2_denial (2026-10-12), where the player can die:
+// 5 events of count 1 against `Deaths: 5`.
 message Deaths { int32 count = 1; }
 
 // Vendor: "Overshots are defined as the shots from the player's weapon that are

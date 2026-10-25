@@ -132,7 +132,7 @@ Counts are over all 2139 files; the CSV validation is over the 2131 paired ones.
 | 6 | `damage_possible` | delta | 2139 | 131,048 | **confirmed** | sum == weapon table `Damage Possible`, 2131/2131 |
 | 7 | `score` | delta | 2139 | 128,581 | **confirmed** | sum == `Score:`, 2131/2131 within float tolerance |
 | 8 | `kills` | count | 1189 | 42,370 | **confirmed** | sum == `Kills:`, exact, 1186/1186 paired |
-| 9 | `deaths` | count | 0 | 0 | `[vendor]` | `Deaths:` is 0 in every paired CSV, so the event never fires |
+| 9 | `deaths` | count | 0 | 0 | observed later | `Deaths:` is 0 in every paired CSV; first seen in tf2_denial (2026-10-12), where the player can die, 5 events summing to `Deaths: 5` |
 | 10 | `overshots` | count | 272 | 6,320 | **confirmed** | see quirk below |
 | 11 | `player_damage_taken` | delta | 53 | 501 | **confirmed** | sum == `Damage Taken:`, 53/53 |
 | 12 | `reloads` | count | 19 | 23 | **confirmed** | sum == `Reloads:`, 19/19 (count is always 1) |
@@ -207,7 +207,7 @@ proto3 canonical encoding reproduces.
 - **`player_profile`, `map_name`, `bot_max_lives`, `bot_teams`, `player_team`.** The
   structure (types, arity, parallelism to `added_bots`) is confirmed; the *semantics*
   rest on the vendor doc, because `Stats.csv` exposes nothing to check them against.
-- **Six event types never fire in this corpus**: `deaths`, `target_size`,
+- **Six event types never fire in this corpus**: `deaths` (since seen in tf2_denial), `target_size`,
   `target_speed`, `random_sens_scale` (and `player_max_lives` /
   `end_challenge_after_damage` in the header). Their field numbers and types come
   from the vendor schema and are untested here.

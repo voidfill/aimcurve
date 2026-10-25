@@ -159,7 +159,7 @@ export interface RunTotals {
 	/** `Kills:` — equals `.perf` `kills` summed. [cross-checked] */
 	kills: number;
 
-	/** `Deaths:` — 0 in every file here, and `.perf` never emits the event. [unknown] */
+	/** `Deaths:` — 0 unless the player can die (tf2_denial); matches the `.perf` `deaths` events. */
 	deaths: number;
 
 	/** `Fight Time:` — seconds spent in combat, well under the run duration. [measured] */

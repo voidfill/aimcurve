@@ -87,7 +87,8 @@ create table run_perf (
   foreign key (run_id, kind) references run (id, kind) on delete cascade
 );
 
--- The 13 event types observed in the corpus, one array each, tick-aligned.
+-- The 14 event types observed, one array each, tick-aligned. `deaths` came
+-- last, first seen in tf2_denial, a scenario where the player can die.
 -- A type outside this set makes ingest raise; adding one is a migration.
 --
 -- A whole metric array is NULL when the run never emitted that event, which the
@@ -109,6 +110,7 @@ create table run_series (
   pause_count         integer[],
   distance_traveled   real[],
   mbs_points          real[],
+  deaths              integer[],
   constraint run_series_aligned check (
     (shots_fired     is null or cardinality(shots_fired)     = cardinality(t)) and
     (shots_hit       is null or cardinality(shots_hit)       = cardinality(t)) and
@@ -122,6 +124,7 @@ create table run_series (
     (reloads         is null or cardinality(reloads)         = cardinality(t)) and
     (pause_count     is null or cardinality(pause_count)     = cardinality(t)) and
     (distance_traveled is null or cardinality(distance_traveled) = cardinality(t)) and
-    (mbs_points      is null or cardinality(mbs_points)      = cardinality(t))
+    (mbs_points      is null or cardinality(mbs_points)      = cardinality(t)) and
+    (deaths          is null or cardinality(deaths)          = cardinality(t))
   )
 );
