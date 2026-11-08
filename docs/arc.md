@@ -189,8 +189,9 @@ SQL narrows, JavaScript computes:
 - `listArcRuns`: every complete scored run of the given names, ordered by
   `started_at, id`, as typed arrays, with each scenario row's trimmed name and
   hash.
-- `listPlayedNames`: the trimmed names with at least one complete run, for the
-  index's "n/m played".
+- `listPlayedBests`: each trimmed name's best complete score and last complete
+  run (epoch ms), taken per scenario before trimming, for the index's ranks,
+  played counts and order.
 
 **The history pass** (`history.ts`) walks the run stream once, for one coverage
 mode and one window. Per scenario it keeps the PB and the last `W` scores in a

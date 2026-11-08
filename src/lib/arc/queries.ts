@@ -63,9 +63,14 @@ export async function listArcRuns(pg: PGliteInterface, names: readonly string[])
 export async function listPlayedBests(pg: PGliteInterface): Promise<Map<string, PlayedScenario>> {
 	const result = await pg.query<[string, number, number]>(
 		`
-		select ${TRIMMED('s.name')}, max(r.score), (extract(epoch from max(r.started_at)) * 1000)::float8
-		from scenario s join run r on r.scenario_id = s.id
-		where r.kind = 'complete' and r.score is not null
+		select ${TRIMMED('s.name')}, max(r.pb), (extract(epoch from max(r.last)) * 1000)::float8
+		from (
+			select scenario_id, max(score) as pb, max(started_at) as last
+			from run
+			where kind = 'complete' and score is not null
+			group by scenario_id
+		) r
+		join scenario s on s.id = r.scenario_id
 		group by 1
 		`,
 		[],

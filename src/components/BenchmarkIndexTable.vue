@@ -47,40 +47,77 @@ function open(d: IndexDifficulty, event: Event): void {
 	void router.push(sheet(d));
 }
 
-function rankOf(d: IndexDifficulty) {
-	if (d.r === null) return null;
-	const p = pill(d.r, d.benchmark.ranks);
-	return { ...p, title: `${arcText(d.r)} arc · ${describeRank(d.r, d.benchmark.ranks)}` };
+/** Whether any scenario of the difficulty has a run, rated or not. */
+const touched = (d: IndexDifficulty) => d.last !== null;
+
+interface Rank {
+	name: string;
+	text: string;
+	fill: number;
+	tint: string;
+	title: string;
 }
 
-function squareColor(d: IndexDifficulty): string | null {
-	if (d.played === 0) return null;
-	const c = d.r === null ? null : rankName(d.r, d.benchmark.ranks).color;
-	return c === null ? UNRANKED : chartColor(c);
+function rankOf(d: IndexDifficulty): Rank | null {
+	if (d.r === null) return null;
+	const p = pill(d.r, d.benchmark.ranks);
+	return { name: p.name, text: p.text, fill: p.fill, tint: p.tint, title: `${arcText(d.r)} arc · ${describeRank(d.r, d.benchmark.ranks)}` };
+}
+
+/** A difficulty's row: the only one of a single-difficulty family, or one in an open fold. */
+interface DifficultyRow {
+	dm: DifficultyMatch;
+	d: IndexDifficulty;
+	single: boolean;
+	last: boolean;
+	rank: Rank | null;
+}
+
+function rowsOf(m: FamilyMatch, mine: boolean): DifficultyRow[] {
+	const single = m.family.difficulties.length === 1;
+	if (!single && !props.isOpen(m, mine)) return [];
+	return m.difficulties.map((dm, i) => ({
+		dm,
+		d: dm.difficulty,
+		single,
+		last: i === m.difficulties.length - 1,
+		rank: rankOf(dm.difficulty),
+	}));
+}
+
+/** A square's look: the rank colour, or the played-but-unrated and not-played styles. */
+function square(d: IndexDifficulty): { kind: 'rank' | 'unrated' | 'empty'; color?: string } {
+	if (!touched(d)) return { kind: 'empty' };
+	if (d.r === null) return { kind: 'unrated' };
+	const c = rankName(d.r, d.benchmark.ranks).color;
+	return { kind: 'rank', color: c === null ? UNRANKED : chartColor(c) };
 }
 
 function squareTitle(d: IndexDifficulty): string {
-	if (d.played === 0) return `${d.benchmark.difficulty}: not played`;
+	if (!touched(d)) return `${d.benchmark.difficulty}: not played`;
 	const rank = d.r === null ? 'unrated' : describeRank(d.r, d.benchmark.ranks);
 	return `${d.benchmark.difficulty}: ${rank} · ${d.played}/${d.total} played`;
 }
 
 function started(m: FamilyMatch): number {
-	return m.family.difficulties.filter((d) => d.played > 0).length;
+	return m.family.difficulties.filter(touched).length;
 }
 
-/** `today`, `yesterday`, `5 d ago`, `4 mo ago`, `2 y ago`. */
+const DAY = 86_400_000;
+
+/** `today` and `yesterday` by the calendar, then `5 d ago`, `4 mo ago`, `2 y ago`. */
 function age(t: number): string {
-	const days = Math.floor((props.now - t) / 86_400_000);
-	if (days < 1) return 'today';
-	if (days < 2) return 'yesterday';
+	const midnight = new Date(props.now).setHours(0, 0, 0, 0);
+	if (t >= midnight) return 'today';
+	if (t >= new Date(midnight - DAY / 2).setHours(0, 0, 0, 0)) return 'yesterday';
+	const days = Math.max(2, Math.floor((props.now - t) / DAY));
 	if (days < 60) return `${days} d ago`;
 	if (days < 365) return `${Math.round(days / 30.44)} mo ago`;
 	return `${Math.floor(days / 365)} y ago`;
 }
 
-function moreTitle(dm: DifficultyMatch): string {
-	return dm.via.slice(VIA_SHOWN).join('\n');
+function moreText(dm: DifficultyMatch): string {
+	return dm.via.slice(VIA_SHOWN).join(', ');
 }
 </script>
 
@@ -98,7 +135,7 @@ function moreTitle(dm: DifficultyMatch): string {
 			<template v-for="s in sections" :key="s.key">
 				<tbody class="section">
 					<tr>
-						<th scope="colgroup" colspan="4" class="left">
+						<th colspan="4" class="left">
 							{{ s.title }}<span class="count">{{ s.matches.length }}</span>
 						</th>
 					</tr>
@@ -109,135 +146,96 @@ function moreTitle(dm: DifficultyMatch): string {
 					class="family"
 					:class="{ open: m.family.difficulties.length > 1 && isOpen(m, s.key === 'mine') }"
 				>
-					<!-- One difficulty: the family is its row. -->
-					<tr
-						v-if="m.family.difficulties.length === 1"
-						class="link"
-						tabindex="0"
-						@click="open(m.difficulties[0]!.difficulty, $event)"
-						@keydown.enter.self="open(m.difficulties[0]!.difficulty, $event)"
-					>
+					<!-- More than one difficulty: a header row that folds them. -->
+					<tr v-if="m.family.difficulties.length > 1" class="head" @click="emit('toggle', m, s.key === 'mine')">
 						<th scope="row" class="left name">
 							<div class="main">
-								<span class="disc-space" aria-hidden="true" />
-								<RouterLink class="fam" :to="sheet(m.difficulties[0]!.difficulty)" tabindex="-1"
-									><MarkedText :text="m.family.name" :q="q"
-								/></RouterLink>
-								<span class="tag"><MarkedText :text="m.difficulties[0]!.difficulty.benchmark.difficulty" :q="q" /></span>
-							</div>
-							<div v-if="m.difficulties[0]!.via.length" class="via single">
-								<template v-for="v in m.difficulties[0]!.via.slice(0, VIA_SHOWN)" :key="v"
-									><span class="scen"><MarkedText :text="v" :q="q" /></span
-								></template>
-								<span v-if="m.difficulties[0]!.via.length > VIA_SHOWN" class="more" :title="moreTitle(m.difficulties[0]!)"
-									>+{{ m.difficulties[0]!.via.length - VIA_SHOWN }} more</span
+								<button
+									type="button"
+									class="disc"
+									:aria-expanded="isOpen(m, s.key === 'mine')"
+									:aria-label="`${isOpen(m, s.key === 'mine') ? 'Hide' : 'Show'} the ${m.family.name} difficulties`"
+									@click.stop="emit('toggle', m, s.key === 'mine')"
 								>
+									<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 L6.5 5 L3.5 8" /></svg>
+								</button>
+								<span class="fam"><MarkedText :text="m.family.name" :q="q" /></span>
+								<span class="tag">
+									{{ m.family.difficulties.length }} difficulties<template v-if="started(m) > 0"> · {{ started(m) }} played</template
+									><template v-if="m.difficulties.length < m.family.difficulties.length">
+										· {{ m.difficulties.length }} match</template
+									>
+								</span>
 							</div>
 						</th>
 						<td class="left">
-							<template v-for="d in [m.difficulties[0]!.difficulty]" :key="d.benchmark.id">
-								<span v-if="rankOf(d)" class="rank" :title="rankOf(d)!.title">
-									<i class="sq" :style="{ background: rankOf(d)!.tint }" aria-hidden="true" />
-									<span class="rname">{{ rankOf(d)!.name }}</span>
-									<span class="meter" aria-hidden="true"
-										><span :style="{ width: `${rankOf(d)!.fill * 100}%`, background: rankOf(d)!.tint }"
-									/></span>
-									<span class="pct">{{ rankOf(d)!.text }}</span>
-								</span>
-								<span v-else class="dim">{{ d.played > 0 ? 'unrated' : '—' }}</span>
-							</template>
+							<span class="squares">
+								<i
+									v-for="d in m.family.difficulties"
+									:key="d.benchmark.id"
+									class="sq"
+									:class="square(d).kind"
+									:style="square(d).color ? { background: square(d).color } : undefined"
+									role="img"
+									:aria-label="squareTitle(d)"
+									:title="squareTitle(d)"
+								/>
+							</span>
 						</td>
-						<td :class="{ strong: m.family.difficulties[0]!.played === m.family.difficulties[0]!.total, dim: m.family.difficulties[0]!.played === 0 }">
-							{{ m.family.difficulties[0]!.played > 0 ? `${m.family.difficulties[0]!.played}/${m.family.difficulties[0]!.total}` : '—' }}
-						</td>
+						<td />
 						<td class="dim" :title="m.family.last !== null ? timeFormat.format(m.family.last) : undefined">
 							{{ m.family.last !== null ? age(m.family.last) : '' }}
 						</td>
 					</tr>
 
-					<!-- More: a header row that folds its difficulties. -->
-					<template v-else>
-						<tr class="head" @click="emit('toggle', m, s.key === 'mine')">
-							<th scope="row" class="left name">
-								<div class="main">
-									<button
-										type="button"
-										class="disc"
-										:aria-expanded="isOpen(m, s.key === 'mine')"
-										:aria-label="`${isOpen(m, s.key === 'mine') ? 'Hide' : 'Show'} the ${m.family.name} difficulties`"
-										@click.stop="emit('toggle', m, s.key === 'mine')"
-									>
-										<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 L6.5 5 L3.5 8" /></svg>
-									</button>
-									<span class="fam"><MarkedText :text="m.family.name" :q="q" /></span>
-									<span class="tag">
-										{{ m.family.difficulties.length }} difficulties<template v-if="started(m) > 0"> · {{ started(m) }} played</template
-										><template v-if="m.difficulties.length < m.family.difficulties.length">
-											· {{ m.difficulties.length }} match</template
-										>
-									</span>
-								</div>
-							</th>
-							<td class="left">
-								<span class="squares">
-									<i
-										v-for="d in m.family.difficulties"
-										:key="d.benchmark.id"
-										class="sq"
-										:class="{ empty: d.played === 0 }"
-										:style="squareColor(d) ? { background: squareColor(d)! } : undefined"
-										:title="squareTitle(d)"
-									/>
-								</span>
-							</td>
-							<td />
-							<td class="dim" :title="m.family.last !== null ? timeFormat.format(m.family.last) : undefined">
-								{{ m.family.last !== null ? age(m.family.last) : '' }}
-							</td>
-						</tr>
-						<template v-if="isOpen(m, s.key === 'mine')">
-							<tr
-								v-for="(dm, i) in m.difficulties"
-								:key="dm.difficulty.benchmark.id"
-								class="link child"
-								:class="{ last: i === m.difficulties.length - 1, unplayed: dm.difficulty.played === 0 }"
-								tabindex="0"
-								@click="open(dm.difficulty, $event)"
-								@keydown.enter.self="open(dm.difficulty, $event)"
-							>
-								<th scope="row" class="left name">
-									<div class="main">
-										<RouterLink class="diff" :to="sheet(dm.difficulty)" tabindex="-1"
-											><MarkedText :text="dm.difficulty.benchmark.difficulty" :q="q"
-										/></RouterLink>
-									</div>
-									<div v-if="dm.via.length" class="via">
-										<template v-for="v in dm.via.slice(0, VIA_SHOWN)" :key="v"
-											><span class="scen"><MarkedText :text="v" :q="q" /></span
-										></template>
-										<span v-if="dm.via.length > VIA_SHOWN" class="more" :title="moreTitle(dm)">+{{ dm.via.length - VIA_SHOWN }} more</span>
-									</div>
-								</th>
-								<td class="left">
-									<span v-if="rankOf(dm.difficulty)" class="rank" :title="rankOf(dm.difficulty)!.title">
-										<i class="sq" :style="{ background: rankOf(dm.difficulty)!.tint }" aria-hidden="true" />
-										<span class="rname">{{ rankOf(dm.difficulty)!.name }}</span>
-										<span class="meter" aria-hidden="true"
-											><span :style="{ width: `${rankOf(dm.difficulty)!.fill * 100}%`, background: rankOf(dm.difficulty)!.tint }"
-										/></span>
-										<span class="pct">{{ rankOf(dm.difficulty)!.text }}</span>
-									</span>
-									<span v-else class="dim">{{ dm.difficulty.played > 0 ? 'unrated' : '—' }}</span>
-								</td>
-								<td :class="{ strong: dm.difficulty.played === dm.difficulty.total, dim: dm.difficulty.played === 0 }">
-									{{ dm.difficulty.played > 0 ? `${dm.difficulty.played}/${dm.difficulty.total}` : '—' }}
-								</td>
-								<td class="dim" :title="dm.difficulty.last !== null ? timeFormat.format(dm.difficulty.last) : undefined">
-									{{ dm.difficulty.last !== null ? age(dm.difficulty.last) : '' }}
-								</td>
-							</tr>
-						</template>
-					</template>
+					<!-- A difficulty: a single-difficulty family's only row, or one in an open fold. -->
+					<tr
+						v-for="row in rowsOf(m, s.key === 'mine')"
+						:key="row.d.benchmark.id"
+						class="link"
+						:class="{ child: !row.single, last: row.last, unplayed: !touched(row.d) }"
+						tabindex="0"
+						@click="open(row.d, $event)"
+						@keydown.enter.self="open(row.d, $event)"
+					>
+						<th scope="row" class="left name">
+							<div class="main">
+								<template v-if="row.single">
+									<span class="disc-space" aria-hidden="true" />
+									<RouterLink class="fam" :to="sheet(row.d)" tabindex="-1"><MarkedText :text="m.family.name" :q="q" /></RouterLink>
+									<span class="tag"><MarkedText :text="row.d.benchmark.difficulty" :q="q" /></span>
+								</template>
+								<RouterLink v-else class="diff" :to="sheet(row.d)" tabindex="-1"
+									><MarkedText :text="row.d.benchmark.difficulty" :q="q"
+								/></RouterLink>
+							</div>
+							<div v-if="row.dm.via.length" class="via" :class="{ single: row.single }">
+								<template v-for="v in row.dm.via.slice(0, VIA_SHOWN)" :key="v"
+									><span class="scen"><MarkedText :text="v" :q="q" /></span
+								></template>
+								<span v-if="row.dm.via.length > VIA_SHOWN" class="more" :title="moreText(row.dm)"
+									>+{{ row.dm.via.length - VIA_SHOWN }} more<span class="vh">: {{ moreText(row.dm) }}</span></span
+								>
+							</div>
+						</th>
+						<td class="left">
+							<span v-if="row.rank" class="rank" :title="row.rank.title">
+								<i class="sq" :style="{ background: row.rank.tint }" aria-hidden="true" />
+								<span class="rname">{{ row.rank.name }}</span>
+								<span class="meter" aria-hidden="true"
+									><span :style="{ width: `${row.rank.fill * 100}%`, background: row.rank.tint }"
+								/></span>
+								<span class="pct">{{ row.rank.text }}</span>
+							</span>
+							<span v-else class="dim">{{ touched(row.d) ? 'unrated' : '—' }}</span>
+						</td>
+						<td :class="{ strong: row.d.played === row.d.total, dim: row.d.played === 0 }">
+							{{ touched(row.d) ? `${row.d.played}/${row.d.total}` : '—' }}
+						</td>
+						<td class="dim" :title="row.d.last !== null ? timeFormat.format(row.d.last) : undefined">
+							{{ row.d.last !== null ? age(row.d.last) : '' }}
+						</td>
+					</tr>
 				</tbody>
 			</template>
 		</table>
@@ -497,6 +495,21 @@ tr.head:hover .disc,
 
 .sq.empty {
 	box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+/* Played, but only scenarios without a ladder here: struck through, unlike Unranked's grey fill. */
+.sq.unrated {
+	background: linear-gradient(135deg, transparent 42%, var(--color-text-faint) 42% 58%, transparent 58%);
+	box-shadow: inset 0 0 0 1px var(--color-text-faint);
+}
+
+.vh {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }
 
 .rname {

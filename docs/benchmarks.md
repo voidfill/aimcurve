@@ -42,8 +42,9 @@ started.
 - **A family with more** is a header row: a boxed disclosure button whose
   chevron turns when open, the name, "4 difficulties · 2 played", and in the
   rank column one square per difficulty in snapshot order, filled in the colour
-  of the rank its PB reaches (grey for played but unrated, hollow for not
-  played; the tooltip names it). Clicking anywhere on the row folds it. Open,
+  of the rank its PB reaches (Unranked's grey included), struck through when
+  only scenarios without a ladder there were played, and hollow when nothing
+  was; the tooltip and screen readers name it. Clicking anywhere on the row folds it. Open,
   every difficulty is a row hung off a guide line from the disclosure, on a
   darker group background; unplayed ones are dimmed. Your benchmarks start
   open, the rest closed.
@@ -52,13 +53,14 @@ started.
   fixed columns so ranks line up down the table. It is the overall's
   [ARC](arc.md) over each scenario's all-time best, with the coverage mode
   setting, so it matches the sheet's overall PB pill. Played is the rated
-  scenarios played ("6/39", bright when complete); last played is "today",
-  "5 d ago" and so on.
+  scenarios played ("6/39", bright when complete); a difficulty where only
+  unrated scenarios were played reads "unrated" and "0/39". Last played is
+  "today" and "yesterday" by the calendar, then "5 d ago" and so on.
 - **Search** keeps the difficulties that every word finds, ignoring case, in
   the benchmark's name, the difficulty's or a scenario's, and marks the words
   in every name. The scenarios holding a word the names do not are listed under
   the difficulty as small boxed tags, two and then "+N more" (the rest in its
-  tooltip). Matching families open, and the header row says how many of its
+  tooltip and, for screen readers, in hidden text). Matching families open, and the header row says how many of its
   difficulties match; each new search resets the folds the reader toggled. `/`
   focuses the search and Escape clears it.
 - **On a phone** names wrap, and the bar and last played are hidden.
