@@ -12,18 +12,56 @@ pages link in through the benchmark picker.
 
 ## Routes and navigation
 
-- **`#/benchmarks`**, the index: deliberately minimal, only the way in. Every
-  benchmark family in snapshot order with its difficulties as links, one per
-  line, and a muted "14/18 played" where anything is. Difficulties without a
-  category tree have no sheet and are not listed; a family left with none is
-  hidden. A database that cannot open shows a notice.
+- **`#/benchmarks`**, the index: the way in, with your PB rank on every
+  difficulty. See [The index](#the-index). `?q=` holds its search.
 - **`#/benchmark/:id`**, one difficulty, by its KovaaK's benchmark ID. An unknown
   ID or one without a tree shows a notice with a link to the index. The tab
   title is "<benchmark> <difficulty>".
 - **`?open=<row key>`** opens that row's fold instead of the overall's and
   scrolls it into view: the scenario page links to its own row this way.
 - **The Benchmarks tab** remembers the last Benchmarks location, as the
-  Scenarios tab does. On a difficulty page it leads back to the index instead.
+  Scenarios tab does. On a difficulty page it leads back to the index instead,
+  as the page's back link does, with the index's last search kept.
+
+## The index
+
+Laid out as Scenarios is: one panel filling the page, with the title, a count,
+the ARC note (not Voltaic's, Evxl's or any official rank) and the search in its
+header, and a table scrolling inside it under pinned column headings:
+benchmark, PB rank, played, last played. Difficulties without a category tree
+have no sheet and are not listed; a family left with none is hidden. A
+database that cannot open shows a notice, and everything is listed as not
+started.
+
+- **Two sections**, each a band row in the table: **Your benchmarks** (any
+  scenario of the family played) and **Not started**. Yours go by the highest
+  share of rated scenarios played on any one difficulty, then by the last run,
+  newest first. Not started keeps snapshot order.
+- **A family with one difficulty** is that difficulty's row, the difficulty
+  named after the family in small type.
+- **A family with more** is a header row: a boxed disclosure button whose
+  chevron turns when open, the name, "4 difficulties · 2 played", and in the
+  rank column one square per difficulty in snapshot order, filled in the colour
+  of the rank its PB reaches (grey for played but unrated, hollow for not
+  played; the tooltip names it). Clicking anywhere on the row folds it. Open,
+  every difficulty is a row hung off a guide line from the disclosure, on a
+  darker group background; unplayed ones are dimmed. Your benchmarks start
+  open, the rest closed.
+- **A difficulty row** opens its sheet. The PB rank is a coloured square, the
+  rank name, a thin bar of the progress to the next rank and the percent, in
+  fixed columns so ranks line up down the table. It is the overall's
+  [ARC](arc.md) over each scenario's all-time best, with the coverage mode
+  setting, so it matches the sheet's overall PB pill. Played is the rated
+  scenarios played ("6/39", bright when complete); last played is "today",
+  "5 d ago" and so on.
+- **Search** keeps the difficulties that every word finds, ignoring case, in
+  the benchmark's name, the difficulty's or a scenario's, and marks the words
+  in every name. The scenarios holding a word the names do not are listed under
+  the difficulty as small boxed tags, two and then "+N more" (the rest in its
+  tooltip). Matching families open, and the header row says how many of its
+  difficulties match; each new search resets the folds the reader toggled. `/`
+  focuses the search and Escape clears it.
+- **On a phone** names wrap, and the bar and last played are hidden.
 
 ## The difficulty page
 
@@ -220,7 +258,10 @@ All are per browser, and changing one on either page changes both.
   `ScenarioFold`, `BenchmarkPicker`, `ScenarioBenchmarkRow`.
 - `useBenchmarkPage` joins the snapshot tree, the run stream, the history pass
   and the candle statistics into one row model, and builds an open row's chart.
-  `useBenchmarkIndex` serves the index; `useBenchmarksRoute` the tab.
+  `useBenchmarkIndex` serves the index from `lib/benchmarks/catalog` (ranks,
+  order, search) and one query, `listPlayedBests`: each scenario name's best
+  score and last run. `BenchmarkIndexTable` draws the table, `MarkedText` the marked words.
+  `useBenchmarksRoute` keeps the tab, the index's search and the way back to it.
 - Pure modules in `src/lib/arc/` (see [ARC](arc.md#modules)).
 
 Tests cover the calculations and the row model. How the page looks is checked
@@ -259,7 +300,13 @@ Refinements made while building it:
 - the scenario page shows the scenario's sheet row in place of its PB badge and
   "N to next rank" (the lane's tooltip now carries that gap);
 - an "ARC gain" on the Run page was built and dropped;
-- "custom energy" became [ARC](arc.md).
+- "custom energy" became [ARC](arc.md);
+- the index, at first a multi-column wall of links in snapshot order, became a
+  ranked, searchable table with what you play first. Chips per difficulty were
+  considered, but TSK's and Deadman's many difficulties broke them; a fold with
+  a square per difficulty holds any number. A first cut with PB pills in a
+  narrow column was too unlike Scenarios and hid that families fold, so the
+  table took the Scenarios panel and a boxed disclosure.
 
 ## Parked
 

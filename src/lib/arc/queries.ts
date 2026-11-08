@@ -3,6 +3,7 @@
  * is done in JS over the stream. See docs/arc.md.
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
+import type { PlayedScenario } from '../benchmarks/catalog';
 import type { StreamRows } from './history';
 
 /**
@@ -55,16 +56,22 @@ export async function listArcRuns(pg: PGliteInterface, names: readonly string[])
 	return out;
 }
 
-/** The trimmed names of every scenario with a complete scored run: the index's "n/m played". */
-export async function listPlayedNames(pg: PGliteInterface): Promise<Set<string>> {
-	const result = await pg.query<{ name: string }>(
+/**
+ * Every trimmed scenario name with a complete scored run, its best score and
+ * its last such run (epoch ms), across all hashes: the index's ranks and order.
+ */
+export async function listPlayedBests(pg: PGliteInterface): Promise<Map<string, PlayedScenario>> {
+	const result = await pg.query<[string, number, number]>(
 		`
-		select distinct ${TRIMMED('s.name')} as name
-		from scenario s
-		where exists (select 1 from run r where r.scenario_id = s.id and r.kind = 'complete' and r.score is not null)
+		select ${TRIMMED('s.name')}, max(r.score), (extract(epoch from max(r.started_at)) * 1000)::float8
+		from scenario s join run r on r.scenario_id = s.id
+		where r.kind = 'complete' and r.score is not null
+		group by 1
 		`,
+		[],
+		{ rowMode: 'array' },
 	);
-	return new Set(result.rows.map((r) => r.name));
+	return new Map(result.rows.map(([name, pb, last]) => [name, { pb, last }]));
 }
 
 /** What a link into Run needs for one run: its file stem and scenario hash. */

@@ -9,6 +9,7 @@
  */
 import { computed, type ComputedRef, type Ref, ref, shallowRef, watch } from 'vue';
 import type { Snapshot, SnapshotBenchmark } from '../lib/benchmarks/snapshot';
+import { type IndexFamily, indexFamilies, type PlayedScenario } from '../lib/benchmarks/catalog';
 import {
 	categoryNode,
 	type Coverage,
@@ -350,43 +351,15 @@ export function useBenchmarkPage(id: Ref<number>, options: BenchmarkPageOptions 
 	return { state, error, snapshot, benchmark, family, tree, rows, coverage, chartFor, runLink, retry };
 }
 
-export interface IndexDifficulty {
-	benchmark: SnapshotBenchmark;
-	/** Distinct rated scenarios played, and in total. */
-	played: number;
-	total: number;
-}
-
-export interface IndexFamily {
-	name: string;
-	difficulties: IndexDifficulty[];
-}
-
-/**
- * The index: families in snapshot order, each with its difficulties and
- * what is played. A difficulty without a category tree has no sheet, and is
- * left out; a family left with none is too.
- */
-export function indexFamilies(snapshot: Snapshot, played: ReadonlySet<string>): IndexFamily[] {
-	const families: IndexFamily[] = [];
-	snapshot.benchmarks.forEach((b, i) => {
-		const tree = arcTree(snapshot, i);
-		if (tree === null) return;
-		let family = families[families.length - 1];
-		if (family?.name !== b.name) families.push((family = { name: b.name, difficulties: [] }));
-		const c = coverageOf(tree, (s) => played.has(tree.names[s]!));
-		family.difficulties.push({ benchmark: b, played: c.scenarios[0], total: c.scenarios[1] });
-	});
-	return families;
-}
-
+/** The index's families, with each difficulty's PB rank in the shared coverage mode. See `lib/benchmarks/catalog`. */
 export function useBenchmarkIndex(load?: () => Promise<Snapshot>): {
 	families: ComputedRef<IndexFamily[] | null>;
 	error: Ref<string | null>;
 } {
 	const { source, revision } = useSource();
 	const { snapshot, failed } = useSnapshot(load);
-	const played = shallowRef<Set<string>>(new Set());
+	const mode = useCoverageMode();
+	const played = shallowRef<Map<string, PlayedScenario>>(new Map());
 	const error = ref<string | null>(null);
 	let gen = 0;
 
@@ -395,9 +368,9 @@ export function useBenchmarkIndex(load?: () => Promise<Snapshot>): {
 		const mine = ++gen;
 		if (handle === null) return;
 		try {
-			const names = await handle.listPlayedNames();
+			const bests = await handle.listPlayedBests();
 			if (mine !== gen) return;
-			played.value = names;
+			played.value = bests;
 			error.value = failed.value;
 		} catch (err) {
 			if (mine === gen) error.value = errorText(err);
@@ -408,7 +381,7 @@ export function useBenchmarkIndex(load?: () => Promise<Snapshot>): {
 	watch(failed, (f) => (error.value = f));
 
 	return {
-		families: computed(() => (snapshot.value === null ? null : indexFamilies(snapshot.value, played.value))),
+		families: computed(() => (snapshot.value === null ? null : indexFamilies(snapshot.value, played.value, mode.value))),
 		error,
 	};
 }

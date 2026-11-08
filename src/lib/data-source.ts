@@ -9,7 +9,8 @@
  */
 import type { PGliteInterface } from '@electric-sql/pglite';
 import type { StreamRows } from './arc/history';
-import { getRunLink, listArcRuns, listPlayedNames, type RunLink } from './arc/queries';
+import { getRunLink, listArcRuns, listPlayedBests, type RunLink } from './arc/queries';
+import type { PlayedScenario } from './benchmarks/catalog';
 import type { ScenarioRun } from './run/baseline';
 import type { KillDetail, SlotStats } from './run/bots';
 import { type Attempt, getAttempt, getKillDetail, getScoringInputs, getSlotStats, listScenarioRuns } from './run/queries';
@@ -27,7 +28,7 @@ export interface DataSource {
 	listVersions(name: string): Promise<ScenarioVersion[]>;
 	listHistory(scenarioId: number): Promise<HistoryRun[]>;
 	listArcRuns(names: readonly string[]): Promise<StreamRows>;
-	listPlayedNames(): Promise<Set<string>>;
+	listPlayedBests(): Promise<Map<string, PlayedScenario>>;
 	getRunLink(runId: number): Promise<RunLink | null>;
 }
 
@@ -42,7 +43,7 @@ export function pgSource(pg: PGliteInterface): DataSource {
 		listVersions: (name) => listVersions(pg, name),
 		listHistory: (scenarioId) => listHistory(pg, scenarioId),
 		listArcRuns: (names) => listArcRuns(pg, names),
-		listPlayedNames: () => listPlayedNames(pg),
+		listPlayedBests: () => listPlayedBests(pg),
 		getRunLink: (runId) => getRunLink(pg, runId),
 	};
 }
