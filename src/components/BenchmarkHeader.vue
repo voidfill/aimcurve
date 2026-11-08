@@ -78,6 +78,9 @@ const coverageText = computed(() => {
 			>
 		</nav>
 		<span v-else class="single">{{ benchmark.difficulty }}</span>
+		<a v-if="playlist" :href="playlist" class="play" title="Opens this difficulty’s benchmark playlist in Kovaak’s through Steam"
+			>Play in Kovaak’s</a
+		>
 		<button
 			type="button"
 			class="chip"
@@ -89,9 +92,6 @@ const coverageText = computed(() => {
 		>
 			ARC
 		</button>
-		<a v-if="playlist" :href="playlist" class="play" title="Opens this difficulty’s benchmark playlist in Kovaak’s through Steam"
-			>Play in Kovaak’s</a
-		>
 
 		<div class="settings">
 			<div class="segment" role="group" aria-label="Coverage">
