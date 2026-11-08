@@ -10,6 +10,7 @@
  *
  * Must not import from `src/db/`: this is what keeps PGlite out of About.
  */
+import type { PlayedScenario } from '../benchmarks/catalog';
 import type { Snapshot } from '../benchmarks/snapshot';
 import type { DataSource } from '../data-source';
 import type { StreamRows } from '../arc/history';
@@ -90,6 +91,21 @@ function arcRuns(snapshot: DemoSnapshot, names: readonly string[]): StreamRows {
 	};
 }
 
+/** Each trimmed name's best score and last run from the bundled history, as `listPlayedBests` reads them. */
+function playedBests(snapshot: DemoSnapshot): Map<string, PlayedScenario> {
+	const out = new Map<string, PlayedScenario>();
+	for (const s of Object.values(snapshot.scenarios)) {
+		for (const r of snapshot.history[s.id] ?? []) {
+			if (r.score === null) continue;
+			const name = s.name.trim();
+			const t = new Date(r.startedAt).getTime();
+			const was = out.get(name);
+			out.set(name, was ? { pb: Math.max(was.pb, r.score), last: Math.max(was.last, t) } : { pb: r.score, last: t });
+		}
+	}
+	return out;
+}
+
 export function snapshotSource(snapshot: DemoSnapshot): DataSource {
 	const scenarioOf = (runId: number) => {
 		for (const s of Object.values(snapshot.scenarios)) {
@@ -108,12 +124,7 @@ export function snapshotSource(snapshot: DemoSnapshot): DataSource {
 		listVersions: async (name) => snapshot.versions[name] ?? [],
 		listHistory: async (scenarioId) => snapshot.history[scenarioId] ?? [],
 		listArcRuns: async (names) => arcRuns(snapshot, names),
-		listPlayedNames: async () =>
-			new Set(
-				Object.values(snapshot.scenarios)
-					.filter((s) => (snapshot.history[s.id] ?? []).some((r) => r.score !== null))
-					.map((s) => s.name.trim()),
-			),
+		listPlayedBests: async () => playedBests(snapshot),
 		getRunLink: async (runId) => scenarioOf(runId),
 	};
 }

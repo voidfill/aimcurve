@@ -19,12 +19,15 @@ import { useStorage } from '@vueuse/core';
 import type { SnapshotBenchmark } from '../lib/benchmarks/snapshot';
 import { type Coverage, type CoverageMode, isFull } from '../lib/arc/aggregate';
 import { STALE_MS } from '../composables/useBenchmarkPage';
+import { useBenchmarksRoute } from '../composables/useBenchmarksRoute';
 import type { ChartAxis } from '../composables/useChartSettings';
 import RunWindowSelect from './RunWindowSelect.vue';
 import { BODY_MIN } from '../lib/arc/spread';
 import { kovaaksPlaylistLink } from '../lib/scenario/link';
 
 const STALE_DAYS = STALE_MS / 86_400_000;
+/** Back to the index as it was left, search and all. */
+const { index } = useBenchmarksRoute();
 
 const props = defineProps<{
 	benchmark: SnapshotBenchmark;
@@ -60,7 +63,7 @@ const coverageText = computed(() => {
 </script>
 
 <template>
-	<RouterLink class="back" :to="{ name: 'benchmarks' }">← Benchmarks</RouterLink>
+	<RouterLink class="back" :to="index">← Benchmarks</RouterLink>
 
 	<div class="bar">
 		<h1 id="benchmark-heading" :title="benchmark.name">{{ benchmark.name }}</h1>
@@ -75,6 +78,9 @@ const coverageText = computed(() => {
 			>
 		</nav>
 		<span v-else class="single">{{ benchmark.difficulty }}</span>
+		<a v-if="playlist" :href="playlist" class="play" title="Opens this difficulty’s benchmark playlist in Kovaak’s through Steam"
+			>Play in Kovaak’s</a
+		>
 		<button
 			type="button"
 			class="chip"
@@ -86,9 +92,6 @@ const coverageText = computed(() => {
 		>
 			ARC
 		</button>
-		<a v-if="playlist" :href="playlist" class="play" title="Opens this difficulty’s benchmark playlist in Kovaak’s through Steam"
-			>Play in Kovaak’s</a
-		>
 
 		<div class="settings">
 			<div class="segment" role="group" aria-label="Coverage">

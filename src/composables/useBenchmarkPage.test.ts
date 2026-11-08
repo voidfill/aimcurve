@@ -4,7 +4,7 @@ import { smallSnapshot } from '../../test/helpers/arc';
 import type { DataSource } from '../lib/data-source';
 import type { CoverageMode } from '../lib/arc/aggregate';
 import type { StreamRows } from '../lib/arc/history';
-import { type BenchmarkPageOptions, indexFamilies, useBenchmarkIndex, STALE_MS, useBenchmarkPage } from './useBenchmarkPage';
+import { type BenchmarkPageOptions, useBenchmarkIndex, STALE_MS, useBenchmarkPage } from './useBenchmarkPage';
 import { SOURCE_KEY } from './useSource';
 
 const DAY = 86_400_000;
@@ -212,9 +212,9 @@ describe('recovery', () => {
 		const app = createApp({});
 		const revision = ref(0);
 		const src = {
-			listPlayedNames: async () => {
+			listPlayedBests: async () => {
 				if (fail) throw new Error('busy');
-				return new Set(['A']);
+				return new Map([['A', { pb: 150, last: 1 }]]);
 			},
 		} as unknown as DataSource;
 		app.provide(SOURCE_KEY, { source: shallowRef(src), revision });
@@ -227,19 +227,3 @@ describe('recovery', () => {
 	});
 });
 
-describe('index', () => {
-	it('lists families and difficulties in snapshot order with played counts, leaving out treeless ones', () => {
-		const snapshot = smallSnapshot();
-		snapshot.benchmarks.push({ ...snapshot.benchmarks[1]!, id: 459, difficulty: 'Novice' });
-		// The same ladders on the second difficulty.
-		for (const list of Object.values(snapshot.scenarios)) {
-			const own = list.find(([i]) => i === 1);
-			if (own) list.push([2, own[1]]);
-		}
-		const families = indexFamilies(snapshot, new Set(['A', 'Unrated', 'Elsewhere']));
-		expect(families.map((f) => [f.name, f.difficulties.map((d) => [d.benchmark.id, d.played, d.total])])).toEqual([
-			['Voltaic S5', [[458, 1, 4], [459, 1, 4]]],
-		]);
-		expect(indexFamilies(snapshot, new Set())[0]!.difficulties[0]!.played).toBe(0);
-	});
-});

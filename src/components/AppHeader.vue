@@ -32,9 +32,9 @@ import { GITHUB_MARK_PATH, REPO_URL } from '../lib/links';
 const route = useRoute();
 const { rememberedRunRoute } = useSelection();
 const { rememberedRoute: rememberedScenariosRoute } = useDirectoryRoute();
-const rememberedBenchmarksRoute = useBenchmarksRoute();
+const benchmarksRoute = useBenchmarksRoute();
 /** From a difficulty page, the tab goes up to the index; from elsewhere, back to where Benchmarks was left. */
-const benchmarksTo = computed(() => (route.name === 'benchmark' ? { name: 'benchmarks' } : rememberedBenchmarksRoute.value));
+const benchmarksTo = computed(() => (route.name === 'benchmark' ? benchmarksRoute.index.value : benchmarksRoute.tab.value));
 
 const onRun = computed(() => route.name === 'run');
 const onScenarios = computed(() => route.name === 'scenarios' || route.name === 'scenario');

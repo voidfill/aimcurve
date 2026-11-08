@@ -105,14 +105,14 @@ describe('demo snapshot', () => {
 			}
 		});
 
-		it('the ARC run stream and the played names', async () => {
+		it('the ARC run stream and the played bests', async () => {
 			const names = demoCategoryNames(benchmarks as unknown as Snapshot);
 			for (const want of [names, names.slice(0, 2), ['nope'], []]) {
 				const [a, b] = [await snap.listArcRuns(want), await db.listArcRuns(want)];
 				const byId = (s: { id: number }[]) => [...s].sort((x, y) => x.id - y.id);
 				expect({ ...a, scenarios: byId(a.scenarios) }).toEqual({ ...b, scenarios: byId(b.scenarios) });
 			}
-			expect(await snap.listPlayedNames()).toEqual(await db.listPlayedNames());
+			expect(await snap.listPlayedBests()).toEqual(await db.listPlayedBests());
 		});
 
 		it('per-run maps, for all ids, a subset and an unknown id', async () => {
