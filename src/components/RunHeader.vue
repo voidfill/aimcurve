@@ -371,6 +371,8 @@ h1 {
 	justify-content: flex-end;
 	gap: 0.22em;
 	font: 500 52px/0.92 var(--font-mono);
+	/* Shrinks only once the figures are squeezed into their narrower columns. */
+	font-size: clamp(38px, 6cqi, 52px);
 	font-variant-numeric: tabular-nums;
 	letter-spacing: -0.045em;
 }
@@ -418,9 +420,14 @@ h1 {
 	color: var(--color-text-faint);
 }
 
-@media (max-width: 1100px) {
+/*
+	Sized by the result column, not the viewport: the rail beside it takes a
+	share of the width that a media query cannot see. Without a run-result
+	container the header keeps its widest layout.
+*/
+@container run-result (max-width: 1000px) {
 	.header {
-		grid-template-columns: 16rem 13.5rem 11.5rem;
+		grid-template-columns: minmax(0, 16rem) minmax(0, 13.5rem) minmax(0, 11.5rem);
 		justify-content: start;
 	}
 
@@ -437,6 +444,40 @@ h1 {
 	.compared .value,
 	.big {
 		justify-content: flex-start;
+	}
+}
+
+/* Narrow: the delta gets a row to itself, the other two figures share the next. */
+@container run-result (max-width: 720px) {
+	.header {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+
+	.delta {
+		grid-column: 1 / -1;
+		grid-row: 2;
+	}
+
+	.big {
+		font-size: clamp(36px, 11cqi, 52px);
+	}
+
+	.compared {
+		padding-right: 0;
+		border-right: 0;
+	}
+
+	/* The baseline's name goes above its score rather than pushing it out of view. */
+	.compared .value {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+
+	.compared .value > span {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 }
 </style>

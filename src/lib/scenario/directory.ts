@@ -3,7 +3,7 @@
  * (L2, L4, L6, L8 of its design). See docs/superpowers/specs/2026-09-26-scenarios-directory-design.md.
  */
 import type { LocationQuery, LocationQueryRaw } from 'vue-router';
-import { candidates, pick } from '../benchmarks/pick';
+import { candidates, pickStored } from '../benchmarks/pick';
 import { rankOf } from '../benchmarks/rank';
 import type { Snapshot } from '../benchmarks/snapshot';
 import { median } from './config';
@@ -184,10 +184,7 @@ export function pbRanks(
 		const list = candidates(snapshot, row.name);
 		let c;
 		if (bench !== null) c = list.find((x) => x.benchmark.id === bench) ?? null;
-		else {
-			const id = picks[row.name.trim()];
-			c = pick(list, typeof id === 'number' || id === null ? id : undefined);
-		}
+		else c = pickStored(list, picks, row.name);
 		if (c === null) continue;
 		const { k } = rankOf(c.thresholds, row.pb);
 		const rank = c.benchmark.ranks[k];

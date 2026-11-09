@@ -27,12 +27,14 @@ const {
 	scenarios,
 	scenariosError,
 	filterState,
+	scenarioId,
 	items,
 	railState,
 	railError,
 	hasMore,
 	loadingOlder,
 	loadOlder,
+	sessions,
 	selected,
 	selectionState,
 	selectionError,
@@ -150,6 +152,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 		<aside class="rail-column">
 			<AttemptRail
 				:attempts="items"
+				:sessions="sessions"
 				:selected-stem="railStem"
 				:state="railState"
 				:error="railError"
@@ -157,6 +160,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 				:loading-older="loadingOlder"
 				:has-newer="hasNewer"
 				:filtered="scenarioHash !== null"
+				:scenario-id="scenarioId"
 				:filter-label="filterLabel"
 				:filter-error="scenariosError"
 				:link-to="linkTo"
@@ -173,10 +177,11 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 <style scoped>
 .run {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 340px;
-	gap: 18px;
+	/* The rail gives way on mid-width screens and takes more on wide ones. */
+	grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 420px);
+	gap: 14px;
 	align-items: start;
-	padding: 12px 18px;
+	padding: 10px 14px;
 }
 
 /*
@@ -203,7 +208,9 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 	scrollbar-gutter: stable;
 }
 
+/* The run header lays itself out by this column's width (see RunHeader). */
 .result {
+	container: run-result / inline-size;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
