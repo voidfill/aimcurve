@@ -1,6 +1,7 @@
 /**
- * The Run view's data: the attempt rail, the selected attempt, the scenario
- * filter options, and the "newer attempt available" indicator.
+ * The Run view's data: the attempt rail and its session totals, the selected
+ * attempt, the scenario filter options, and the "newer attempt available"
+ * indicator.
  *
  * Not a singleton — it is created by the Run view and its watchers stop with
  * that component. Nothing here owns import state, so leaving and re-entering
@@ -18,9 +19,12 @@ import {
 	getLatestAttempt,
 	listAttempts,
 	listScenarios,
+	listSessionSummaries,
 	type Attempt,
 	type AttemptCursor,
+	type RailAttempt,
 	type ScenarioOption,
+	type SessionSummary,
 } from '../lib/run/queries';
 import { errorText } from '../lib/error';
 import { useDb } from './useDb';
@@ -38,12 +42,14 @@ export interface AttemptsApi {
 	filterState: ComputedRef<FilterState>;
 	scenarioId: ComputedRef<number | null>;
 
-	items: Ref<Attempt[]>;
+	items: Ref<RailAttempt[]>;
 	railState: Ref<LoadState>;
 	railError: Ref<string | null>;
 	hasMore: ComputedRef<boolean>;
 	loadingOlder: Ref<boolean>;
 	loadOlder: () => Promise<void>;
+	/** Session id → whole-session totals, for every session the rail shows; absent until loaded. */
+	sessions: Ref<Map<number, SessionSummary>>;
 
 	selected: Ref<Attempt | null>;
 	selectionState: Ref<SelectionState>;
@@ -119,7 +125,7 @@ export function useAttempts(): AttemptsApi {
 	/* Concern 2: the rail page                                            */
 	/* ------------------------------------------------------------------ */
 
-	const items = shallowRef<Attempt[]>([]);
+	const items = shallowRef<RailAttempt[]>([]);
 	const railState = ref<LoadState>('idle');
 	const railError = ref<string | null>(null);
 	const cursor = shallowRef<AttemptCursor | null>(null);
@@ -138,7 +144,7 @@ export function useAttempts(): AttemptsApi {
 	 * `Load older` that interleave cannot leave it describing a different list
 	 * than `items` holds.
 	 */
-	function commitRail(rows: Attempt[], next: AttemptCursor | null, pages: number): void {
+	function commitRail(rows: RailAttempt[], next: AttemptCursor | null, pages: number): void {
 		items.value = rows;
 		cursor.value = next;
 		pagesLoaded = pages;
@@ -173,12 +179,12 @@ export function useAttempts(): AttemptsApi {
 		scoped: number | null,
 		pages: number,
 		gen: number,
-	): Promise<{ items: Attempt[]; next: AttemptCursor | null; pages: number } | null> {
-		const collected: Attempt[] = [];
+	): Promise<{ items: RailAttempt[]; next: AttemptCursor | null; pages: number } | null> {
+		const collected: RailAttempt[] = [];
 		let before: AttemptCursor | null = null;
 		let loaded = 0;
 		for (let index = 0; index < pages; index += 1) {
-			const page: { items: Attempt[]; next: AttemptCursor | null } = await listAttempts(
+			const page: { items: RailAttempt[]; next: AttemptCursor | null } = await listAttempts(
 				handle,
 				scoped,
 				before,
@@ -287,7 +293,37 @@ export function useAttempts(): AttemptsApi {
 	}
 
 	/* ------------------------------------------------------------------ */
-	/* Concern 3: the selected attempt                                     */
+	/* Concern 3: session totals for the rail's groups                     */
+	/* ------------------------------------------------------------------ */
+
+	const sessions = shallowRef<Map<number, SessionSummary>>(new Map());
+	let sessionGen = 0;
+
+	/**
+	 * Re-reads the totals of every session the rail shows whenever its rows
+	 * change. A failure leaves the headers without totals rather than failing
+	 * the rail: the rows are still correct without them.
+	 */
+	async function loadSessions(): Promise<void> {
+		const handle = pg.value;
+		const gen = ++sessionGen;
+		const ids = [...new Set(items.value.map((row) => row.sessionId))];
+		if (handle === null || ids.length === 0) {
+			sessions.value = new Map();
+			return;
+		}
+		try {
+			const rows = await listSessionSummaries(handle, ids, scenarioId.value);
+			if (gen !== sessionGen) return;
+			sessions.value = new Map(rows.map((row) => [row.sessionId, row]));
+		} catch (err) {
+			if (gen !== sessionGen) return;
+			console.error('Session totals could not be read', err);
+		}
+	}
+
+	/* ------------------------------------------------------------------ */
+	/* Concern 4: the selected attempt                                     */
 	/* ------------------------------------------------------------------ */
 
 	const selected = shallowRef<Attempt | null>(null);
@@ -406,6 +442,12 @@ export function useAttempts(): AttemptsApi {
 	// the same stem, which refreshes `hasPerf` without moving the selection; in
 	// following mode it re-reads the filter's latest, which is the only way the
 	// selection advances.
+	// `items` is replaced on every commit, including a refresh after an import,
+	// so this also picks up a session that grew.
+	watch(items, () => {
+		void loadSessions();
+	});
+
 	watch(revision, () => {
 		void refreshRail(true);
 		void loadSelection();
@@ -429,6 +471,7 @@ export function useAttempts(): AttemptsApi {
 		hasMore,
 		loadingOlder,
 		loadOlder,
+		sessions,
 		selected,
 		selectionState,
 		selectionError,

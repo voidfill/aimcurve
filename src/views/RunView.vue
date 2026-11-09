@@ -33,6 +33,7 @@ const {
 	hasMore,
 	loadingOlder,
 	loadOlder,
+	sessions,
 	selected,
 	selectionState,
 	selectionError,
@@ -150,6 +151,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 		<aside class="rail-column">
 			<AttemptRail
 				:attempts="items"
+				:sessions="sessions"
 				:selected-stem="railStem"
 				:state="railState"
 				:error="railError"
