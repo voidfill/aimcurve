@@ -195,6 +195,33 @@ nav {
 	align-items: center;
 }
 
+/*
+ * Narrower than the links and Run's inspecting pill together: the view's
+ * status takes a row of its own under the links, not the middle of them.
+ */
+@media (max-width: 1100px) {
+	.bar-status {
+		order: 1;
+		flex-basis: 100%;
+		margin-left: 0;
+	}
+
+	.bar-status:not(:empty) {
+		padding-bottom: 8px;
+	}
+
+	.about {
+		margin-left: auto;
+	}
+}
+
+@media (max-width: 720px) {
+	header {
+		column-gap: 14px;
+		padding: 0 14px;
+	}
+}
+
 .about {
 	font-size: 12.5px;
 	color: var(--color-text-faint);

@@ -101,7 +101,8 @@ const line = computed<Line | null>(() => {
 	gap: 2px;
 	padding: var(--space-2) var(--space-3);
 	border-bottom: 1px solid var(--color-border);
-	background: var(--color-bg);
+	border-radius: 7px 7px 0 0;
+	background: var(--color-surface-raised);
 	font-size: 0.8125rem;
 }
 

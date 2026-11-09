@@ -103,7 +103,7 @@ const style = computed(() =>
 	gap: 0 var(--space-2);
 	padding: 5px var(--space-3) 7px;
 	border: 1px solid transparent;
-	border-radius: 6px;
+	border-radius: 5px;
 	overflow: hidden;
 	color: var(--color-text);
 	text-decoration: none;
@@ -111,11 +111,11 @@ const style = computed(() =>
 }
 
 .row:hover {
-	background-color: var(--color-surface);
+	background-color: var(--color-surface-raised);
 }
 
 .row.is-selected {
-	background-color: var(--color-surface);
+	background-color: var(--color-surface-raised);
 	border-color: var(--color-accent);
 }
 

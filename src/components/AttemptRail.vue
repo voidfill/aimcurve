@@ -175,10 +175,13 @@ h2 {
 	min-height: 0;
 }
 
+/* Each session is a card, so where one ends and the next begins is plain. No overflow clip: it would unstick the header. */
 .group {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
 }
 
 /* Each header stays in view while its session scrolls past. */
@@ -193,10 +196,19 @@ h2 {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
+	padding: 4px;
 }
 
 .end {
 	padding: var(--space-2) var(--space-3);
+}
+
+/* Below RunView's 800px breakpoint the page scrolls, not the list, so no gutter is kept for it. */
+@media (max-width: 799px) {
+	.list {
+		overflow-y: visible;
+		scrollbar-gutter: auto;
+	}
 }
 
 .newer,
