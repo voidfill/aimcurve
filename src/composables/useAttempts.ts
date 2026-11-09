@@ -298,28 +298,53 @@ export function useAttempts(): AttemptsApi {
 
 	const sessions = shallowRef<Map<number, SessionSummary>>(new Map());
 	let sessionGen = 0;
+	/**
+	 * Whether the held totals may be out of date: after an import, which can
+	 * grow any session, or a change of scope. Cleared only by a full read
+	 * committing, so a narrower read in between does not lose it.
+	 */
+	let sessionsStale = true;
 
 	/**
-	 * Re-reads the totals of every session the rail shows whenever its rows
-	 * change. A failure leaves the headers without totals rather than failing
-	 * the rail: the rows are still correct without them.
+	 * Totals for the sessions the rail shows, read whenever its rows change.
+	 * `Load older` only adds sessions, so only the ones not yet held are read;
+	 * after an import or a scope change every shown session is read again. A
+	 * failure leaves the headers without totals rather than failing the rail:
+	 * the rows are still correct without them.
 	 */
 	async function loadSessions(): Promise<void> {
 		const handle = pg.value;
 		const gen = ++sessionGen;
-		const ids = [...new Set(items.value.map((row) => row.sessionId))];
-		if (handle === null || ids.length === 0) {
+		const shown = [...new Set(items.value.map((row) => row.sessionId))];
+		if (handle === null || shown.length === 0) {
 			sessions.value = new Map();
 			return;
 		}
+		const full = sessionsStale;
+		const ids = full ? shown : shown.filter((id) => !sessions.value.has(id));
+		if (ids.length === 0) return;
 		try {
 			const rows = await listSessionSummaries(handle, ids, scenarioId.value);
 			if (gen !== sessionGen) return;
-			sessions.value = new Map(rows.map((row) => [row.sessionId, row]));
+			const next = new Map(full ? [] : sessions.value);
+			for (const row of rows) next.set(row.sessionId, row);
+			sessions.value = next;
+			if (full) sessionsStale = false;
 		} catch (err) {
 			if (gen !== sessionGen) return;
 			console.error('Session totals could not be read', err);
 		}
+	}
+
+	/**
+	 * Totals are scoped, and session ids are the same in every scope, so held
+	 * totals are dropped the moment the scope changes rather than shown under
+	 * the new one until its rows arrive.
+	 */
+	function resetSessions(): void {
+		++sessionGen;
+		sessionsStale = true;
+		sessions.value = new Map();
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -436,21 +461,24 @@ export function useAttempts(): AttemptsApi {
 		{ immediate: true },
 	);
 
+	watch(scenarioId, resetSessions);
+
 	// Every import pass that wrote rows bumps `revision`, including a partly committed
 	// failed one, so this is also how the available committed summaries come
 	// back after a partial failure. In inspection mode `loadSelection` re-reads
 	// the same stem, which refreshes `hasPerf` without moving the selection; in
 	// following mode it re-reads the filter's latest, which is the only way the
 	// selection advances.
-	// `items` is replaced on every commit, including a refresh after an import,
-	// so this also picks up a session that grew.
-	watch(items, () => {
-		void loadSessions();
-	});
-
 	watch(revision, () => {
+		sessionsStale = true;
 		void refreshRail(true);
 		void loadSelection();
+	});
+
+	// `items` is replaced on every commit, including the refresh after an
+	// import, which is when a stale session is read again.
+	watch(items, () => {
+		void loadSessions();
 	});
 
 	watch(mode, (current) => {

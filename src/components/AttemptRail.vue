@@ -12,10 +12,12 @@
  *
  * Older pages load as the end of the list scrolls into view. The sentinel is
  * observed against the viewport, which also clips by the list's own scroll
- * box, so the same observer works whether the list or the page scrolls.
+ * box, so the same observer works whether the list or the page scrolls. It is
+ * keyed by the row count, so each settled page is judged by a fresh report
+ * taken after its rows were laid out, never by the one from before them.
  */
-import { computed, ref, shallowRef, watchEffect } from 'vue';
-import { useIntersectionObserver } from '@vueuse/core';
+import { computed, ref, shallowRef, watch, watchEffect } from 'vue';
+import { useIntersectionObserver, useIntervalFn, useNow } from '@vueuse/core';
 import type { RouteLocationRaw } from 'vue-router';
 import AttemptRow from './AttemptRow.vue';
 import SessionHeader from './SessionHeader.vue';
@@ -34,6 +36,8 @@ const props = defineProps<{
 	loadingOlder: boolean;
 	hasNewer: boolean;
 	filtered: boolean;
+	/** The filtered scenario's id, once known; null without a filter. */
+	scenarioId: number | null;
 	/** The filtered scenario's name, or null without a filter. */
 	filterLabel: string | null;
 	/** Why scenario names could not be listed, if they could not. */
@@ -63,20 +67,29 @@ const ranks = computed(() => {
 
 const groups = computed(() => groupBySession(props.attempts));
 
+/** For the headers' Today and Yesterday, which must turn over at midnight on an open page. */
+const now = useNow({ scheduler: (tick) => useIntervalFn(tick, 60_000) });
+
 /* Loading older pages as the list's end comes into view. */
 const sentinel = ref<HTMLElement | null>(null);
 const atEnd = ref(false);
 useIntersectionObserver(sentinel, ([entry]) => {
 	atEnd.value = entry?.isIntersecting ?? false;
 });
+// A sentinel that is gone, or replaced, has not been seen yet.
+watch(sentinel, () => {
+	atEnd.value = false;
+});
 
-/** A failed page stops the loop; its retry is the button below. */
-const olderFailed = computed(() => props.state === 'ready' && props.error !== null);
+/** A failed page stops the loop; its retry is the button below, and a retry in flight shows as loading. */
+const olderFailed = computed(() => props.state === 'ready' && props.error !== null && !props.loadingOlder);
 
-// Re-runs when a page settles, so a short page that leaves the end in view loads the next.
 watchEffect(() => {
-	if (atEnd.value && props.hasMore && !props.loadingOlder && props.state === 'ready' && !olderFailed.value)
+	if (atEnd.value && props.hasMore && !props.loadingOlder && props.state === 'ready' && !olderFailed.value) {
+		// Spent: only the next page's sentinel can ask again.
+		atEnd.value = false;
 		emit('load-older');
+	}
 });
 </script>
 
@@ -125,6 +138,8 @@ watchEffect(() => {
 					:newest="group.rows[0]!.startedAt"
 					:oldest="group.rows[group.rows.length - 1]!.startedAt"
 					:filtered="filtered"
+					:scenario-id="scenarioId"
+					:now="now"
 				/>
 				<ul class="rows">
 					<li v-for="attempt in group.rows" :key="attempt.fileStem">
@@ -138,7 +153,7 @@ watchEffect(() => {
 					</li>
 				</ul>
 			</li>
-			<li v-if="hasMore" ref="sentinel" class="end">
+			<li v-if="hasMore" :key="`end-${attempts.length}`" ref="sentinel" class="end">
 				<p v-if="olderFailed" class="error">
 					<span>Older attempts could not be read. {{ error }}</span>
 					<button type="button" @click="emit('load-older')">Try again</button>

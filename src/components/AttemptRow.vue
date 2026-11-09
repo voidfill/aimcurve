@@ -15,7 +15,7 @@
  *
  * The background is the score's rank: tinted in the rank's colour up to its
  * progress toward the next rank, with a solid edge along the bottom. The rank
- * is also in the row's text for assistive technology, never colour alone.
+ * is also named in the row's text, so it never rests on colour alone.
  */
 import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
@@ -57,11 +57,13 @@ const delta = computed(() => {
 
 const pb = computed(() => isPb(props.attempt));
 
-/** First attempt at a scenario: nothing to compare against. */
-const first = computed(() => props.attempt.prevScore === null && props.attempt.score !== null);
+/** No earlier score on the scenario: nothing to compare against. */
+const first = computed(() => props.attempt.pbBefore === null && props.attempt.score !== null);
 
 const style = computed(() =>
-	props.rank === null ? undefined : { '--rank': props.rank.color, '--fill': `${props.rank.fill * 100}%` },
+	props.rank === null
+		? undefined
+		: { '--rank': props.rank.color, '--rank-text': props.rank.tint, '--fill': `${props.rank.fill * 100}%` },
 );
 </script>
 
@@ -82,11 +84,14 @@ const style = computed(() =>
 			<span class="meta">
 				<span>{{ startedAt }}</span>
 				<span v-if="!attempt.hasPerf" title="No performance detail was imported for this run">· no detail</span>
-				<span v-if="rank !== null" class="sr-only">· {{ rank.label }}</span>
+				<template v-if="rank !== null">
+					<span class="rank" aria-hidden="true">· {{ rank.name }}</span>
+					<span class="sr-only">· {{ rank.label }}</span>
+				</template>
 			</span>
 			<span class="change">
 				<span v-if="pb" class="pb" title="A new personal best when it was played">PB</span>
-				<span v-if="delta !== null" :class="delta.tone" title="Change from the previous attempt at this scenario">{{
+				<span v-if="delta !== null && !first" :class="delta.tone" title="Change from the previous attempt at this scenario">{{
 					delta.text
 				}}</span>
 				<span v-else-if="first" class="even">first</span>
@@ -165,6 +170,15 @@ const style = computed(() =>
 	display: flex;
 	gap: 0.3em;
 	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+/* The rank's name, in its colour made readable on the dark page. */
+.rank {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--rank-text, var(--color-text-muted));
 }
 
 .change {

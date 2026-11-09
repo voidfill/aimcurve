@@ -7,7 +7,7 @@
  */
 import { computed, shallowRef, type ComputedRef, type Ref } from 'vue';
 import { useStorage } from '@vueuse/core';
-import { type Candidate, candidates as candidatesOf, pick } from '../lib/benchmarks/pick';
+import { type Candidate, candidates as candidatesOf, pickStored } from '../lib/benchmarks/pick';
 import { rankOf, type RankResult } from '../lib/benchmarks/rank';
 import type { Snapshot } from '../lib/benchmarks/snapshot';
 
@@ -98,8 +98,7 @@ export function useBenchmarkRank(
 			const linked = candidates.value.find((c) => c.benchmark.id === preferred);
 			if (linked) return linked;
 		}
-		const id = stored.value[name.value.trim()];
-		return pick(candidates.value, typeof id === 'number' || id === null ? id : undefined);
+		return pickStored(candidates.value, stored.value, name.value);
 	});
 	const rank = computed(() => {
 		const s = score.value;

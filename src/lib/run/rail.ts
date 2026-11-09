@@ -4,7 +4,7 @@
  * previous attempt, and its rank on the picked benchmark.
  */
 import type { Snapshot } from '../benchmarks/snapshot';
-import { candidates, pick } from '../benchmarks/pick';
+import { candidates, pickStored } from '../benchmarks/pick';
 import { rankScale } from '../arc/rank';
 import { describeRank } from '../arc/name';
 import { pill, type Pill } from '../arc/pill';
@@ -78,8 +78,7 @@ export function rankLookup(snapshot: Snapshot | null, picks: Readonly<Record<str
 		const name = scenarioName.trim();
 		let entry = scales.get(name);
 		if (entry === undefined) {
-			const id = picks[name];
-			const chosen = pick(candidates(snapshot, name), typeof id === 'number' || id === null ? id : undefined);
+			const chosen = pickStored(candidates(snapshot, name), picks, name);
 			entry = chosen === null ? null : { scale: rankScale(chosen.thresholds), ranks: chosen.benchmark.ranks };
 			scales.set(name, entry);
 		}

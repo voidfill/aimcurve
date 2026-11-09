@@ -2,8 +2,8 @@
 /**
  * The rail's load-bearing behaviour: rows grouped under session headers, and
  * older pages requested as the end comes into view — once per settled page,
- * never while one is in flight or after one failed. How rows look is checked
- * by eye, not here.
+ * judged by a report taken after that page's rows, never while one is in
+ * flight or after one failed. How rows look is checked by eye, not here.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive, ref } from 'vue';
@@ -19,25 +19,42 @@ vi.mock('../composables/useBenchmarkRank', () => ({
 	storedPicks: (picks: Record<string, number | null>) => picks,
 }));
 
-/** The observer's callback, so a test can scroll the sentinel into view. */
-let observe: ((entries: { isIntersecting: boolean }[]) => void) | null = null;
+type Report = (entries: { isIntersecting: boolean }[]) => void;
+
+/** Each observer watching a sentinel, newest last, so a test can report what the browser would. */
+let observers: { report: Report; target: Element | null }[] = [];
+
+/** What the browser reports to the observer of the sentinel now in the DOM. */
+function report(isIntersecting: boolean): void {
+	const live = observers.filter((o) => o.target?.isConnected);
+	live[live.length - 1]!.report([{ isIntersecting }]);
+}
 
 beforeEach(() => {
-	observe = null;
+	observers = [];
 	vi.stubGlobal(
 		'IntersectionObserver',
 		class {
-			constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
-				observe = callback;
+			entry: { report: Report; target: Element | null };
+			constructor(callback: Report) {
+				this.entry = { report: callback, target: null };
+				observers.push(this.entry);
 			}
-			observe() {}
+			observe(target: Element) {
+				this.entry.target = target;
+			}
 			unobserve() {}
-			disconnect() {}
+			disconnect() {
+				this.entry.target = null;
+			}
 		},
 	);
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.unstubAllGlobals();
+	document.body.innerHTML = '';
+});
 
 function attempt(fileStem: string, sessionId: number, score: number, prevScore: number | null): RailAttempt {
 	return {
@@ -80,7 +97,8 @@ interface RailState {
 }
 
 function mount(state: RailState, loads: string[]) {
-	const el = document.createElement('div');
+	// In the document, so a sentinel's observer can tell it is the live one.
+	const el = document.body.appendChild(document.createElement('div'));
 	const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { render: () => null } }] });
 	createApp({
 		render: () =>
@@ -88,6 +106,7 @@ function mount(state: RailState, loads: string[]) {
 				...state,
 				hasNewer: false,
 				filtered: false,
+				scenarioId: null,
 				filterLabel: null,
 				filterError: null,
 				selectedStem: null,
@@ -122,7 +141,7 @@ describe('AttemptRail', () => {
 		expect(groups[0]!.querySelector('.pb')).not.toBeNull();
 	});
 
-	it('loads older pages once per settled page while the end is in view, and stops after a failure', async () => {
+	it('loads one page per settled page, judged by a fresh report, and stops after a failure', async () => {
 		const loads: string[] = [];
 		const state = reactive<RailState>({
 			attempts: [attempt('a', 1, 70, null)],
@@ -136,7 +155,7 @@ describe('AttemptRail', () => {
 		await nextTick();
 		expect(loads).toEqual([]);
 
-		observe!([{ isIntersecting: true }]);
+		report(true);
 		await nextTick();
 		expect(loads).toEqual(['older']);
 
@@ -145,8 +164,15 @@ describe('AttemptRail', () => {
 		await nextTick();
 		expect(loads).toHaveLength(1);
 
-		// Settled with the end still in view: the next page.
+		// Settled with a new row: the old report is spent, so nothing yet...
+		state.attempts = [...state.attempts, attempt('b', 1, 71, 70)];
 		state.loadingOlder = false;
+		await nextTick();
+		await nextTick();
+		expect(loads).toHaveLength(1);
+
+		// ...until the new sentinel is reported in view.
+		report(true);
 		await nextTick();
 		expect(loads).toHaveLength(2);
 
@@ -161,5 +187,36 @@ describe('AttemptRail', () => {
 		expect(retry.textContent).toBe('Try again');
 		retry.click();
 		expect(loads).toHaveLength(3);
+
+		// While the retry is in flight it shows as loading, not as the failure.
+		state.loadingOlder = true;
+		await nextTick();
+		expect(el.querySelector('.end button')).toBeNull();
+		expect(el.querySelector('.end')!.textContent).toContain('Loading older attempts');
+	});
+
+	it('does not load on its own when the end returns without being seen', async () => {
+		const loads: string[] = [];
+		const state = reactive<RailState>({
+			attempts: [attempt('a', 1, 70, null)],
+			sessions: new Map(),
+			state: 'ready',
+			error: null,
+			hasMore: true,
+			loadingOlder: false,
+		});
+		mount(state, loads);
+		await nextTick();
+		report(true);
+		await nextTick();
+		expect(loads).toHaveLength(1);
+
+		// The list ends, then a refresh brings more back: no report, no load.
+		state.hasMore = false;
+		await nextTick();
+		state.hasMore = true;
+		await nextTick();
+		await nextTick();
+		expect(loads).toHaveLength(1);
 	});
 });

@@ -27,6 +27,7 @@ const {
 	scenarios,
 	scenariosError,
 	filterState,
+	scenarioId,
 	items,
 	railState,
 	railError,
@@ -159,6 +160,7 @@ const onboarding = computed(() => dbError.value === null && ready.value && hasRu
 				:loading-older="loadingOlder"
 				:has-newer="hasNewer"
 				:filtered="scenarioHash !== null"
+				:scenario-id="scenarioId"
 				:filter-label="filterLabel"
 				:filter-error="scenariosError"
 				:link-to="linkTo"

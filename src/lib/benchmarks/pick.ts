@@ -33,3 +33,12 @@ export function pick(list: readonly Candidate[], storedId: number | null | undef
 	}
 	return list[0] ?? null;
 }
+
+/**
+ * `pick` with the stored picks (trimmed scenario name → benchmark ID, or null
+ * for none), ignoring an entry that holds anything else.
+ */
+export function pickStored(list: readonly Candidate[], picks: Readonly<Record<string, unknown>>, name: string): Candidate | null {
+	const id = picks[name.trim()];
+	return pick(list, typeof id === 'number' || id === null ? id : undefined);
+}

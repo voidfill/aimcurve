@@ -20,13 +20,17 @@ const props = defineProps<{
 	newest: string;
 	oldest: string;
 	filtered: boolean;
+	/** The filtered scenario, whose figures the filtered line shows; null until known. */
+	scenarioId: number | null;
+	/** The current time, ticking, so Today and Yesterday turn over at midnight. */
+	now: Date;
 }>();
 
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 
-function dayLabel(date: Date): string {
-	const today = new Date();
+function dayLabel(date: Date, now: Date): string {
+	const today = new Date(now);
 	const yesterday = new Date(today);
 	yesterday.setDate(today.getDate() - 1);
 	if (date.toDateString() === today.toDateString()) return 'Today';
@@ -39,7 +43,7 @@ const when = computed(() => {
 	const end = new Date(props.summary?.endedAt ?? props.newest);
 	const from = timeFormat.format(start);
 	const to = timeFormat.format(end);
-	return `${dayLabel(start)} · ${from === to ? from : `${from}–${to}`}`;
+	return `${dayLabel(start, props.now)} · ${from === to ? from : `${from}–${to}`}`;
 });
 
 const runs = computed(() => {
@@ -57,7 +61,9 @@ const line = computed<Line | null>(() => {
 	const s = props.summary;
 	if (s === undefined || s.scenarios.length === 0) return null;
 	if (props.filtered) {
-		const scenario = s.scenarios[0]!;
+		// By id, never position: totals for another scope must not stand in for this one.
+		const scenario = s.scenarios.find((x) => x.scenarioId === props.scenarioId);
+		if (scenario === undefined) return null;
 		const best = `best ${formatScore(scenario.best)}`;
 		if (scenario.prevBest === null)
 			return { value: null, tone: 'even', text: `${best} · first session`, title: 'No earlier session played this scenario' };
